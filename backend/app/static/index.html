@@ -151,8 +151,8 @@
         grupo/empresa opcionales; puerto 22 por defecto). Acepta coma, punto y coma o tabulador.
       </p>
       <button type="button" class="ghost" id="btn-template">⬇ Descargar plantilla</button>
-      <p class="muted" style="margin-bottom:6px"><strong>Paso 2.</strong> Suba el archivo o pegue el contenido:</p>
-      <input type="file" id="bulk-file" accept=".csv,.txt" style="border:0;padding:4px 0">
+      <p class="muted" style="margin-bottom:6px"><strong>Paso 2.</strong> Suba el archivo (CSV, TXT o <strong>Excel .xlsx</strong> — la plantilla también se puede llenar y guardar en Excel) o pegue el contenido:</p>
+      <input type="file" id="bulk-file" accept=".csv,.txt,.xlsx" style="border:0;padding:4px 0">
       <textarea id="bulk-text" rows="8" style="width:100%;margin-top:8px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:8px 10px;font-family:monospace;font-size:.85rem" placeholder="rb-core-01,192.0.2.10,2222,backup,MiClave&#10;rb-sucursal-02,192.0.2.20"></textarea>
       <div style="display:flex;gap:12px;align-items:center;margin-top:10px">
         <button type="button" id="btn-upload">Subir routers</button>
@@ -789,9 +789,26 @@ $("btn-template").addEventListener("click", () => {
   URL.revokeObjectURL(link.href);
 });
 
-$("bulk-file").addEventListener("change", () => {
+$("bulk-file").addEventListener("change", async () => {
   const file = $("bulk-file").files[0];
   if (!file) return;
+  if (/\.xls$/i.test(file.name)) {
+    setMsg("bulk-msg", "Formato .xls antiguo no soportado: guárdelo en Excel como .xlsx.", false);
+    return;
+  }
+  if (/\.xlsx$/i.test(file.name)) {
+    const form = new FormData();
+    form.append("file", file);
+    try {
+      const result = await api("/api/devices/convert-xlsx", {
+        method: "POST",
+        body: form,
+      });
+      $("bulk-text").value = result.text;
+      setMsg("bulk-msg", "Excel leído: " + result.rows + " filas cargadas. Revise y pulse Subir routers.", true);
+    } catch (error) { setMsg("bulk-msg", error.message, false); }
+    return;
+  }
   const reader = new FileReader();
   reader.onload = () => { $("bulk-text").value = reader.result; };
   reader.readAsText(file);

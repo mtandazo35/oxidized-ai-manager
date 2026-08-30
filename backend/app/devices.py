@@ -1,5 +1,8 @@
+import io
+
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
+from openpyxl import load_workbook
 from pydantic import ValidationError
 
 from .auth import current_user
@@ -125,6 +128,52 @@ async def import_devices(
         except DuplicateDeviceError:
             duplicates.append(device.name)
     return {"created": created, "duplicates": duplicates, "errors": errors}
+
+
+MAX_XLSX_BYTES = 5 * 1024 * 1024
+MAX_XLSX_ROWS = 5000
+
+
+def _cell_to_text(value) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return str(value).strip().replace(",", " ")
+
+
+@router.post("/convert-xlsx")
+async def convert_xlsx(file: UploadFile = File(...)) -> dict:
+    content = await file.read()
+    if len(content) > MAX_XLSX_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            detail="El archivo supera 5 MB.",
+        )
+    try:
+        workbook = load_workbook(
+            io.BytesIO(content), read_only=True, data_only=True
+        )
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="No se pudo leer el archivo; guárdelo como .xlsx (Excel moderno).",
+        )
+    lines: list[str] = []
+    try:
+        sheet = workbook.active
+        for row in sheet.iter_rows(values_only=True):
+            if len(lines) >= MAX_XLSX_ROWS:
+                break
+            cells = [_cell_to_text(value) for value in row]
+            while cells and cells[-1] == "":
+                cells.pop()
+            if not cells:
+                continue
+            lines.append(",".join(cells))
+    finally:
+        workbook.close()
+    return {"text": "\n".join(lines), "rows": len(lines)}
 
 
 @router.post("/{device_id}/backup", status_code=status.HTTP_202_ACCEPTED)
