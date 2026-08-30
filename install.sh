@@ -126,7 +126,18 @@ if [ -n "$PUBLIC_HOST" ]; then
     COMPOSE_FILES="-f docker-compose.yml -f deploy/docker-compose.public.yml"
 else
     COMPOSE_FILES="-f docker-compose.yml"
+    # Modo local: expone el panel en la IP del host (HTTP, sin TLS) para poder
+    # abrirlo desde el navegador. Para TLS use --public.
+    set_kv API_BIND_ADDRESS "0.0.0.0"
 fi
+
+detect_ip() {
+    local ip
+    ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
+    [ -n "$ip" ] || ip="$(ip route get 1.1.1.1 2>/dev/null | awk '{print $7; exit}')"
+    [ -n "$ip" ] || ip="$(curl -fsS --max-time 4 https://api.ipify.org 2>/dev/null)"
+    printf '%s' "${ip:-127.0.0.1}"
+}
 
 # --- Validar y levantar ---
 info "Validando la configuración de Compose."
@@ -142,7 +153,12 @@ echo
 if [ -n "$PUBLIC_HOST" ]; then
     info "Listo. Panel público en https://${PUBLIC_HOST}/"
 else
-    info "Listo. Panel local en http://127.0.0.1:8000/"
+    SERVER_IP="$(detect_ip)"
+    API_PORT_VAL="$(grep '^API_PORT=' .env | cut -d= -f2)"; API_PORT_VAL="${API_PORT_VAL:-8000}"
+    info "Listo. Panel en:"
+    printf '%s[*]%s   Este equipo:  http://127.0.0.1:%s/\n' "$GRN" "$NC" "$API_PORT_VAL"
+    printf '%s[*]%s   Desde la red: %shttp://%s:%s/%s\n' "$GRN" "$NC" "$YLW" "$SERVER_IP" "$API_PORT_VAL" "$NC"
+    warn "Acceso por IP en HTTP (sin cifrado). Para HTTPS: sudo ./install.sh --public $SERVER_IP --cert"
 fi
 info "Usuario: admin"
 if [ -n "$ADMIN_PASSWORD" ]; then
