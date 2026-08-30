@@ -1,3 +1,5 @@
+import time
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 
@@ -14,6 +16,26 @@ from .security import (
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
+
+# Bloqueo de fuerza bruta por cuenta (complementa el rate-limit por IP de nginx).
+LOCKOUT_THRESHOLD = 8
+LOCKOUT_SECONDS = 300
+_failed_logins: dict[str, list[float]] = {}
+
+
+def _is_locked(username: str) -> bool:
+    attempts = _failed_logins.get(username, [])
+    recent = [t for t in attempts if time.monotonic() - t < LOCKOUT_SECONDS]
+    _failed_logins[username] = recent
+    return len(recent) >= LOCKOUT_THRESHOLD
+
+
+def _record_failure(username: str) -> None:
+    _failed_logins.setdefault(username, []).append(time.monotonic())
+
+
+def _reset_failures(username: str) -> None:
+    _failed_logins.pop(username, None)
 
 
 async def current_user(request: Request, token: str = Depends(oauth2_scheme)) -> str:
@@ -35,13 +57,20 @@ async def login(
     request: Request, form: OAuth2PasswordRequestForm = Depends()
 ) -> dict:
     settings = get_settings()
+    if _is_locked(form.username):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Cuenta bloqueada temporalmente por intentos fallidos. Espere unos minutos.",
+        )
     user = await request.app.state.users.get_by_username(form.username)
     if user is None or not verify_password(form.password, user["password_hash"]):
+        _record_failure(form.username)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password.",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    _reset_failures(form.username)
     token = create_access_token(
         user["username"],
         settings.app_secret_key,

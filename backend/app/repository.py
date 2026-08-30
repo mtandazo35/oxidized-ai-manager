@@ -2,6 +2,9 @@ from typing import Any
 
 import asyncpg
 
+from .config import get_settings
+from .secrets_box import decrypt_secret, encrypt_secret, looks_encrypted
+
 
 class DuplicateDeviceError(Exception):
     """Raised when a device name already exists in the inventory."""
@@ -18,6 +21,27 @@ METADATA_FIELDS = ("identity", "ros_version", "board")
 class DeviceRepository:
     def __init__(self, pool: asyncpg.Pool) -> None:
         self._pool = pool
+
+    @property
+    def _key(self) -> str:
+        return get_settings().app_secret_key
+
+    async def encrypt_legacy_passwords(self) -> int:
+        """Cifra en reposo cualquier clave de router aún en texto plano."""
+        rows = await self._pool.fetch(
+            "SELECT id, password FROM devices WHERE password <> ''"
+        )
+        migrated = 0
+        for row in rows:
+            if looks_encrypted(self._key, row["password"]):
+                continue
+            await self._pool.execute(
+                "UPDATE devices SET password = $2 WHERE id = $1",
+                row["id"],
+                encrypt_secret(self._key, row["password"]),
+            )
+            migrated += 1
+        return migrated
 
     async def list_devices(self) -> list[dict[str, Any]]:
         rows = await self._pool.fetch(
@@ -44,7 +68,7 @@ class DeviceRepository:
                 data["port"],
                 data["model"],
                 data["username"],
-                data["password"],
+                encrypt_secret(self._key, data["password"]),
                 data["enabled"],
                 data["group_name"],
                 data["backup_interval_minutes"],
@@ -58,6 +82,8 @@ class DeviceRepository:
     ) -> dict[str, Any] | None:
         if not data:
             return await self.get_device(device_id)
+        if "password" in data:
+            data = {**data, "password": encrypt_secret(self._key, data["password"])}
         assignments = []
         values: list[Any] = []
         for position, (column, value) in enumerate(data.items(), start=2):
@@ -98,7 +124,12 @@ class DeviceRepository:
             "SELECT name, address, port, model, username, password "
             "FROM devices WHERE enabled ORDER BY name"
         )
-        return [dict(row) for row in rows]
+        nodes = []
+        for row in rows:
+            node = dict(row)
+            node["password"] = decrypt_secret(self._key, node["password"])
+            nodes.append(node)
+        return nodes
 
 
 SETTINGS_DEFAULTS = {

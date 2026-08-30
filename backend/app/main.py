@@ -31,11 +31,13 @@ settings = get_settings()
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     pool = await create_pool(settings)
     await init_schema(pool)
-    app.state.devices = DeviceRepository(pool)
+    devices = DeviceRepository(pool)
+    app.state.devices = devices
     app.state.backup_events = BackupEventRepository(pool)
     app.state.settings = SettingsRepository(pool)
     users = UserRepository(pool)
     app.state.users = users
+    await devices.encrypt_legacy_passwords()
     if await users.count_users() == 0 and settings.admin_password:
         await users.create_user(
             settings.admin_username, hash_password(settings.admin_password)
@@ -50,11 +52,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await pool.close()
 
 
+_docs_enabled = settings.app_env == "development"
+
 app = FastAPI(
     title=settings.app_name,
     version=settings.app_version,
     description="Foundation API for Oxidized AI Manager.",
     lifespan=lifespan,
+    docs_url="/docs" if _docs_enabled else None,
+    redoc_url=None,
+    openapi_url="/openapi.json" if _docs_enabled else None,
 )
 
 app.include_router(auth_router)

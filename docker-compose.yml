@@ -4,6 +4,8 @@ services:
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-oxidized_ai}
       POSTGRES_USER: ${POSTGRES_USER:-oxidized_ai}
@@ -22,6 +24,8 @@ services:
   redis:
     image: redis:7.4-alpine
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}
     command:
@@ -61,6 +65,8 @@ services:
     image: ${OXIDIZED_IMAGE:-oxidized/oxidized:0.37.0}
     restart: unless-stopped
     init: true
+    security_opt:
+      - no-new-privileges:true
     depends_on:
       oxidized-init:
         condition: service_completed_successfully
@@ -85,6 +91,10 @@ services:
     restart: unless-stopped
     init: true
     read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     environment:
       APP_ENV: ${APP_ENV:-development}
       APP_SECRET_KEY: ${APP_SECRET_KEY:?Set APP_SECRET_KEY in .env}
