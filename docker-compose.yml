@@ -97,6 +97,8 @@ services:
       REDIS_PASSWORD: ${REDIS_PASSWORD}
       OXIDIZED_URL: http://oxidized:8888
       OXIDIZED_SOURCE_TOKEN: ${OXIDIZED_SOURCE_TOKEN}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD in .env}
     ports:
       - "${API_BIND_ADDRESS:-127.0.0.1}:${API_PORT:-8000}:8000"
     tmpfs:

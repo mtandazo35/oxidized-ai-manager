@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     redis_password: str
     oxidized_url: str
     oxidized_source_token: str
+    admin_username: str = "admin"
+    admin_password: str = ""
+    access_token_ttl_minutes: int = 480
 
     model_config = SettingsConfigDict(
         env_file=".env",

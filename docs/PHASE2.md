@@ -10,6 +10,11 @@ Esta entrega moderniza la integración con Oxidized reemplazando el CSV estátic
 - Endpoint `/api/oxidized/nodes` que Oxidized consume mediante `source: http`.
 - Autenticación del endpoint de nodos con el header `X-Oxidized-Token`
   (`OXIDIZED_SOURCE_TOKEN` en `.env`; `oxidized-init` lo inyecta en la config).
+- Login de plataforma: tabla `users`, `POST /api/auth/login` (JWT HS256 firmado
+  con `APP_SECRET_KEY`, expira a las 8 h por defecto), `GET /api/auth/me` y
+  `POST /api/auth/change-password`. El CRUD de `/api/devices` exige Bearer
+  token; `/health/*` queda abierto. Claves con hash bcrypt. El admin inicial se
+  siembra desde `ADMIN_USERNAME`/`ADMIN_PASSWORD` solo si la tabla está vacía.
 
 Queda pendiente de la Fase 2: el MikroTik Collector (inventario rico vía API-SSL,
 modelo/serial/versión/uptime) y el manejo de errores/timeouts contra RouterOS.

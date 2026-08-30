@@ -46,10 +46,11 @@ async def test_empty_inventory_returns_placeholder() -> None:
     ]
 
 
-async def test_returns_enabled_devices_with_credentials() -> None:
+async def test_returns_enabled_devices_with_credentials(auth_headers) -> None:
     async with client() as api:
         await api.post(
             "/api/devices",
+            headers=auth_headers,
             json={
                 "name": "rb-lab-01",
                 "address": "192.0.2.10",
@@ -59,6 +60,7 @@ async def test_returns_enabled_devices_with_credentials() -> None:
         )
         await api.post(
             "/api/devices",
+            headers=auth_headers,
             json={
                 "name": "rb-lab-02",
                 "address": "192.0.2.11",

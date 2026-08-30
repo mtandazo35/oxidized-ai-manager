@@ -37,6 +37,16 @@ class DeviceOut(BaseModel):
     updated_at: datetime
 
 
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str = Field(min_length=1, max_length=72)
+    new_password: str = Field(min_length=8, max_length=72)
+
+
 class OxidizedNode(BaseModel):
     name: str
     ip: str

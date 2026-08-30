@@ -7,9 +7,11 @@ from app import main as main_module
 pytestmark = pytest.mark.anyio
 
 
-def client() -> AsyncClient:
+def client(auth_headers: dict[str, str]) -> AsyncClient:
     transport = ASGITransport(app=main_module.app)
-    return AsyncClient(transport=transport, base_url="http://test")
+    return AsyncClient(
+        transport=transport, base_url="http://test", headers=auth_headers
+    )
 
 
 DEVICE = {
@@ -20,8 +22,8 @@ DEVICE = {
 }
 
 
-async def test_create_device_returns_201_without_password() -> None:
-    async with client() as api:
+async def test_create_device_returns_201_without_password(auth_headers) -> None:
+    async with client(auth_headers) as api:
         response = await api.post("/api/devices", json=DEVICE)
 
     assert response.status_code == 201
@@ -32,8 +34,8 @@ async def test_create_device_returns_201_without_password() -> None:
     assert "password" not in body
 
 
-async def test_duplicate_name_returns_409() -> None:
-    async with client() as api:
+async def test_duplicate_name_returns_409(auth_headers) -> None:
+    async with client(auth_headers) as api:
         first = await api.post("/api/devices", json=DEVICE)
         second = await api.post("/api/devices", json=DEVICE)
 
@@ -41,8 +43,8 @@ async def test_duplicate_name_returns_409() -> None:
     assert second.status_code == 409
 
 
-async def test_invalid_name_is_rejected() -> None:
-    async with client() as api:
+async def test_invalid_name_is_rejected(auth_headers) -> None:
+    async with client(auth_headers) as api:
         response = await api.post(
             "/api/devices", json={**DEVICE, "name": "../etc/passwd"}
         )
@@ -50,8 +52,8 @@ async def test_invalid_name_is_rejected() -> None:
     assert response.status_code == 422
 
 
-async def test_list_and_get_devices() -> None:
-    async with client() as api:
+async def test_list_and_get_devices(auth_headers) -> None:
+    async with client(auth_headers) as api:
         created = (await api.post("/api/devices", json=DEVICE)).json()
         listed = await api.get("/api/devices")
         fetched = await api.get(f"/api/devices/{created['id']}")
@@ -62,15 +64,15 @@ async def test_list_and_get_devices() -> None:
     assert fetched.json()["id"] == created["id"]
 
 
-async def test_get_missing_device_returns_404() -> None:
-    async with client() as api:
+async def test_get_missing_device_returns_404(auth_headers) -> None:
+    async with client(auth_headers) as api:
         response = await api.get("/api/devices/999")
 
     assert response.status_code == 404
 
 
-async def test_patch_updates_fields() -> None:
-    async with client() as api:
+async def test_patch_updates_fields(auth_headers) -> None:
+    async with client(auth_headers) as api:
         created = (await api.post("/api/devices", json=DEVICE)).json()
         response = await api.patch(
             f"/api/devices/{created['id']}",
@@ -82,8 +84,8 @@ async def test_patch_updates_fields() -> None:
     assert response.json()["enabled"] is False
 
 
-async def test_delete_device() -> None:
-    async with client() as api:
+async def test_delete_device(auth_headers) -> None:
+    async with client(auth_headers) as api:
         created = (await api.post("/api/devices", json=DEVICE)).json()
         deleted = await api.delete(f"/api/devices/{created['id']}")
         missing = await api.get(f"/api/devices/{created['id']}")

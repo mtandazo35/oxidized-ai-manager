@@ -4,12 +4,14 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, status
 from fastapi.responses import JSONResponse
 
+from .auth import router as auth_router
 from .config import get_settings
 from .db import create_pool, init_schema
 from .devices import router as devices_router
 from .health import check_dependencies
 from .oxidized_source import router as oxidized_router
-from .repository import DeviceRepository
+from .repository import DeviceRepository, UserRepository
+from .security import hash_password
 
 
 settings = get_settings()
@@ -20,6 +22,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     pool = await create_pool(settings)
     await init_schema(pool)
     app.state.devices = DeviceRepository(pool)
+    users = UserRepository(pool)
+    app.state.users = users
+    if await users.count_users() == 0 and settings.admin_password:
+        await users.create_user(
+            settings.admin_username, hash_password(settings.admin_password)
+        )
     try:
         yield
     finally:
@@ -33,6 +41,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.include_router(auth_router)
 app.include_router(devices_router)
 app.include_router(oxidized_router)
 

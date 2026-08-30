@@ -1,10 +1,15 @@
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 
+from .auth import current_user
 from .repository import DeviceRepository, DuplicateDeviceError
 from .schemas import DeviceCreate, DeviceOut, DeviceUpdate
 
 
-router = APIRouter(prefix="/api/devices", tags=["devices"])
+router = APIRouter(
+    prefix="/api/devices",
+    tags=["devices"],
+    dependencies=[Depends(current_user)],
+)
 
 
 def _repository(request: Request) -> DeviceRepository:

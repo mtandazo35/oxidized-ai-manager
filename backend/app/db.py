@@ -4,6 +4,14 @@ from .config import Settings
 
 
 SCHEMA = """
+CREATE TABLE IF NOT EXISTS users (
+    id SERIAL PRIMARY KEY,
+    username TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS devices (
     id SERIAL PRIMARY KEY,
     name TEXT NOT NULL UNIQUE,

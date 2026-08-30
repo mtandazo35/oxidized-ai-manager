@@ -19,7 +19,7 @@ cp .env.example .env
 nano .env
 ```
 
-Cambie `POSTGRES_PASSWORD`, `REDIS_PASSWORD`, `APP_SECRET_KEY` y `OXIDIZED_SOURCE_TOKEN`. Genere valores aleatorios, por ejemplo:
+Cambie `POSTGRES_PASSWORD`, `REDIS_PASSWORD`, `APP_SECRET_KEY`, `OXIDIZED_SOURCE_TOKEN` y `ADMIN_PASSWORD`. Genere valores aleatorios, por ejemplo:
 
 ```bash
 openssl rand -hex 32
@@ -47,17 +47,33 @@ curl http://127.0.0.1:8888/nodes.json
 
 La documentación interactiva de FastAPI está en `http://127.0.0.1:8000/docs`. Los puertos se enlazan a localhost por defecto. Para acceder desde la LAN, configure las variables `*_BIND_ADDRESS` con la IP local concreta del servidor; evite exponer estos servicios a Internet.
 
+## Autenticación
+
+La API exige login. El usuario inicial se crea con `ADMIN_USERNAME`/`ADMIN_PASSWORD` del `.env` solo en el primer arranque; después la clave vive en PostgreSQL y se cambia por API (el valor del `.env` deja de importar):
+
+```bash
+TOKEN=$(curl -s -X POST http://127.0.0.1:8000/api/auth/login \
+  -d 'username=admin' -d 'password=SU_CLAVE' | python3 -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')
+
+curl -X POST http://127.0.0.1:8000/api/auth/change-password \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"current_password":"SU_CLAVE","new_password":"CLAVE_NUEVA_LARGA"}'
+```
+
+En `http://127.0.0.1:8000/docs` el botón **Authorize** permite iniciar sesión de forma interactiva.
+
 ## Inventario de routers
 
-Los equipos se administran por API y Oxidized los recibe automáticamente:
+Los equipos se administran por API (autenticada) y Oxidized los recibe automáticamente:
 
 ```bash
 curl -X POST http://127.0.0.1:8000/api/devices \
+  -H "Authorization: Bearer $TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{"name":"rb-lab-01","address":"192.0.2.10","username":"backup","password":"CAMBIAR"}'
 
-curl http://127.0.0.1:8000/api/devices        # listado sin contraseñas
-curl http://127.0.0.1:8888/reload             # recarga de nodos en Oxidized
+curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/api/devices   # listado sin contraseñas
+curl http://127.0.0.1:8888/reload                                          # recarga de nodos en Oxidized
 ```
 
 Detalles y criterios de aceptación en [docs/PHASE2.md](docs/PHASE2.md).

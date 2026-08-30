@@ -5,7 +5,7 @@ from typing import Any
 import pytest
 
 
-os.environ.setdefault("APP_SECRET_KEY", "test-secret-key")
+os.environ.setdefault("APP_SECRET_KEY", "test-secret-key-0123456789abcdef0123456789abcdef")
 os.environ.setdefault("POSTGRES_HOST", "localhost")
 os.environ.setdefault("POSTGRES_PORT", "5432")
 os.environ.setdefault("POSTGRES_DB", "test")
@@ -17,7 +17,12 @@ os.environ.setdefault("REDIS_PASSWORD", "test")
 os.environ.setdefault("OXIDIZED_URL", "http://localhost:8888")
 os.environ.setdefault("OXIDIZED_SOURCE_TOKEN", "test-oxidized-token")
 
+from app.config import get_settings  # noqa: E402
 from app.repository import DuplicateDeviceError  # noqa: E402
+from app.security import create_access_token, hash_password  # noqa: E402
+
+
+TEST_ADMIN_PASSWORD = "admin-test-password"
 
 
 class FakeDeviceRepository:
@@ -89,6 +94,30 @@ class FakeDeviceRepository:
         ]
 
 
+class FakeUserRepository:
+    """In-memory stand-in matching UserRepository's public contract."""
+
+    def __init__(self) -> None:
+        self._users: dict[str, dict[str, Any]] = {}
+
+    async def count_users(self) -> int:
+        return len(self._users)
+
+    async def get_by_username(self, username: str) -> dict[str, Any] | None:
+        user = self._users.get(username)
+        return dict(user) if user else None
+
+    async def create_user(self, username: str, password_hash: str) -> None:
+        self._users[username] = {
+            "id": len(self._users) + 1,
+            "username": username,
+            "password_hash": password_hash,
+        }
+
+    async def update_password(self, username: str, password_hash: str) -> None:
+        self._users[username]["password_hash"] = password_hash
+
+
 @pytest.fixture
 def anyio_backend() -> str:
     return "asyncio"
@@ -101,3 +130,24 @@ def device_repository() -> FakeDeviceRepository:
     repository = FakeDeviceRepository()
     main_module.app.state.devices = repository
     return repository
+
+
+@pytest.fixture(autouse=True)
+def user_repository() -> FakeUserRepository:
+    from app import main as main_module
+
+    repository = FakeUserRepository()
+    repository._users["admin"] = {
+        "id": 1,
+        "username": "admin",
+        "password_hash": hash_password(TEST_ADMIN_PASSWORD),
+    }
+    main_module.app.state.users = repository
+    return repository
+
+
+@pytest.fixture
+def auth_headers() -> dict[str, str]:
+    settings = get_settings()
+    token = create_access_token("admin", settings.app_secret_key, 60)
+    return {"Authorization": f"Bearer {token}"}
