@@ -121,15 +121,9 @@
 
     <h2>Routers</h2>
     <div class="card">
-      <form class="inline" id="device-form">
-        <input id="d-name" placeholder="nombre (rb-core-01)" required pattern="[A-Za-z0-9][A-Za-z0-9._-]*">
-        <input id="d-address" placeholder="IP o host" required>
-        <input id="d-port" type="number" min="1" max="65535" value="22" title="Puerto SSH" style="width:80px">
-        <input id="d-username" placeholder="usuario SSH">
-        <input id="d-password" type="password" placeholder="clave SSH">
-        <input id="d-group" placeholder="grupo/empresa" style="width:140px">
-        <button type="submit">Agregar</button>
-      </form>
+      <div style="margin:2px 0 10px">
+        <button type="button" id="btn-open-add">+ Agregar router</button>
+      </div>
       <p class="msg" id="device-msg"></p>
       <table>
         <thead><tr><th>Nombre</th><th>Identity</th><th>Grupo</th><th>Dirección</th><th>Puerto</th><th>Versión</th><th>Usuario</th><th>Estado</th><th></th></tr></thead>
@@ -199,6 +193,31 @@
     <p class="msg" id="changes-msg"></p>
     <pre class="diff" id="changes-view"></pre>
   </div>
+</div>
+
+<div class="overlay" id="add-overlay" hidden>
+  <form class="card" id="add-form">
+    <h1 style="margin-bottom:16px;font-size:1.1rem">Agregar router</h1>
+    <label for="a-name">Nombre</label>
+    <input id="a-name" placeholder="rb-core-01" required pattern="[A-Za-z0-9][A-Za-z0-9._-]*" style="margin:4px 0 10px">
+    <label for="a-address">Dirección (IP o host)</label>
+    <input id="a-address" required style="margin:4px 0 10px">
+    <label for="a-port">Puerto SSH</label>
+    <input id="a-port" type="number" min="1" max="65535" value="22" style="margin:4px 0 10px">
+    <label for="a-username">Usuario SSH</label>
+    <input id="a-username" style="margin:4px 0 10px">
+    <label for="a-password">Clave SSH</label>
+    <input id="a-password" type="password" autocomplete="new-password" style="margin:4px 0 10px">
+    <label for="a-group">Grupo / Empresa</label>
+    <input id="a-group" style="margin:4px 0 10px">
+    <label for="a-interval">Respaldar cada (minutos; 0 = usar el global)</label>
+    <input id="a-interval" type="number" min="0" max="10080" value="0" style="margin:4px 0 12px">
+    <div style="display:flex;gap:8px">
+      <button type="submit">Agregar</button>
+      <button type="button" class="ghost" id="btn-close-add">Cancelar</button>
+    </div>
+    <p class="msg" id="add-msg"></p>
+  </form>
 </div>
 
 <div class="overlay" id="edit-overlay" hidden>
@@ -631,27 +650,40 @@ $("login-form").addEventListener("submit", async (event) => {
   enterApp();
 });
 
-$("device-form").addEventListener("submit", async (event) => {
+$("btn-open-add").addEventListener("click", () => {
+  $("add-form").reset();
+  $("a-port").value = 22;
+  $("a-interval").value = 0;
+  $("add-msg").textContent = "";
+  $("add-overlay").hidden = false;
+  $("a-name").focus();
+});
+
+$("btn-close-add").addEventListener("click", () => {
+  $("add-overlay").hidden = true;
+});
+
+$("add-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   try {
     await api("/api/devices", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        name: $("d-name").value,
-        address: $("d-address").value,
-        port: Number($("d-port").value) || 22,
-        username: $("d-username").value,
-        password: $("d-password").value,
-        group_name: $("d-group").value.trim(),
+        name: $("a-name").value.trim(),
+        address: $("a-address").value.trim(),
+        port: Number($("a-port").value) || 22,
+        username: $("a-username").value,
+        password: $("a-password").value,
+        group_name: $("a-group").value.trim(),
+        backup_interval_minutes: Number($("a-interval").value) || 0,
       }),
     });
-    $("device-form").reset();
-    $("d-port").value = 22;
+    $("add-overlay").hidden = true;
     setMsg("device-msg", "Router agregado.", true);
     await reloadOxidized(true);
     refresh();
-  } catch (error) { setMsg("device-msg", error.message, false); }
+  } catch (error) { setMsg("add-msg", error.message, false); }
 });
 
 $("settings-form").addEventListener("submit", async (event) => {
