@@ -155,9 +155,7 @@ if [ -n "$PUBLIC_HOST" ]; then
 else
     SERVER_IP="$(detect_ip)"
     API_PORT_VAL="$(grep '^API_PORT=' .env | cut -d= -f2)"; API_PORT_VAL="${API_PORT_VAL:-8000}"
-    info "Listo. Panel en:"
-    printf '%s[*]%s   Este equipo:  http://127.0.0.1:%s/\n' "$GRN" "$NC" "$API_PORT_VAL"
-    printf '%s[*]%s   Desde la red: %shttp://%s:%s/%s\n' "$GRN" "$NC" "$YLW" "$SERVER_IP" "$API_PORT_VAL" "$NC"
+    printf '%s[*]%s Listo. Panel en: %shttp://%s:%s/%s\n' "$GRN" "$NC" "$YLW" "$SERVER_IP" "$API_PORT_VAL" "$NC"
     warn "Acceso por IP en HTTP (sin cifrado). Para HTTPS: sudo ./install.sh --public $SERVER_IP --cert"
 fi
 info "Usuario: admin"
