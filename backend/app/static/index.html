@@ -8,12 +8,26 @@
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
   [hidden] { display: none !important; }
-  body { margin: 0; font-family: system-ui, sans-serif; background: #0f172a; color: #e2e8f0; }
+  body { margin: 0; font-family: system-ui, sans-serif; color: #e2e8f0;
+    background: #0b1120;
+    background-image:
+      radial-gradient(1100px 700px at 12% -8%, rgba(37,99,235,.28), transparent 60%),
+      radial-gradient(900px 600px at 108% 8%, rgba(14,165,233,.22), transparent 55%),
+      radial-gradient(800px 800px at 85% 110%, rgba(99,102,241,.20), transparent 60%),
+      linear-gradient(160deg, #0b1120 0%, #0d1526 50%, #0b1120 100%);
+    background-attachment: fixed; }
   main { max-width: 1600px; margin: 0 auto; padding: 24px 24px 64px; }
   h1 { font-size: 1.3rem; margin: 0; }
   h2 { font-size: 1.05rem; margin: 32px 0 12px; color: #93c5fd; }
   header.bar { display: flex; align-items: center; justify-content: space-between;
-    padding: 14px 16px; background: #1e293b; border-bottom: 1px solid #334155; }
+    padding: 14px 20px; border-bottom: 1px solid rgba(51, 65, 85, .7);
+    background: linear-gradient(180deg, rgba(30,41,59,.92), rgba(20,29,48,.86));
+    backdrop-filter: blur(10px); position: sticky; top: 0; z-index: 10; }
+  header.bar h1 { display: flex; align-items: center; gap: 10px; }
+  .brand-badge { display: inline-grid; place-items: center;
+    width: 30px; height: 30px; border-radius: 8px; font-size: 1rem;
+    background: linear-gradient(135deg, #2563eb, #0ea5e9);
+    box-shadow: 0 4px 12px -3px rgba(37, 99, 235, .6); }
   .bar-right { display: flex; align-items: center; gap: 8px; }
   table { width: 100%; border-collapse: collapse; font-size: .9rem; }
   th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid #1e293b;
@@ -33,7 +47,9 @@
   button.ghost { background: #334155; }
   button.danger { background: #7f1d1d; }
   form.inline { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; align-items: center; }
-  .card { background: #111c33; border: 1px solid #1e293b; border-radius: 10px; padding: 16px; }
+  .card { background: rgba(17, 28, 51, .82); border: 1px solid rgba(51, 65, 85, .55);
+    border-radius: 12px; padding: 16px; backdrop-filter: blur(8px);
+    box-shadow: 0 10px 30px -18px rgba(0, 0, 0, .6); }
   .msg { min-height: 1.2em; font-size: .85rem; margin: 8px 0; }
   .msg.err { color: #f87171; } .msg.ok { color: #4ade80; }
   .badge { padding: 2px 8px; border-radius: 999px; font-size: .75rem; }
@@ -42,8 +58,29 @@
   .badge.off { background: #374151; color: #d1d5db; }
   .badge.run { background: #78350f; color: #fcd34d; animation: pulse 1.2s infinite; }
   @keyframes pulse { 50% { opacity: .55; } }
-  #login-view { display: grid; place-items: center; min-height: 100vh; }
-  #login-view .card { width: 320px; }
+  #login-view { display: grid; place-items: center; min-height: 100vh;
+    position: relative; overflow: hidden; }
+  #login-view::before, #login-view::after {
+    content: ""; position: absolute; border-radius: 50%; filter: blur(70px);
+    opacity: .55; z-index: 0; pointer-events: none; }
+  #login-view::before { width: 460px; height: 460px; top: -120px; left: -100px;
+    background: radial-gradient(circle, #2563eb, transparent 70%);
+    animation: float1 16s ease-in-out infinite; }
+  #login-view::after { width: 520px; height: 520px; bottom: -160px; right: -120px;
+    background: radial-gradient(circle, #0ea5e9, transparent 70%);
+    animation: float2 20s ease-in-out infinite; }
+  @keyframes float1 { 50% { transform: translate(60px, 40px) scale(1.1); } }
+  @keyframes float2 { 50% { transform: translate(-50px, -30px) scale(1.08); } }
+  #login-view .card { width: 340px; position: relative; z-index: 1;
+    background: rgba(17, 28, 51, .72); backdrop-filter: blur(14px);
+    border: 1px solid rgba(148, 163, 184, .18);
+    box-shadow: 0 24px 60px -20px rgba(0, 0, 0, .7);
+    padding: 28px 26px; }
+  #login-view .card h1 { display: flex; align-items: center; gap: 10px; }
+  #login-view .brand-badge { display: inline-grid; place-items: center;
+    width: 34px; height: 34px; border-radius: 9px; font-size: 1.1rem;
+    background: linear-gradient(135deg, #2563eb, #0ea5e9);
+    box-shadow: 0 6px 16px -4px rgba(37, 99, 235, .6); }
   #login-view input { width: 100%; margin-bottom: 10px; }
   #login-view button { width: 100%; }
   .muted { color: #64748b; font-size: .8rem; }
@@ -88,7 +125,8 @@
 
 <div id="login-view" hidden>
   <form class="card" id="login-form">
-    <h1 style="margin-bottom:16px">Oxidized AI Manager</h1>
+    <h1 style="margin-bottom:6px"><span class="brand-badge">🛡️</span> Oxidized AI Manager</h1>
+    <p class="muted" style="margin:0 0 18px">Respaldo y auditoría de red</p>
     <input id="login-user" placeholder="Usuario" autocomplete="username" required>
     <input id="login-pass" type="password" placeholder="Clave" autocomplete="current-password" required>
     <button type="submit">Ingresar</button>
@@ -98,7 +136,7 @@
 
 <div id="app-view" hidden>
   <header class="bar">
-    <h1>Oxidized AI Manager</h1>
+    <h1><span class="brand-badge">🛡️</span> Oxidized AI Manager</h1>
     <div class="bar-right">
       <button class="ghost" id="btn-reload">Recargar Oxidized</button>
       <div class="menu">
