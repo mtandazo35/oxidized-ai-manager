@@ -886,12 +886,20 @@ $("btn-upload").addEventListener("click", async () => {
   }
 });
 
+const TAB_NAMES = ["dashboard", "import", "config"];
+
 function switchTab(tab) {
-  ["dashboard", "import", "config"].forEach((name) => {
+  TAB_NAMES.forEach((name) => {
     $("tab-" + name).hidden = name !== tab;
     $("tab-btn-" + name).classList.toggle("active", name === tab);
   });
+  if (location.hash !== "#" + tab) history.replaceState(null, "", "#" + tab);
   if (tab === "config") loadSettings();
+}
+
+function initialTab() {
+  const fromHash = location.hash.slice(1);
+  return TAB_NAMES.includes(fromHash) ? fromHash : "dashboard";
 }
 $("tab-btn-dashboard").addEventListener("click", () => switchTab("dashboard"));
 $("tab-btn-import").addEventListener("click", () => switchTab("import"));
@@ -902,7 +910,7 @@ async function enterApp() {
     const me = await api("/api/auth/me");
     $("btn-user").textContent = me.username + " ▾";
     show("app");
-    switchTab("dashboard");
+    switchTab(initialTab());
     refresh();
     setInterval(refresh, 60000);
   } catch (error) { logout(); }
