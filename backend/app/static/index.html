@@ -150,9 +150,12 @@
         (<code>nombre,ip,puerto,usuario,clave,grupo</code> — puerto, usuario, clave y
         grupo/empresa opcionales; puerto 22 por defecto). Acepta coma, punto y coma o tabulador.
       </p>
-      <div style="display:flex;gap:8px;margin-bottom:10px">
-        <button type="button" class="ghost" id="btn-template-xlsx">⬇ Plantilla Excel (.xlsx)</button>
-        <button type="button" class="ghost" id="btn-template">⬇ Plantilla CSV</button>
+      <div class="menu" style="display:inline-block;margin-bottom:10px">
+        <button type="button" class="ghost" id="btn-template-menu">⬇ Descargar plantilla ▾</button>
+        <div class="menu-list" id="template-menu" hidden style="left:0;right:auto">
+          <button type="button" id="btn-template-xlsx">Excel (.xlsx)</button>
+          <button type="button" id="btn-template">CSV</button>
+        </div>
       </div>
       <p class="muted" style="margin-bottom:6px"><strong>Paso 2.</strong> Suba el archivo (CSV, TXT o <strong>Excel .xlsx</strong> — la plantilla también se puede llenar y guardar en Excel) o pegue el contenido:</p>
       <input type="file" id="bulk-file" accept=".csv,.txt,.xlsx" style="border:0;padding:4px 0">
@@ -762,7 +765,15 @@ $("btn-user").addEventListener("click", (event) => {
   event.stopPropagation();
   $("user-menu").hidden = !$("user-menu").hidden;
 });
-document.addEventListener("click", () => { $("user-menu").hidden = true; });
+document.addEventListener("click", () => {
+  $("user-menu").hidden = true;
+  $("template-menu").hidden = true;
+});
+
+$("btn-template-menu").addEventListener("click", (event) => {
+  event.stopPropagation();
+  $("template-menu").hidden = !$("template-menu").hidden;
+});
 $("btn-open-pass").addEventListener("click", () => {
   $("pass-overlay").hidden = false;
   $("pass-msg").textContent = "";
