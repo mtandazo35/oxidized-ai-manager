@@ -30,13 +30,6 @@ async def trigger_node_backup(oxidized_url: str, node: str) -> None:
             )
 
 
-async def trigger_all_backups(devices_repository, oxidized_url: str) -> None:
-    nodes = await devices_repository.list_oxidized_nodes()
-    for node in nodes:
-        try:
-            await trigger_node_backup(oxidized_url, node["name"])
-        except httpx.HTTPError as error:
-            log.warning("No se pudo encolar %s: %s", node["name"], error)
 
 
 async def push_backups(repo_path: str, remote_url: str) -> tuple[bool, str]:
@@ -65,35 +58,73 @@ async def push_backups(repo_path: str, remote_url: str) -> tuple[bool, str]:
     return False, mask_remote_url(detail)
 
 
-async def run_cycle(app, settings: Settings) -> None:
-    await trigger_all_backups(app.state.devices, settings.oxidized_url)
+def is_due(elapsed_seconds: float, interval_minutes: int) -> bool:
+    return elapsed_seconds >= max(interval_minutes, 5) * 60
+
+
+async def run_tick(
+    app, settings: Settings, last_run: dict[str, float], now: float
+) -> bool:
     values = await app.state.settings.get_all()
-    if values["git_remote_enabled"] == "true" and values["git_remote_url"]:
-        await asyncio.sleep(PUSH_DELAY_SECONDS)
-        ok, detail = await push_backups(
-            settings.oxidized_backup_repo, values["git_remote_url"]
-        )
-        await app.state.settings.set_many(
-            {
-                "last_push_ok": "true" if ok else "false",
-                "last_push_at": dt.datetime.now(dt.timezone.utc).isoformat(),
-                "last_push_detail": detail,
-            }
-        )
-        if not ok:
-            log.warning("git push al remoto falló: %s", detail)
+    try:
+        global_minutes = max(int(values["backup_interval_minutes"]), 5)
+    except ValueError:
+        global_minutes = 60
+    devices = await app.state.devices.list_devices()
+    active_names = set()
+    triggered = False
+    for device in devices:
+        name = device["name"]
+        active_names.add(name)
+        if not device["enabled"]:
+            last_run.pop(name, None)
+            continue
+        interval = device.get("backup_interval_minutes") or global_minutes
+        if name not in last_run:
+            # Recién visto (arranque o alta): Oxidized ya recolecta al cargar
+            # el nodo, así que el primer disparo propio espera su intervalo.
+            last_run[name] = now
+            continue
+        if is_due(now - last_run[name], interval):
+            last_run[name] = now
+            try:
+                await trigger_node_backup(settings.oxidized_url, name)
+                triggered = True
+            except httpx.HTTPError as error:
+                log.warning("No se pudo encolar %s: %s", name, error)
+    for stale in set(last_run) - active_names:
+        last_run.pop(stale, None)
+    return triggered
+
+
+async def push_if_enabled(app, settings: Settings) -> None:
+    values = await app.state.settings.get_all()
+    if values["git_remote_enabled"] != "true" or not values["git_remote_url"]:
+        return
+    await asyncio.sleep(PUSH_DELAY_SECONDS)
+    ok, detail = await push_backups(
+        settings.oxidized_backup_repo, values["git_remote_url"]
+    )
+    await app.state.settings.set_many(
+        {
+            "last_push_ok": "true" if ok else "false",
+            "last_push_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+            "last_push_detail": detail,
+        }
+    )
+    if not ok:
+        log.warning("git push al remoto falló: %s", detail)
 
 
 async def scheduler_loop(app, settings: Settings) -> None:
+    last_run: dict[str, float] = {}
+    loop = asyncio.get_running_loop()
     while True:
         try:
-            values = await app.state.settings.get_all()
-            minutes = max(int(values["backup_interval_minutes"]), 5)
-        except Exception:
-            minutes = 60
-        try:
-            await asyncio.sleep(minutes * 60)
-            await run_cycle(app, settings)
+            await asyncio.sleep(60)
+            triggered = await run_tick(app, settings, last_run, loop.time())
+            if triggered:
+                await push_if_enabled(app, settings)
         except asyncio.CancelledError:
             raise
         except Exception:

@@ -48,6 +48,29 @@ async def test_group_name_create_and_update(auth_headers) -> None:
     assert patched.json()["group_name"] == "EmpresaB"
 
 
+async def test_per_device_backup_interval(auth_headers) -> None:
+    async with client(auth_headers) as api:
+        created = (await api.post(
+            "/api/devices", json={**DEVICE, "backup_interval_minutes": 15}
+        )).json()
+        patched = await api.patch(
+            f"/api/devices/{created['id']}", json={"backup_interval_minutes": 0}
+        )
+
+    assert created["backup_interval_minutes"] == 15
+    assert patched.json()["backup_interval_minutes"] == 0
+
+
+async def test_backup_interval_out_of_range_rejected(auth_headers) -> None:
+    async with client(auth_headers) as api:
+        response = await api.post(
+            "/api/devices",
+            json={**DEVICE, "name": "rb-x", "backup_interval_minutes": 99999},
+        )
+
+    assert response.status_code == 422
+
+
 async def test_create_device_with_custom_port(auth_headers) -> None:
     async with client(auth_headers) as api:
         response = await api.post(

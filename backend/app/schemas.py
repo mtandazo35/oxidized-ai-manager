@@ -18,6 +18,7 @@ class DeviceCreate(BaseModel):
     password: str = Field(default="", max_length=256)
     enabled: bool = True
     group_name: str = Field(default="", max_length=64)
+    backup_interval_minutes: int = Field(default=0, ge=0, le=10080)
 
 
 class DeviceUpdate(BaseModel):
@@ -29,6 +30,7 @@ class DeviceUpdate(BaseModel):
     password: str | None = Field(default=None, max_length=256)
     enabled: bool | None = None
     group_name: str | None = Field(default=None, max_length=64)
+    backup_interval_minutes: int | None = Field(default=None, ge=0, le=10080)
 
 
 class DeviceOut(BaseModel):
@@ -40,6 +42,7 @@ class DeviceOut(BaseModel):
     username: str
     enabled: bool
     group_name: str = ""
+    backup_interval_minutes: int = 0
     identity: str = ""
     ros_version: str = ""
     board: str = ""

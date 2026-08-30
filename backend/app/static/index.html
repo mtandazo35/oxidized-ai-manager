@@ -171,7 +171,7 @@
         <div class="field" style="margin-bottom:12px">
           <label for="s-interval">Respaldar cada</label>
           <input id="s-interval" type="number" min="5" max="10080" step="5" style="width:90px" required>
-          <label for="s-interval">minutos</label>
+          <label for="s-interval">minutos <span class="muted">(global — cada router puede tener el suyo con «Editar»)</span></label>
         </div>
         <div class="field" style="margin-bottom:12px">
           <input id="s-git-enabled" type="checkbox">
@@ -199,6 +199,29 @@
     <p class="msg" id="changes-msg"></p>
     <pre class="diff" id="changes-view"></pre>
   </div>
+</div>
+
+<div class="overlay" id="edit-overlay" hidden>
+  <form class="card" id="edit-form">
+    <h1 style="margin-bottom:16px;font-size:1.1rem" id="edit-title">Editar</h1>
+    <label for="e-address">Dirección (IP o host)</label>
+    <input id="e-address" required style="margin:4px 0 10px">
+    <label for="e-port">Puerto SSH</label>
+    <input id="e-port" type="number" min="1" max="65535" style="margin:4px 0 10px">
+    <label for="e-username">Usuario SSH</label>
+    <input id="e-username" style="margin:4px 0 10px">
+    <label for="e-password">Clave SSH</label>
+    <input id="e-password" type="password" placeholder="(dejar vacío para no cambiarla)" style="margin:4px 0 10px">
+    <label for="e-group">Grupo / Empresa</label>
+    <input id="e-group" style="margin:4px 0 10px">
+    <label for="e-interval">Respaldar cada (minutos; 0 = usar el global de Configuración)</label>
+    <input id="e-interval" type="number" min="0" max="10080" style="margin:4px 0 12px">
+    <div style="display:flex;gap:8px">
+      <button type="submit">Guardar</button>
+      <button type="button" class="ghost" id="btn-close-edit">Cancelar</button>
+    </div>
+    <p class="msg" id="edit-msg"></p>
+  </form>
 </div>
 
 <div class="overlay" id="pass-overlay" hidden>
@@ -355,12 +378,57 @@ function renderDevices() {
         <td><span class="badge ${d.enabled ? "ok" : "off"}">${d.enabled ? "activo" : "pausado"}</span></td>
         <td style="text-align:right;white-space:nowrap">
           <button class="ghost" onclick="backupNow(${d.id})">Respaldar ahora</button>
+          <button class="ghost" onclick="openEdit(${d.id})">Editar</button>
           <button class="ghost" onclick="toggleDevice(${d.id}, ${!d.enabled})">${d.enabled ? "Pausar" : "Activar"}</button>
           <button class="danger" onclick="deleteDevice(${d.id}, '${esc(d.name)}')">Eliminar</button>
         </td>
       </tr>`).join("")
     : '<tr><td colspan="9" class="muted">Sin routers que coincidan.</td></tr>';
 }
+
+let editDeviceId = null;
+
+window.openEdit = (id) => {
+  const device = allDevices.find((d) => d.id === id);
+  if (!device) return;
+  editDeviceId = id;
+  $("edit-title").textContent = "Editar " + device.name;
+  $("e-address").value = device.address;
+  $("e-port").value = device.port;
+  $("e-username").value = device.username;
+  $("e-password").value = "";
+  $("e-group").value = device.group_name || "";
+  $("e-interval").value = device.backup_interval_minutes || 0;
+  $("edit-msg").textContent = "";
+  $("edit-overlay").hidden = false;
+};
+
+$("btn-close-edit").addEventListener("click", () => {
+  $("edit-overlay").hidden = true;
+});
+
+$("edit-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const body = {
+    address: $("e-address").value.trim(),
+    port: Number($("e-port").value) || 22,
+    username: $("e-username").value,
+    group_name: $("e-group").value.trim(),
+    backup_interval_minutes: Number($("e-interval").value) || 0,
+  };
+  if ($("e-password").value) body.password = $("e-password").value;
+  try {
+    await api("/api/devices/" + editDeviceId, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    $("edit-overlay").hidden = true;
+    setMsg("device-msg", "Router actualizado.", true);
+    await reloadOxidized(true);
+    refresh();
+  } catch (error) { setMsg("edit-msg", error.message, false); }
+});
 
 window.editGroup = async (id, current) => {
   const value = prompt("Grupo / Empresa:", current);
