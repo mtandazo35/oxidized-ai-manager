@@ -80,8 +80,12 @@ async def login(
 
 
 @router.get("/me")
-async def me(username: str = Depends(current_user)) -> dict:
-    return {"username": username}
+async def me(request: Request, username: str = Depends(current_user)) -> dict:
+    user = await request.app.state.users.get_by_username(username)
+    return {
+        "username": username,
+        "must_change_password": bool(user and user.get("must_change_password")),
+    }
 
 
 @router.post("/change-password", status_code=status.HTTP_204_NO_CONTENT)

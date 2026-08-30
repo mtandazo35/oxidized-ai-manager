@@ -217,22 +217,27 @@ class UserRepository:
 
     async def get_by_username(self, username: str) -> dict[str, Any] | None:
         row = await self._pool.fetchrow(
-            "SELECT id, username, password_hash FROM users WHERE username = $1",
+            "SELECT id, username, password_hash, must_change_password "
+            "FROM users WHERE username = $1",
             username,
         )
         return dict(row) if row else None
 
-    async def create_user(self, username: str, password_hash: str) -> None:
+    async def create_user(
+        self, username: str, password_hash: str, must_change_password: bool = False
+    ) -> None:
         await self._pool.execute(
-            "INSERT INTO users (username, password_hash) VALUES ($1, $2)",
+            "INSERT INTO users (username, password_hash, must_change_password) "
+            "VALUES ($1, $2, $3)",
             username,
             password_hash,
+            must_change_password,
         )
 
     async def update_password(self, username: str, password_hash: str) -> None:
         await self._pool.execute(
-            "UPDATE users SET password_hash = $2, updated_at = now() "
-            "WHERE username = $1",
+            "UPDATE users SET password_hash = $2, must_change_password = FALSE, "
+            "updated_at = now() WHERE username = $1",
             username,
             password_hash,
         )

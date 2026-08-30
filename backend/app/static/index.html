@@ -281,7 +281,10 @@
 
 <div class="overlay" id="pass-overlay" hidden>
   <form class="card" id="pass-form">
-    <h1 style="margin-bottom:16px;font-size:1.1rem">Cambiar clave</h1>
+    <h1 style="margin-bottom:8px;font-size:1.1rem" id="pass-title">Cambiar clave</h1>
+    <p class="muted" id="pass-forced-note" hidden style="margin:0 0 12px">
+      Por seguridad, debe definir una clave propia antes de continuar.
+    </p>
     <input id="p-current" type="password" placeholder="clave actual" autocomplete="current-password" required>
     <input id="p-new" type="password" placeholder="clave nueva (mín. 8)" autocomplete="new-password" minlength="8" required>
     <div style="display:flex;gap:8px">
@@ -295,7 +298,18 @@
 <script>
 "use strict";
 let token = localStorage.getItem("oxm_token") || "";
+let mustChangePassword = false;
 const $ = (id) => document.getElementById(id);
+
+function openPassModal(forced) {
+  mustChangePassword = !!forced;
+  $("pass-forced-note").hidden = !forced;
+  $("btn-close-pass").hidden = !!forced;   // sin escape en el primer login
+  $("pass-title").textContent = forced ? "Cambio de clave obligatorio" : "Cambiar clave";
+  $("pass-msg").textContent = "";
+  $("pass-form").reset();
+  $("pass-overlay").hidden = false;
+}
 
 function show(view) {
   $("login-view").hidden = view !== "login";
@@ -756,8 +770,13 @@ $("pass-form").addEventListener("submit", async (event) => {
       }),
     });
     $("pass-form").reset();
-    setMsg("pass-msg", "Clave actualizada. Úsala en el próximo ingreso.", true);
-    setTimeout(() => { $("pass-overlay").hidden = true; }, 1500);
+    setMsg("pass-msg", "Clave actualizada.", true);
+    const wasForced = mustChangePassword;
+    mustChangePassword = false;
+    setTimeout(() => {
+      $("pass-overlay").hidden = true;
+      if (wasForced) refresh();
+    }, 1200);
   } catch (error) { setMsg("pass-msg", error.message, false); }
 });
 
@@ -774,11 +793,9 @@ $("btn-template-menu").addEventListener("click", (event) => {
   event.stopPropagation();
   $("template-menu").hidden = !$("template-menu").hidden;
 });
-$("btn-open-pass").addEventListener("click", () => {
-  $("pass-overlay").hidden = false;
-  $("pass-msg").textContent = "";
-});
+$("btn-open-pass").addEventListener("click", () => openPassModal(false));
 $("btn-close-pass").addEventListener("click", () => {
+  if (mustChangePassword) return;   // no se puede cerrar en el primer login
   $("pass-overlay").hidden = true;
   $("pass-form").reset();
 });
@@ -1032,6 +1049,7 @@ async function enterApp() {
     switchTab(initialTab());
     refresh();
     setInterval(refresh, 60000);
+    if (me.must_change_password) openPassModal(true);
   } catch (error) { logout(); }
 }
 

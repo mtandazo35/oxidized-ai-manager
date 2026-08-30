@@ -178,15 +178,19 @@ class FakeUserRepository:
         user = self._users.get(username)
         return dict(user) if user else None
 
-    async def create_user(self, username: str, password_hash: str) -> None:
+    async def create_user(
+        self, username: str, password_hash: str, must_change_password: bool = False
+    ) -> None:
         self._users[username] = {
             "id": len(self._users) + 1,
             "username": username,
             "password_hash": password_hash,
+            "must_change_password": must_change_password,
         }
 
     async def update_password(self, username: str, password_hash: str) -> None:
         self._users[username]["password_hash"] = password_hash
+        self._users[username]["must_change_password"] = False
 
 
 @pytest.fixture
@@ -230,6 +234,7 @@ def user_repository() -> FakeUserRepository:
         "id": 1,
         "username": "admin",
         "password_hash": hash_password(TEST_ADMIN_PASSWORD),
+        "must_change_password": False,
     }
     main_module.app.state.users = repository
     return repository

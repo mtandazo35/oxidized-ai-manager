@@ -40,7 +40,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await devices.encrypt_legacy_passwords()
     if await users.count_users() == 0 and settings.admin_password:
         await users.create_user(
-            settings.admin_username, hash_password(settings.admin_password)
+            settings.admin_username,
+            hash_password(settings.admin_password),
+            must_change_password=True,
         )
     scheduler_task = asyncio.create_task(scheduler_loop(app, settings))
     try:

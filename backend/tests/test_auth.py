@@ -50,7 +50,30 @@ async def test_me_requires_token(auth_headers) -> None:
 
     assert anonymous.status_code == 401
     assert identified.status_code == 200
-    assert identified.json() == {"username": "admin"}
+    assert identified.json()["username"] == "admin"
+    assert identified.json()["must_change_password"] is False
+
+
+async def test_me_flags_forced_change(auth_headers, user_repository) -> None:
+    user_repository._users["admin"]["must_change_password"] = True
+    async with client() as api:
+        response = await api.get("/api/auth/me", headers=auth_headers)
+
+    assert response.json()["must_change_password"] is True
+
+
+async def test_change_password_clears_forced_flag(auth_headers, user_repository) -> None:
+    user_repository._users["admin"]["must_change_password"] = True
+    async with client() as api:
+        changed = await api.post(
+            "/api/auth/change-password",
+            headers=auth_headers,
+            json={"current_password": TEST_ADMIN_PASSWORD, "new_password": "clave-nueva-1"},
+        )
+        me = await api.get("/api/auth/me", headers=auth_headers)
+
+    assert changed.status_code == 204
+    assert me.json()["must_change_password"] is False
 
 
 async def test_devices_require_authentication() -> None:
