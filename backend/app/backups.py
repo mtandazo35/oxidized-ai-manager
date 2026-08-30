@@ -10,16 +10,55 @@ from .gitrepo import (
     show_config,
     show_diff,
 )
-from .schemas import DEVICE_NAME_PATTERN, BackupEventOut, BackupStatusOut
+from .scheduler import trigger_node_backup
+from .schemas import (
+    DEVICE_NAME_PATTERN,
+    BackupEventOut,
+    BackupStatusOut,
+    BulkBackupRequest,
+)
 
 COMMIT_QUERY_PATTERN = r"^[0-9a-f]{6,40}$"
-
 
 router = APIRouter(
     prefix="/api/backups",
     tags=["backups"],
     dependencies=[Depends(current_user)],
 )
+
+
+@router.post("/run", status_code=status.HTTP_202_ACCEPTED)
+async def run_bulk_backup(request: Request, payload: BulkBackupRequest) -> dict:
+    if payload.scope == "group" and not payload.group:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Indique el grupo a respaldar.",
+        )
+    if payload.scope == "devices" and not payload.device_ids:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Seleccione al menos un router.",
+        )
+    devices = await request.app.state.devices.list_devices()
+    targets = [device for device in devices if device["enabled"]]
+    if payload.scope == "group":
+        targets = [
+            device for device in targets
+            if device.get("group_name", "") == payload.group
+        ]
+    elif payload.scope == "devices":
+        wanted = set(payload.device_ids)
+        targets = [device for device in targets if device["id"] in wanted]
+    settings = get_settings()
+    queued: list[str] = []
+    failed: list[str] = []
+    for device in targets:
+        try:
+            await trigger_node_backup(settings.oxidized_url, device["name"])
+            queued.append(device["name"])
+        except httpx.HTTPError:
+            failed.append(device["name"])
+    return {"queued": queued, "failed": failed}
 
 
 @router.get("/oxidized-status")

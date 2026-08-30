@@ -101,6 +101,12 @@ class SettingsOut(BaseModel):
     last_push_detail: str
 
 
+class BulkBackupRequest(BaseModel):
+    scope: Literal["all", "group", "devices"]
+    group: str = Field(default="", max_length=64)
+    device_ids: list[int] = Field(default_factory=list, max_length=1000)
+
+
 class BackupEventIn(BaseModel):
     node: str = Field(min_length=1, max_length=128)
     event: Literal["node_success", "node_fail", "post_store"]

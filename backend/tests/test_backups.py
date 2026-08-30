@@ -122,6 +122,97 @@ async def test_oxidized_status_empty_when_unreachable(auth_headers) -> None:
     assert response.json() == []
 
 
+async def create_device(api, auth_headers, name, group="", enabled=True):
+    return await api.post(
+        "/api/devices",
+        headers=auth_headers,
+        json={
+            "name": name,
+            "address": "192.0.2.10",
+            "group_name": group,
+            "enabled": enabled,
+        },
+    )
+
+
+async def test_bulk_run_requires_login() -> None:
+    async with client() as api:
+        response = await api.post("/api/backups/run", json={"scope": "all"})
+
+    assert response.status_code == 401
+
+
+async def test_bulk_run_all_skips_disabled(auth_headers, monkeypatch) -> None:
+    triggered = []
+
+    async def fake_trigger(url, node):
+        triggered.append(node)
+
+    monkeypatch.setattr("app.backups.trigger_node_backup", fake_trigger)
+    async with client() as api:
+        await create_device(api, auth_headers, "rb-a", "EmpA")
+        await create_device(api, auth_headers, "rb-b", "EmpB", enabled=False)
+        response = await api.post(
+            "/api/backups/run", headers=auth_headers, json={"scope": "all"}
+        )
+
+    assert response.status_code == 202
+    assert response.json()["queued"] == ["rb-a"]
+    assert triggered == ["rb-a"]
+
+
+async def test_bulk_run_by_group(auth_headers, monkeypatch) -> None:
+    async def fake_trigger(url, node):
+        pass
+
+    monkeypatch.setattr("app.backups.trigger_node_backup", fake_trigger)
+    async with client() as api:
+        await create_device(api, auth_headers, "rb-a", "EmpA")
+        await create_device(api, auth_headers, "rb-b", "EmpB")
+        response = await api.post(
+            "/api/backups/run",
+            headers=auth_headers,
+            json={"scope": "group", "group": "EmpB"},
+        )
+
+    assert response.json()["queued"] == ["rb-b"]
+
+
+async def test_bulk_run_selected_devices(auth_headers, monkeypatch) -> None:
+    async def fake_trigger(url, node):
+        pass
+
+    monkeypatch.setattr("app.backups.trigger_node_backup", fake_trigger)
+    async with client() as api:
+        first = (await create_device(api, auth_headers, "rb-a")).json()
+        await create_device(api, auth_headers, "rb-b")
+        response = await api.post(
+            "/api/backups/run",
+            headers=auth_headers,
+            json={"scope": "devices", "device_ids": [first["id"]]},
+        )
+
+    assert response.json()["queued"] == ["rb-a"]
+
+
+async def test_bulk_run_group_without_name_rejected(auth_headers) -> None:
+    async with client() as api:
+        response = await api.post(
+            "/api/backups/run", headers=auth_headers, json={"scope": "group"}
+        )
+
+    assert response.status_code == 422
+
+
+async def test_bulk_run_devices_without_ids_rejected(auth_headers) -> None:
+    async with client() as api:
+        response = await api.post(
+            "/api/backups/run", headers=auth_headers, json={"scope": "devices"}
+        )
+
+    assert response.status_code == 422
+
+
 async def test_events_filter_by_node(auth_headers) -> None:
     async with client() as api:
         await post_event(api, "rb-lab-01", "node_success", "abc123")

@@ -16,9 +16,12 @@
     padding: 14px 16px; background: #1e293b; border-bottom: 1px solid #334155; }
   .bar-right { display: flex; align-items: center; gap: 8px; }
   table { width: 100%; border-collapse: collapse; font-size: .9rem; }
-  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #1e293b; }
+  th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid #1e293b;
+    white-space: nowrap; }
   th { color: #94a3b8; font-weight: 600; }
   tr:hover td { background: #16233b; }
+  .card { overflow-x: auto; }
+  button.mini { padding: 5px 9px; font-size: .78rem; }
   input, select { background: #1e293b; color: #e2e8f0; border: 1px solid #334155;
     border-radius: 6px; padding: 8px 10px; font-size: .9rem; }
   input:focus { outline: 1px solid #3b82f6; }
@@ -189,6 +192,21 @@
         <span class="muted" id="push-status" style="margin-left:12px"></span>
         <p class="msg" id="settings-msg"></p>
       </form>
+    </div>
+
+    <h2>Respaldo masivo</h2>
+    <div class="card">
+      <div class="field" style="margin-bottom:14px">
+        <button type="button" id="btn-bulk-all">Respaldar todos ahora</button>
+      </div>
+      <div class="field" style="margin-bottom:14px">
+        <select id="bulk-run-group"></select>
+        <button type="button" class="ghost" id="btn-bulk-run-group">Respaldar grupo</button>
+      </div>
+      <p class="muted" style="margin:0 0 6px">Selectivo — marque los routers:</p>
+      <div id="bulk-run-devices" style="max-height:220px;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:4px;margin-bottom:10px"></div>
+      <button type="button" class="ghost" id="btn-bulk-run-selected">Respaldar seleccionados</button>
+      <p class="msg" id="bulk-run-msg"></p>
     </div>
     </div>
   </main>
@@ -376,7 +394,7 @@ function renderStatus() {
           <td>${fmtDate(ev && ev.last_event_at)}</td>
           <td>${fmtDate(ev && ev.last_success_at)}</td>
           <td class="muted">${esc(((ev && ev.last_commit) || "").slice(0, 10))}</td>
-          <td style="text-align:right"><button class="ghost" onclick="showChanges('${esc(name)}')">Cambios</button></td>
+          <td style="text-align:right"><button class="ghost mini" onclick="showChanges('${esc(name)}')">Cambios</button></td>
         </tr>`;
       }).join("")
     : '<tr><td colspan="7" class="muted">Sin routers registrados.</td></tr>';
@@ -406,11 +424,11 @@ function renderDevices() {
         <td title="${esc(d.board)}">${d.ros_version ? esc(d.ros_version) : '<span class="muted">—</span>'}</td>
         <td>${esc(d.username)}</td>
         <td><span class="badge ${d.enabled ? "ok" : "off"}">${d.enabled ? "activo" : "pausado"}</span></td>
-        <td style="text-align:right;white-space:nowrap">
-          <button class="ghost" onclick="backupNow(${d.id})">Respaldar ahora</button>
-          <button class="ghost" onclick="openEdit(${d.id})">Editar</button>
-          <button class="ghost" onclick="toggleDevice(${d.id}, ${!d.enabled})">${d.enabled ? "Pausar" : "Activar"}</button>
-          <button class="danger" onclick="deleteDevice(${d.id}, '${esc(d.name)}')">Eliminar</button>
+        <td style="text-align:right">
+          <button class="ghost mini" onclick="backupNow(${d.id})">Respaldar</button>
+          <button class="ghost mini" onclick="openEdit(${d.id})">Editar</button>
+          <button class="ghost mini" onclick="toggleDevice(${d.id}, ${!d.enabled})">${d.enabled ? "Pausar" : "Activar"}</button>
+          <button class="danger mini" onclick="deleteDevice(${d.id}, '${esc(d.name)}')">Eliminar</button>
         </td>
       </tr>`).join("")
     : '<tr><td colspan="9" class="muted">Sin routers que coincidan.</td></tr>';
@@ -894,8 +912,61 @@ function switchTab(tab) {
     $("tab-btn-" + name).classList.toggle("active", name === tab);
   });
   if (location.hash !== "#" + tab) history.replaceState(null, "", "#" + tab);
-  if (tab === "config") loadSettings();
+  if (tab === "config") { loadSettings(); loadBulkRun(); }
 }
+
+async function loadBulkRun() {
+  try {
+    const devices = await api("/api/devices");
+    allDevices = devices;
+    const enabled = devices.filter((d) => d.enabled);
+    const groups = [...new Set(
+      enabled.map((d) => d.group_name).filter(Boolean)
+    )].sort();
+    $("bulk-run-group").innerHTML = groups.length
+      ? groups.map((g) => `<option value="${esc(g)}">${esc(g)}</option>`).join("")
+      : '<option value="">(sin grupos definidos)</option>';
+    $("bulk-run-devices").innerHTML = enabled.length
+      ? enabled.map((d) => `<label style="display:flex;gap:6px;align-items:center">
+          <input type="checkbox" class="bulk-run-check" value="${d.id}">
+          ${esc(d.name)}${d.group_name ? ` <span class="muted">(${esc(d.group_name)})</span>` : ""}
+        </label>`).join("")
+      : '<span class="muted">Sin routers activos.</span>';
+  } catch (e) {}
+}
+
+async function runBulkBackup(payload) {
+  try {
+    const result = await api("/api/backups/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const now = Date.now();
+    result.queued.forEach((name) => { pendingBackups[name] = now; });
+    let summary = result.queued.length + " respaldos encolados";
+    if (result.failed.length) summary += "; fallaron: " + result.failed.join(", ");
+    setMsg("bulk-run-msg", summary + ". Vea el avance en la pestaña Respaldos.",
+      result.failed.length === 0);
+    if (result.queued.length) startFastPoll();
+  } catch (error) { setMsg("bulk-run-msg", error.message, false); }
+}
+
+$("btn-bulk-all").addEventListener("click", () => {
+  if (confirm("¿Encolar el respaldo de TODOS los routers activos?"))
+    runBulkBackup({ scope: "all" });
+});
+$("btn-bulk-run-group").addEventListener("click", () => {
+  const group = $("bulk-run-group").value;
+  if (!group) { setMsg("bulk-run-msg", "No hay grupos definidos.", false); return; }
+  runBulkBackup({ scope: "group", group });
+});
+$("btn-bulk-run-selected").addEventListener("click", () => {
+  const ids = [...document.querySelectorAll(".bulk-run-check:checked")]
+    .map((c) => Number(c.value));
+  if (!ids.length) { setMsg("bulk-run-msg", "Marque al menos un router.", false); return; }
+  runBulkBackup({ scope: "devices", device_ids: ids });
+});
 
 function initialTab() {
   const fromHash = location.hash.slice(1);
