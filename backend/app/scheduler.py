@@ -1,6 +1,7 @@
 import asyncio
 import datetime as dt
 import logging
+import os
 import re
 
 import httpx
@@ -51,7 +52,7 @@ async def push_backups(repo_path: str, remote_url: str) -> tuple[bool, str]:
         "refs/heads/*:refs/heads/*",
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
-        env={"GIT_TERMINAL_PROMPT": "0", "HOME": "/tmp", "PATH": "/usr/bin:/bin"},
+        env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
     )
     try:
         _, stderr = await asyncio.wait_for(process.communicate(), timeout=120)

@@ -53,6 +53,17 @@
     display: grid; place-items: center; z-index: 30; }
   .overlay .card { width: 340px; }
   .overlay input { width: 100%; margin-bottom: 10px; }
+  .overlay .card.wide { width: min(900px, 94vw); }
+  .version-list { display: flex; flex-direction: column; gap: 4px;
+    max-height: 160px; overflow-y: auto; margin-bottom: 10px; }
+  .version-list .vrow { display: flex; align-items: center; gap: 6px; }
+  .version-list .vrow > button:first-child { flex: 1; text-align: left; background: #1e293b; }
+  .version-list .vrow > button:first-child.sel { outline: 1px solid #3b82f6; }
+  .version-list .mini { padding: 6px 8px; font-size: .75rem; }
+  pre.diff { background: #0b1220; border: 1px solid #1e293b; border-radius: 8px;
+    padding: 12px; overflow: auto; max-height: 50vh; font-size: .8rem;
+    line-height: 1.35; margin: 0; white-space: pre; }
+  .dadd { color: #4ade80; } .ddel { color: #f87171; } .dhunk { color: #60a5fa; }
   .field { display: flex; align-items: center; gap: 8px; }
   label { font-size: .9rem; color: #cbd5e1; }
   nav.tabs { display: flex; gap: 4px; padding: 0 16px; background: #1e293b;
@@ -99,8 +110,8 @@
     <h2>Estado de respaldos</h2>
     <div class="card">
       <table>
-        <thead><tr><th>Router</th><th>Estado actual</th><th>Último evento</th><th>Fecha</th><th>Último éxito</th><th>Commit</th></tr></thead>
-        <tbody id="status-body"><tr><td colspan="6" class="muted">Sin routers registrados.</td></tr></tbody>
+        <thead><tr><th>Router</th><th>Estado actual</th><th>Último evento</th><th>Fecha</th><th>Último éxito</th><th>Commit</th><th></th></tr></thead>
+        <tbody id="status-body"><tr><td colspan="7" class="muted">Sin routers registrados.</td></tr></tbody>
       </table>
     </div>
 
@@ -171,6 +182,18 @@
     </div>
     </div>
   </main>
+</div>
+
+<div class="overlay" id="changes-overlay" hidden>
+  <div class="card wide">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <h1 style="font-size:1.1rem" id="changes-title">Cambios</h1>
+      <button type="button" class="ghost" id="btn-close-changes">Cerrar</button>
+    </div>
+    <div class="version-list" id="version-list"></div>
+    <p class="msg" id="changes-msg"></p>
+    <pre class="diff" id="changes-view"></pre>
+  </div>
 </div>
 
 <div class="overlay" id="pass-overlay" hidden>
@@ -286,9 +309,10 @@ async function loadStatus() {
           <td>${fmtDate(ev && ev.last_event_at)}</td>
           <td>${fmtDate(ev && ev.last_success_at)}</td>
           <td class="muted">${esc(((ev && ev.last_commit) || "").slice(0, 10))}</td>
+          <td style="text-align:right"><button class="ghost" onclick="showChanges('${esc(name)}')">Cambios</button></td>
         </tr>`;
       }).join("")
-    : '<tr><td colspan="6" class="muted">Sin routers registrados.</td></tr>';
+    : '<tr><td colspan="7" class="muted">Sin routers registrados.</td></tr>';
 }
 
 let fastPollTimer = null;
@@ -348,6 +372,86 @@ async function reloadOxidized(silent) {
     if (!silent) setMsg("device-msg", "Reload: " + error.message, false);
   }
 }
+
+let changesNode = "";
+
+function renderDiff(text) {
+  $("changes-view").innerHTML = text.split("\n").map((line) => {
+    const safe = esc(line);
+    if (line.startsWith("+") && !line.startsWith("+++")) return `<span class="dadd">${safe}</span>`;
+    if (line.startsWith("-") && !line.startsWith("---")) return `<span class="ddel">${safe}</span>`;
+    if (line.startsWith("@@") || line.startsWith("commit ")) return `<span class="dhunk">${safe}</span>`;
+    return safe;
+  }).join("\n");
+}
+
+function selectVersion(commit) {
+  document.querySelectorAll("#version-list .vrow > button:first-child")
+    .forEach((b) => b.classList.toggle("sel", b.dataset.commit === commit));
+}
+
+window.loadDiff = async (commit) => {
+  selectVersion(commit);
+  $("changes-msg").textContent = "";
+  try {
+    const result = await api(`/api/backups/diff?node=${encodeURIComponent(changesNode)}&commit=${commit}`);
+    renderDiff(result.diff || "(sin diferencias registradas en esta versión)");
+  } catch (error) { setMsg("changes-msg", error.message, false); }
+};
+
+window.loadFullConfig = async (commit) => {
+  selectVersion(commit);
+  $("changes-msg").textContent = "";
+  try {
+    const result = await api(`/api/backups/config?node=${encodeURIComponent(changesNode)}&commit=${commit}`);
+    $("changes-view").textContent = result.config;
+  } catch (error) { setMsg("changes-msg", error.message, false); }
+};
+
+window.downloadConfig = async (commit) => {
+  try {
+    const result = await api(`/api/backups/config?node=${encodeURIComponent(changesNode)}&commit=${commit}`);
+    const blob = new Blob([result.config], { type: "text/plain;charset=utf-8" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = changesNode + "-" + commit.slice(0, 7) + ".rsc";
+    link.click();
+    URL.revokeObjectURL(link.href);
+  } catch (error) { setMsg("changes-msg", error.message, false); }
+};
+
+window.showChanges = async (name) => {
+  changesNode = name;
+  $("changes-title").textContent = "Cambios de " + name;
+  $("version-list").innerHTML = '<span class="muted">Cargando…</span>';
+  $("changes-view").textContent = "";
+  $("changes-msg").textContent = "";
+  $("changes-overlay").hidden = false;
+  try {
+    const versions = await api(`/api/backups/versions?node=${encodeURIComponent(name)}`);
+    if (!versions.length) {
+      $("version-list").innerHTML =
+        '<span class="muted">Sin versiones todavía: aparecerán cuando el router se respalde con cambios.</span>';
+      return;
+    }
+    $("version-list").innerHTML = versions.map((v) => `
+      <div class="vrow">
+        <button type="button" data-commit="${v.commit}" onclick="loadDiff('${v.commit}')">
+          ${fmtDate(v.date)} · <span class="muted">${v.commit.slice(0, 7)}</span>
+        </button>
+        <button type="button" class="ghost mini" onclick="loadFullConfig('${v.commit}')">config</button>
+        <button type="button" class="ghost mini" onclick="downloadConfig('${v.commit}')">⬇ descargar</button>
+      </div>`).join("");
+    loadDiff(versions[0].commit);
+  } catch (error) {
+    $("version-list").innerHTML = "";
+    setMsg("changes-msg", error.message, false);
+  }
+};
+
+$("btn-close-changes").addEventListener("click", () => {
+  $("changes-overlay").hidden = true;
+});
 
 window.backupNow = async (id) => {
   try {
