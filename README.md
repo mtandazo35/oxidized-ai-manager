@@ -13,15 +13,19 @@ Las imágenes seleccionadas son multi-arch (amd64/arm64); no se fija `platform` 
 
 ## ⚡ Instalación rápida (one-liner)
 
-En una máquina Debian 13 con Docker ya instalado:
+En cualquier VPS Debian/Ubuntu recién creado (el instalador instala Docker y las
+demás dependencias por sí mismo):
 
 ```bash
-git clone https://github.com/mtandazo35/oxidized-ai-manager.git && cd oxidized-ai-manager && sudo ./install.sh
+sudo apt-get update && sudo apt-get install -y git && \
+git clone https://github.com/mtandazo35/oxidized-ai-manager.git && \
+cd oxidized-ai-manager && sudo ./install.sh
 ```
 
-El script genera `.env` con secretos aleatorios, aplica el ajuste de kernel para
-Redis, levanta el stack e imprime la clave inicial de `admin`. Es idempotente:
-si vuelve a ejecutarlo, conserva el `.env` existente.
+El script instala Docker/Compose si faltan, genera `.env` con secretos
+aleatorios, aplica el ajuste de kernel para Redis, levanta el stack e imprime la
+clave inicial de `admin`. Es idempotente: si vuelve a ejecutarlo, conserva el
+`.env` existente.
 
 Para publicar con HTTPS en cualquier IP o dominio (renderiza Nginx desde la
 plantilla y, con `--cert`, emite el certificado Let's Encrypt):

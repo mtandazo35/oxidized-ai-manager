@@ -31,16 +31,43 @@ done
 
 [ -f docker-compose.yml ] || die "Ejecute este script dentro del repositorio clonado."
 
-# --- Dependencias ---
-command -v docker >/dev/null 2>&1 || die "Docker no está instalado. https://docs.docker.com/engine/install/"
+# --- Instalación de dependencias (VPS recién creado) ---
+IS_ROOT=0; [ "$(id -u)" -eq 0 ] && IS_ROOT=1
+SUDO=""; [ "$IS_ROOT" -eq 0 ] && command -v sudo >/dev/null 2>&1 && SUDO="sudo"
+
+apt_install() {
+    if command -v apt-get >/dev/null 2>&1; then
+        info "Instalando: $*"
+        $SUDO apt-get update -qq
+        DEBIAN_FRONTEND=noninteractive $SUDO apt-get install -y -qq "$@" >/dev/null
+    else
+        die "Instale manualmente: $* (no se detectó apt)."
+    fi
+}
+
+ensure_docker() {
+    command -v docker >/dev/null 2>&1 && return
+    warn "Docker no está instalado; instalándolo con el script oficial."
+    [ "$IS_ROOT" -eq 1 ] || [ -n "$SUDO" ] || die "Se requiere root/sudo para instalar Docker."
+    curl -fsSL https://get.docker.com | $SUDO sh
+    $SUDO systemctl enable --now docker >/dev/null 2>&1 || true
+}
+
+command -v curl >/dev/null 2>&1 || apt_install curl ca-certificates
+command -v openssl >/dev/null 2>&1 || apt_install openssl
+command -v envsubst >/dev/null 2>&1 || apt_install gettext-base
+ensure_docker
+
 if docker compose version >/dev/null 2>&1; then
     COMPOSE="docker compose"
 elif command -v docker-compose >/dev/null 2>&1; then
     COMPOSE="docker-compose"
 else
-    die "Docker Compose v2 no está disponible."
+    warn "Compose v2 ausente; instalando el plugin."
+    apt_install docker-compose-plugin
+    docker compose version >/dev/null 2>&1 || die "No se pudo habilitar Docker Compose v2."
+    COMPOSE="docker compose"
 fi
-command -v openssl >/dev/null 2>&1 || die "Falta 'openssl' para generar los secretos."
 
 # --- Ajuste de kernel para la persistencia de Redis ---
 if [ "$(id -u)" -eq 0 ]; then
@@ -87,7 +114,7 @@ if [ -n "$PUBLIC_HOST" ]; then
         < deploy/nginx.conf.template > deploy/nginx.conf
 
     if [ "$ISSUE_CERT" -eq 1 ]; then
-        command -v certbot >/dev/null 2>&1 || die "Certbot no está instalado (apt install certbot)."
+        command -v certbot >/dev/null 2>&1 || apt_install certbot
         [ -f "/etc/letsencrypt/live/${PUBLIC_HOST}/fullchain.pem" ] || {
             info "Emitiendo certificado Let's Encrypt para $PUBLIC_HOST"
             certbot certonly --standalone -d "$PUBLIC_HOST" --non-interactive --agree-tos --register-unsafely-without-email
