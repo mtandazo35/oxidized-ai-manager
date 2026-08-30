@@ -2,7 +2,7 @@
 username: ""
 password: ""
 model: routeros
-interval: 0
+interval: 3600
 debug: false
 threads: 1
 timeout: 20
@@ -30,9 +30,16 @@ input:
   default: ssh
   debug: false
 output:
-  default: file
-  file:
-    directory: /home/oxidized/.config/oxidized/configs
+  default: git
+  git:
+    user: oxidized
+    email: backup@oxidized-ai-manager.local
+    repo: /home/oxidized/.config/oxidized/backups.git
+hooks:
+  notify-backend:
+    type: exec
+    events: [node_success, node_fail]
+    cmd: 'curl -s -m 10 -X POST -H "X-Oxidized-Token: __OXIDIZED_SOURCE_TOKEN__" -H "Content-Type: application/json" -d "{\"node\":\"$OX_NODE_NAME\",\"event\":\"$OX_EVENT\",\"commit\":\"$OX_REPO_COMMITREF\"}" http://backend:8000/api/oxidized/events'
 source:
   default: http
   http:

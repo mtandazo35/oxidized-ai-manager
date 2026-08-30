@@ -23,6 +23,17 @@ CREATE TABLE IF NOT EXISTS devices (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+CREATE TABLE IF NOT EXISTS backup_events (
+    id SERIAL PRIMARY KEY,
+    node TEXT NOT NULL,
+    event TEXT NOT NULL,
+    commit_ref TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS backup_events_node_idx
+    ON backup_events (node, created_at DESC);
 """
 
 

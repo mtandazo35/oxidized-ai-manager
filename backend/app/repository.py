@@ -76,6 +76,48 @@ class DeviceRepository:
         return [dict(row) for row in rows]
 
 
+class BackupEventRepository:
+    def __init__(self, pool: asyncpg.Pool) -> None:
+        self._pool = pool
+
+    async def record_event(self, node: str, event: str, commit_ref: str) -> None:
+        await self._pool.execute(
+            "INSERT INTO backup_events (node, event, commit_ref) VALUES ($1, $2, $3)",
+            node,
+            event,
+            commit_ref,
+        )
+
+    async def status(self) -> list[dict[str, Any]]:
+        rows = await self._pool.fetch(
+            """
+            SELECT node,
+                   (array_agg(event ORDER BY created_at DESC))[1] AS last_event,
+                   max(created_at) AS last_event_at,
+                   max(created_at) FILTER (WHERE event = 'node_success')
+                       AS last_success_at,
+                   (array_agg(commit_ref ORDER BY created_at DESC)
+                       FILTER (WHERE event = 'node_success'))[1] AS last_commit
+            FROM backup_events
+            GROUP BY node
+            ORDER BY node
+            """
+        )
+        return [dict(row) for row in rows]
+
+    async def list_events(
+        self, node: str | None, limit: int
+    ) -> list[dict[str, Any]]:
+        rows = await self._pool.fetch(
+            "SELECT id, node, event, commit_ref, created_at FROM backup_events "
+            "WHERE ($1::text IS NULL OR node = $1) "
+            "ORDER BY created_at DESC LIMIT $2",
+            node,
+            limit,
+        )
+        return [dict(row) for row in rows]
+
+
 class UserRepository:
     def __init__(self, pool: asyncpg.Pool) -> None:
         self._pool = pool

@@ -94,6 +94,52 @@ class FakeDeviceRepository:
         ]
 
 
+class FakeBackupEventRepository:
+    """In-memory stand-in matching BackupEventRepository's public contract."""
+
+    def __init__(self) -> None:
+        self._events: list[dict[str, Any]] = []
+        self._next_id = 1
+
+    async def record_event(self, node: str, event: str, commit_ref: str) -> None:
+        self._events.append(
+            {
+                "id": self._next_id,
+                "node": node,
+                "event": event,
+                "commit_ref": commit_ref,
+                "created_at": datetime.now(timezone.utc),
+            }
+        )
+        self._next_id += 1
+
+    async def status(self) -> list[dict[str, Any]]:
+        nodes: dict[str, list[dict[str, Any]]] = {}
+        for event in self._events:
+            nodes.setdefault(event["node"], []).append(event)
+        result = []
+        for node in sorted(nodes):
+            events = nodes[node]
+            latest = events[-1]
+            successes = [e for e in events if e["event"] == "node_success"]
+            result.append(
+                {
+                    "node": node,
+                    "last_event": latest["event"],
+                    "last_event_at": latest["created_at"],
+                    "last_success_at": successes[-1]["created_at"] if successes else None,
+                    "last_commit": successes[-1]["commit_ref"] if successes else None,
+                }
+            )
+        return result
+
+    async def list_events(
+        self, node: str | None, limit: int
+    ) -> list[dict[str, Any]]:
+        events = [e for e in self._events if node is None or e["node"] == node]
+        return list(reversed(events))[:limit]
+
+
 class FakeUserRepository:
     """In-memory stand-in matching UserRepository's public contract."""
 
@@ -129,6 +175,15 @@ def device_repository() -> FakeDeviceRepository:
 
     repository = FakeDeviceRepository()
     main_module.app.state.devices = repository
+    return repository
+
+
+@pytest.fixture(autouse=True)
+def backup_event_repository() -> FakeBackupEventRepository:
+    from app import main as main_module
+
+    repository = FakeBackupEventRepository()
+    main_module.app.state.backup_events = repository
     return repository
 
 

@@ -76,6 +76,15 @@ curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/api/devices   # lis
 curl http://127.0.0.1:8888/reload                                          # recarga de nodos en Oxidized
 ```
 
+## Estado de respaldos
+
+Cada respaldo queda versionado en Git (volumen de Oxidized) y notificado al backend:
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/api/backups/status   # último respaldo por router
+curl -H "Authorization: Bearer $TOKEN" 'http://127.0.0.1:8000/api/backups/events?node=rb-lab-01'
+```
+
 Detalles y criterios de aceptación en [docs/PHASE2.md](docs/PHASE2.md).
 
 Consulte diagnósticos con `docker compose logs --tail=100 <servicio>` y detenga el stack con `docker compose down`. No use `docker compose down -v` salvo que pretenda borrar todos los datos locales.
@@ -98,4 +107,5 @@ Las pruebas usan dobles para las dependencias; no necesitan contenedores ni rout
 - [Seguridad](docs/SECURITY.md)
 - [Detalles de la Fase 1](docs/PHASE1.md)
 - [Detalles de la Fase 2 (inventario)](docs/PHASE2.md)
+- [Detalles de la Fase 3 (respaldos Git y eventos)](docs/PHASE3.md)
 - [Acceso web público](docs/PUBLIC_ACCESS.md)

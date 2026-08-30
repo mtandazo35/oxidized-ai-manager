@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -53,3 +54,25 @@ class OxidizedNode(BaseModel):
     model: str
     username: str
     password: str
+
+
+class BackupEventIn(BaseModel):
+    node: str = Field(min_length=1, max_length=128)
+    event: Literal["node_success", "node_fail"]
+    commit: str = Field(default="", max_length=64)
+
+
+class BackupEventOut(BaseModel):
+    id: int
+    node: str
+    event: str
+    commit_ref: str
+    created_at: datetime
+
+
+class BackupStatusOut(BaseModel):
+    node: str
+    last_event: str
+    last_event_at: datetime
+    last_success_at: datetime | None
+    last_commit: str | None
