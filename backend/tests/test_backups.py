@@ -92,6 +92,23 @@ async def test_reload_reports_unreachable_oxidized(auth_headers) -> None:
     assert response.status_code == 502
 
 
+async def test_oxidized_status_requires_login() -> None:
+    async with client() as api:
+        response = await api.get("/api/backups/oxidized-status")
+
+    assert response.status_code == 401
+
+
+async def test_oxidized_status_empty_when_unreachable(auth_headers) -> None:
+    async with client() as api:
+        response = await api.get(
+            "/api/backups/oxidized-status", headers=auth_headers
+        )
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
 async def test_events_filter_by_node(auth_headers) -> None:
     async with client() as api:
         await post_event(api, "rb-lab-01", "node_success", "abc123")

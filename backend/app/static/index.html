@@ -36,6 +36,8 @@
   .badge.ok { background: #14532d; color: #86efac; }
   .badge.fail { background: #7f1d1d; color: #fca5a5; }
   .badge.off { background: #374151; color: #d1d5db; }
+  .badge.run { background: #78350f; color: #fcd34d; animation: pulse 1.2s infinite; }
+  @keyframes pulse { 50% { opacity: .55; } }
   #login-view { display: grid; place-items: center; min-height: 100vh; }
   #login-view .card { width: 320px; }
   #login-view input { width: 100%; margin-bottom: 10px; }
@@ -96,8 +98,8 @@
     <h2>Estado de respaldos</h2>
     <div class="card">
       <table>
-        <thead><tr><th>Router</th><th>Último evento</th><th>Fecha</th><th>Último éxito</th><th>Commit</th></tr></thead>
-        <tbody id="status-body"><tr><td colspan="5" class="muted">Sin eventos todavía.</td></tr></tbody>
+        <thead><tr><th>Router</th><th>Estado actual</th><th>Último evento</th><th>Fecha</th><th>Último éxito</th><th>Commit</th></tr></thead>
+        <tbody id="status-body"><tr><td colspan="6" class="muted">Sin routers registrados.</td></tr></tbody>
       </table>
     </div>
 
@@ -205,17 +207,73 @@ function setMsg(id, text, ok) {
   el.className = "msg " + (ok ? "ok" : "err");
 }
 
+const pendingBackups = {};
+
+function currentStateBadge(name, oxByNode) {
+  if (pendingBackups[name]) return '<span class="badge run">respaldando…</span>';
+  const ox = oxByNode[name];
+  if (!ox) return '<span class="badge off">—</span>';
+  if (ox.status === "success") return '<span class="badge ok">OK</span>';
+  if (ox.status === "never") return '<span class="badge off">pendiente</span>';
+  return `<span class="badge fail">${esc(ox.status)}</span>`;
+}
+
 async function loadStatus() {
-  const rows = await api("/api/backups/status");
-  $("status-body").innerHTML = rows.length
-    ? rows.map((r) => `<tr>
-        <td>${esc(r.node)}</td>
-        <td><span class="badge ${r.last_event === "node_success" ? "ok" : "fail"}">${esc(r.last_event)}</span></td>
-        <td>${fmtDate(r.last_event_at)}</td>
-        <td>${fmtDate(r.last_success_at)}</td>
-        <td class="muted">${esc((r.last_commit || "").slice(0, 10))}</td>
-      </tr>`).join("")
-    : '<tr><td colspan="5" class="muted">Sin eventos todavía.</td></tr>';
+  const [events, devices, oxStatus] = await Promise.all([
+    api("/api/backups/status"),
+    api("/api/devices"),
+    api("/api/backups/oxidized-status"),
+  ]);
+  const evByNode = {};
+  events.forEach((e) => { evByNode[e.node] = e; });
+  const oxByNode = {};
+  oxStatus.forEach((n) => { oxByNode[n.name] = n; });
+
+  const now = Date.now();
+  for (const [name, startedAt] of Object.entries(pendingBackups)) {
+    const ev = evByNode[name];
+    if (ev && new Date(ev.last_event_at).getTime() > startedAt) {
+      delete pendingBackups[name];
+      const ok = ev.last_event === "node_success";
+      setMsg("device-msg", name + (ok
+        ? ": respaldo completado."
+        : ": el respaldo falló (revise conexión o credenciales)."), ok);
+    } else if (now - startedAt > 180000) {
+      delete pendingBackups[name];
+      setMsg("device-msg", name + ": el respaldo sigue sin terminar; revise el estado.", false);
+    }
+  }
+
+  const names = [...new Set([
+    ...devices.map((d) => d.name),
+    ...events.map((e) => e.node),
+  ])].sort();
+
+  $("status-body").innerHTML = names.length
+    ? names.map((name) => {
+        const ev = evByNode[name];
+        return `<tr>
+          <td>${esc(name)}</td>
+          <td>${currentStateBadge(name, oxByNode)}</td>
+          <td>${ev ? `<span class="badge ${ev.last_event === "node_success" ? "ok" : "fail"}">${esc(ev.last_event)}</span>` : '<span class="muted">—</span>'}</td>
+          <td>${fmtDate(ev && ev.last_event_at)}</td>
+          <td>${fmtDate(ev && ev.last_success_at)}</td>
+          <td class="muted">${esc(((ev && ev.last_commit) || "").slice(0, 10))}</td>
+        </tr>`;
+      }).join("")
+    : '<tr><td colspan="6" class="muted">Sin routers registrados.</td></tr>';
+}
+
+let fastPollTimer = null;
+function startFastPoll() {
+  if (fastPollTimer) return;
+  fastPollTimer = setInterval(async () => {
+    await refresh();
+    if (!Object.keys(pendingBackups).length) {
+      clearInterval(fastPollTimer);
+      fastPollTimer = null;
+    }
+  }, 5000);
 }
 
 async function loadDevices() {
@@ -267,8 +325,10 @@ async function reloadOxidized(silent) {
 window.backupNow = async (id) => {
   try {
     const result = await api("/api/devices/" + id + "/backup", { method: "POST" });
-    setMsg("device-msg", "Respaldo de " + result.node + " encolado.", true);
-    setTimeout(refresh, 8000);
+    pendingBackups[result.node] = Date.now();
+    setMsg("device-msg", "Respaldo de " + result.node + " en proceso…", true);
+    loadStatus();
+    startFastPoll();
   } catch (error) { setMsg("device-msg", error.message, false); }
 };
 

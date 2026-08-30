@@ -1,6 +1,8 @@
+import httpx
 from fastapi import APIRouter, Depends, Query, Request
 
 from .auth import current_user
+from .config import get_settings
 from .schemas import BackupEventOut, BackupStatusOut
 
 
@@ -9,6 +11,29 @@ router = APIRouter(
     tags=["backups"],
     dependencies=[Depends(current_user)],
 )
+
+
+@router.get("/oxidized-status")
+async def oxidized_status() -> list[dict]:
+    settings = get_settings()
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            response = await client.get(
+                f"{settings.oxidized_url.rstrip('/')}/nodes.json"
+            )
+            response.raise_for_status()
+            nodes = response.json()
+    except (httpx.HTTPError, ValueError):
+        return []
+    return [
+        {
+            "name": node.get("name"),
+            "status": node.get("status"),
+            "last": node.get("last"),
+        }
+        for node in nodes
+        if node.get("name") != "phase1-placeholder"
+    ]
 
 
 @router.get("/status", response_model=list[BackupStatusOut])
