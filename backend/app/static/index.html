@@ -91,6 +91,7 @@
   </header>
   <nav class="tabs">
     <button id="tab-btn-dashboard" class="active">Respaldos</button>
+    <button id="tab-btn-import">Carga masiva</button>
     <button id="tab-btn-config">Configuración</button>
   </nav>
   <main>
@@ -112,26 +113,38 @@
         <input id="d-username" placeholder="usuario SSH">
         <input id="d-password" type="password" placeholder="clave SSH">
         <button type="submit">Agregar</button>
-        <button type="button" class="ghost" id="btn-import-toggle">Importar CSV</button>
       </form>
-      <div id="import-area" hidden style="margin:10px 0">
-        <p class="muted" style="margin:4px 0 8px">
-          Un router por línea: <code>nombre,ip,puerto,usuario,clave</code> —
-          puerto, usuario y clave son opcionales (puerto 22 por defecto).
-          También acepta ; o tabulador como separador y líneas con #.
-        </p>
-        <textarea id="import-text" rows="7" style="width:100%;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:8px 10px;font-family:monospace;font-size:.85rem" placeholder="rb-core-01,192.0.2.10,2222,backup,MiClave&#10;rb-sucursal-02,192.0.2.20"></textarea>
-        <div class="inline" style="display:flex;gap:8px;margin-top:8px">
-          <input type="file" id="import-file" accept=".csv,.txt" style="border:0;padding:4px 0">
-          <button type="button" id="btn-import">Importar</button>
-        </div>
-        <p class="msg" id="import-msg"></p>
-      </div>
       <p class="msg" id="device-msg"></p>
       <table>
         <thead><tr><th>Nombre</th><th>Dirección</th><th>Puerto</th><th>Modelo</th><th>Usuario</th><th>Estado</th><th></th></tr></thead>
         <tbody id="devices-body"></tbody>
       </table>
+    </div>
+    </div>
+
+    <div id="tab-import" hidden>
+    <h2>Carga masiva de MikroTik</h2>
+    <div class="card">
+      <p class="muted" style="margin-top:0">
+        <strong>Paso 1.</strong> Descargue la plantilla, llénela con un router por línea
+        (<code>nombre,ip,puerto,usuario,clave</code> — puerto, usuario y clave opcionales;
+        puerto 22 por defecto). Acepta coma, punto y coma o tabulador.
+      </p>
+      <button type="button" class="ghost" id="btn-template">⬇ Descargar plantilla</button>
+      <p class="muted" style="margin-bottom:6px"><strong>Paso 2.</strong> Suba el archivo o pegue el contenido:</p>
+      <input type="file" id="bulk-file" accept=".csv,.txt" style="border:0;padding:4px 0">
+      <textarea id="bulk-text" rows="8" style="width:100%;margin-top:8px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:8px 10px;font-family:monospace;font-size:.85rem" placeholder="rb-core-01,192.0.2.10,2222,backup,MiClave&#10;rb-sucursal-02,192.0.2.20"></textarea>
+      <div style="display:flex;gap:12px;align-items:center;margin-top:10px">
+        <button type="button" id="btn-upload">Subir routers</button>
+        <span id="bulk-progress" class="muted"></span>
+      </div>
+      <p class="msg" id="bulk-msg"></p>
+      <div style="max-height:340px;overflow-y:auto;margin-top:8px">
+        <table>
+          <thead><tr><th>Línea</th><th>Router</th><th>Resultado</th></tr></thead>
+          <tbody id="bulk-body"></tbody>
+        </table>
+      </div>
     </div>
     </div>
 
@@ -455,49 +468,148 @@ $("btn-close-pass").addEventListener("click", () => {
 $("btn-logout").addEventListener("click", logout);
 $("btn-reload").addEventListener("click", () => reloadOxidized(false));
 
-$("btn-import-toggle").addEventListener("click", () => {
-  $("import-area").hidden = !$("import-area").hidden;
+const CSV_TEMPLATE = [
+  "nombre,ip,puerto,usuario,clave",
+  "# Un router por linea. Puerto, usuario y clave son opcionales (puerto 22 por defecto).",
+  "# Borre estas lineas de ejemplo antes de subir:",
+  "rb-core-01,192.0.2.10,2222,backup,ClaveSegura",
+  "rb-sucursal-02,192.0.2.20,22,backup,ClaveSegura",
+  "",
+].join("\n");
+
+$("btn-template").addEventListener("click", () => {
+  const blob = new Blob([CSV_TEMPLATE], { type: "text/csv;charset=utf-8" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = "plantilla-routers.csv";
+  link.click();
+  URL.revokeObjectURL(link.href);
 });
 
-$("import-file").addEventListener("change", () => {
-  const file = $("import-file").files[0];
+$("bulk-file").addEventListener("change", () => {
+  const file = $("bulk-file").files[0];
   if (!file) return;
   const reader = new FileReader();
-  reader.onload = () => { $("import-text").value = reader.result; };
+  reader.onload = () => { $("bulk-text").value = reader.result; };
   reader.readAsText(file);
 });
 
-$("btn-import").addEventListener("click", async () => {
-  const text = $("import-text").value.trim();
-  if (!text) { setMsg("import-msg", "Pegue el listado o cargue un archivo.", false); return; }
-  try {
-    const result = await api("/api/devices/import", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text }),
-    });
-    let summary = result.created + " creados";
-    if (result.duplicates.length) summary += ", " + result.duplicates.length + " duplicados (" + result.duplicates.join(", ") + ")";
-    if (result.errors.length) summary += ", " + result.errors.length + " con error: " +
-      result.errors.map((e) => "línea " + e.line + " (" + e.message + ")").join("; ");
-    setMsg("import-msg", summary, result.errors.length === 0);
-    if (result.created) {
-      $("import-text").value = "";
-      $("import-file").value = "";
-      await reloadOxidized(true);
-      refresh();
+const HEADER_WORDS = ["nombre", "name", "host", "router"];
+
+function parseBulkLine(raw) {
+  let line = raw;
+  [";", "\t"].forEach((d) => { line = line.split(d).join(","); });
+  const parts = line.split(",").map((p) => p.trim());
+  if (parts.length < 2 || !parts[1]) {
+    throw new Error("se esperan al menos nombre e IP separados por coma");
+  }
+  const device = { name: parts[0], address: parts[1] };
+  if (parts.length > 2 && parts[2]) {
+    if (!/^\d+$/.test(parts[2])) throw new Error("puerto no numérico: " + parts[2]);
+    device.port = Number(parts[2]);
+  }
+  if (parts.length > 3) device.username = parts[3];
+  if (parts.length > 4) device.password = parts[4];
+  return device;
+}
+
+function bulkRow(lineNo, name, cls, text) {
+  return `<tr><td class="muted">${lineNo}</td><td>${esc(name)}</td>` +
+    `<td><span class="badge ${cls}">${esc(text)}</span></td></tr>`;
+}
+
+$("btn-upload").addEventListener("click", async () => {
+  const text = $("bulk-text").value;
+  if (!text.trim()) { setMsg("bulk-msg", "Suba un archivo o pegue el listado.", false); return; }
+  const rawLines = text.split(/\r?\n/);
+  const items = [];
+  rawLines.forEach((raw, index) => {
+    const line = raw.trim();
+    if (!line || line.startsWith("#")) return;
+    const first = line.split(/[,;\t]/)[0].trim().toLowerCase();
+    if (items.length === 0 && HEADER_WORDS.includes(first)) return;
+    items.push({ lineNo: index + 1, raw: line });
+  });
+  if (!items.length) { setMsg("bulk-msg", "No hay líneas de datos para subir.", false); return; }
+
+  const button = $("btn-upload");
+  button.disabled = true;
+  $("bulk-body").innerHTML = "";
+  setMsg("bulk-msg", "", true);
+  let ok = 0, dup = 0, bad = 0;
+
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    $("bulk-progress").textContent = "Procesando " + (i + 1) + " de " + items.length + "…";
+    let device;
+    try {
+      device = parseBulkLine(item.raw);
+    } catch (error) {
+      bad++;
+      $("bulk-body").insertAdjacentHTML("beforeend",
+        bulkRow(item.lineNo, item.raw.slice(0, 40), "fail", "error: " + error.message));
+      continue;
     }
-  } catch (error) { setMsg("import-msg", error.message, false); }
+    try {
+      const response = await fetch("/api/devices", {
+        method: "POST",
+        headers: {
+          "Authorization": "Bearer " + token,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(device),
+      });
+      if (response.status === 201) {
+        ok++;
+        $("bulk-body").insertAdjacentHTML("beforeend",
+          bulkRow(item.lineNo, device.name, "ok", "creado"));
+      } else if (response.status === 409) {
+        dup++;
+        $("bulk-body").insertAdjacentHTML("beforeend",
+          bulkRow(item.lineNo, device.name, "off", "duplicado"));
+      } else if (response.status === 401) {
+        logout();
+        return;
+      } else {
+        bad++;
+        let detail = "HTTP " + response.status;
+        try {
+          const body = await response.json();
+          if (typeof body.detail === "string") detail = body.detail;
+          else if (Array.isArray(body.detail) && body.detail[0]) {
+            detail = "campo '" + body.detail[0].loc.slice(-1)[0] + "' inválido";
+          }
+        } catch (e) {}
+        $("bulk-body").insertAdjacentHTML("beforeend",
+          bulkRow(item.lineNo, device.name, "fail", "error: " + detail));
+      }
+    } catch (error) {
+      bad++;
+      $("bulk-body").insertAdjacentHTML("beforeend",
+        bulkRow(item.lineNo, device.name, "fail", "error de red"));
+    }
+  }
+
+  $("bulk-progress").textContent = "";
+  setMsg("bulk-msg",
+    "Terminado: " + ok + " creados, " + dup + " duplicados, " + bad + " con error.",
+    bad === 0);
+  button.disabled = false;
+  if (ok) {
+    await reloadOxidized(true);
+    refresh();
+  }
 });
 
 function switchTab(tab) {
-  $("tab-dashboard").hidden = tab !== "dashboard";
-  $("tab-config").hidden = tab !== "config";
-  $("tab-btn-dashboard").classList.toggle("active", tab === "dashboard");
-  $("tab-btn-config").classList.toggle("active", tab === "config");
+  ["dashboard", "import", "config"].forEach((name) => {
+    $("tab-" + name).hidden = name !== tab;
+    $("tab-btn-" + name).classList.toggle("active", name === tab);
+  });
   if (tab === "config") loadSettings();
 }
 $("tab-btn-dashboard").addEventListener("click", () => switchTab("dashboard"));
+$("tab-btn-import").addEventListener("click", () => switchTab("import"));
 $("tab-btn-config").addEventListener("click", () => switchTab("config"));
 
 async function enterApp() {
