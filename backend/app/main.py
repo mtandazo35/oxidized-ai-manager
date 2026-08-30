@@ -1,5 +1,6 @@
+import asyncio
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 
 from fastapi import FastAPI, status
@@ -12,8 +13,15 @@ from .db import create_pool, init_schema
 from .devices import router as devices_router
 from .health import check_dependencies
 from .oxidized_source import router as oxidized_router
-from .repository import BackupEventRepository, DeviceRepository, UserRepository
+from .repository import (
+    BackupEventRepository,
+    DeviceRepository,
+    SettingsRepository,
+    UserRepository,
+)
+from .scheduler import scheduler_loop
 from .security import hash_password
+from .settings_api import router as settings_router
 
 
 settings = get_settings()
@@ -25,15 +33,20 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await init_schema(pool)
     app.state.devices = DeviceRepository(pool)
     app.state.backup_events = BackupEventRepository(pool)
+    app.state.settings = SettingsRepository(pool)
     users = UserRepository(pool)
     app.state.users = users
     if await users.count_users() == 0 and settings.admin_password:
         await users.create_user(
             settings.admin_username, hash_password(settings.admin_password)
         )
+    scheduler_task = asyncio.create_task(scheduler_loop(app, settings))
     try:
         yield
     finally:
+        scheduler_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await scheduler_task
         await pool.close()
 
 
@@ -48,6 +61,7 @@ app.include_router(auth_router)
 app.include_router(backups_router)
 app.include_router(devices_router)
 app.include_router(oxidized_router)
+app.include_router(settings_router)
 
 
 PANEL_FILE = Path(__file__).parent / "static" / "index.html"

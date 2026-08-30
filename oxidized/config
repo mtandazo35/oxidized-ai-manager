@@ -2,7 +2,7 @@
 username: ""
 password: ""
 model: routeros
-interval: 3600
+interval: 31536000
 debug: false
 threads: 1
 timeout: 20

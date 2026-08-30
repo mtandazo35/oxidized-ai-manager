@@ -18,7 +18,7 @@ os.environ.setdefault("OXIDIZED_URL", "http://localhost:8888")
 os.environ.setdefault("OXIDIZED_SOURCE_TOKEN", "test-oxidized-token")
 
 from app.config import get_settings  # noqa: E402
-from app.repository import DuplicateDeviceError  # noqa: E402
+from app.repository import SETTINGS_DEFAULTS, DuplicateDeviceError  # noqa: E402
 from app.security import create_access_token, hash_password  # noqa: E402
 
 
@@ -140,6 +140,19 @@ class FakeBackupEventRepository:
         return list(reversed(events))[:limit]
 
 
+class FakeSettingsRepository:
+    """In-memory stand-in matching SettingsRepository's public contract."""
+
+    def __init__(self) -> None:
+        self._values: dict[str, str] = {}
+
+    async def get_all(self) -> dict[str, str]:
+        return {**SETTINGS_DEFAULTS, **self._values}
+
+    async def set_many(self, values: dict[str, str]) -> None:
+        self._values.update(values)
+
+
 class FakeUserRepository:
     """In-memory stand-in matching UserRepository's public contract."""
 
@@ -184,6 +197,15 @@ def backup_event_repository() -> FakeBackupEventRepository:
 
     repository = FakeBackupEventRepository()
     main_module.app.state.backup_events = repository
+    return repository
+
+
+@pytest.fixture(autouse=True)
+def settings_repository() -> FakeSettingsRepository:
+    from app import main as main_module
+
+    repository = FakeSettingsRepository()
+    main_module.app.state.settings = repository
     return repository
 
 

@@ -14,6 +14,7 @@
   h2 { font-size: 1.05rem; margin: 32px 0 12px; color: #93c5fd; }
   header.bar { display: flex; align-items: center; justify-content: space-between;
     padding: 14px 16px; background: #1e293b; border-bottom: 1px solid #334155; }
+  .bar-right { display: flex; align-items: center; gap: 8px; }
   table { width: 100%; border-collapse: collapse; font-size: .9rem; }
   th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #1e293b; }
   th { color: #94a3b8; font-weight: 600; }
@@ -21,12 +22,13 @@
   input, select { background: #1e293b; color: #e2e8f0; border: 1px solid #334155;
     border-radius: 6px; padding: 8px 10px; font-size: .9rem; }
   input:focus { outline: 1px solid #3b82f6; }
+  input[type=checkbox] { width: 16px; height: 16px; accent-color: #2563eb; }
   button { background: #2563eb; color: #fff; border: 0; border-radius: 6px;
     padding: 8px 14px; font-size: .9rem; cursor: pointer; }
   button:hover { background: #1d4ed8; }
   button.ghost { background: #334155; }
   button.danger { background: #7f1d1d; }
-  form.inline { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+  form.inline { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; align-items: center; }
   .card { background: #111c33; border: 1px solid #1e293b; border-radius: 10px; padding: 16px; }
   .msg { min-height: 1.2em; font-size: .85rem; margin: 8px 0; }
   .msg.err { color: #f87171; } .msg.ok { color: #4ade80; }
@@ -39,6 +41,18 @@
   #login-view input { width: 100%; margin-bottom: 10px; }
   #login-view button { width: 100%; }
   .muted { color: #64748b; font-size: .8rem; }
+  .menu { position: relative; }
+  .menu-list { position: absolute; right: 0; top: calc(100% + 6px); min-width: 170px;
+    background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 6px;
+    z-index: 20; display: flex; flex-direction: column; gap: 4px; }
+  .menu-list button { background: transparent; text-align: left; width: 100%; }
+  .menu-list button:hover { background: #334155; }
+  .overlay { position: fixed; inset: 0; background: rgba(2, 6, 23, .7);
+    display: grid; place-items: center; z-index: 30; }
+  .overlay .card { width: 340px; }
+  .overlay input { width: 100%; margin-bottom: 10px; }
+  .field { display: flex; align-items: center; gap: 8px; }
+  label { font-size: .9rem; color: #cbd5e1; }
 </style>
 </head>
 <body>
@@ -56,10 +70,15 @@
 <div id="app-view" hidden>
   <header class="bar">
     <h1>Oxidized AI Manager</h1>
-    <div>
-      <span id="whoami" class="muted"></span>
+    <div class="bar-right">
       <button class="ghost" id="btn-reload">Recargar Oxidized</button>
-      <button class="ghost" id="btn-logout">Salir</button>
+      <div class="menu">
+        <button class="ghost" id="btn-user">admin ▾</button>
+        <div class="menu-list" id="user-menu" hidden>
+          <button id="btn-open-pass">Cambiar clave</button>
+          <button id="btn-logout">Salir</button>
+        </div>
+      </div>
     </div>
   </header>
   <main>
@@ -87,16 +106,40 @@
       </table>
     </div>
 
-    <h2>Cambiar clave</h2>
+    <h2>Configuración</h2>
     <div class="card">
-      <form class="inline" id="pass-form">
-        <input id="p-current" type="password" placeholder="clave actual" autocomplete="current-password" required>
-        <input id="p-new" type="password" placeholder="clave nueva (mín. 8)" autocomplete="new-password" minlength="8" required>
-        <button type="submit">Cambiar</button>
+      <form id="settings-form">
+        <div class="field" style="margin-bottom:12px">
+          <label for="s-interval">Respaldar cada</label>
+          <input id="s-interval" type="number" min="5" max="10080" step="5" style="width:90px" required>
+          <label for="s-interval">minutos</label>
+        </div>
+        <div class="field" style="margin-bottom:12px">
+          <input id="s-git-enabled" type="checkbox">
+          <label for="s-git-enabled">Enviar respaldos a un Git remoto</label>
+        </div>
+        <div class="field" style="margin-bottom:12px">
+          <input id="s-git-url" placeholder="https://usuario:token@github.com/usuario/respaldos.git" style="flex:1">
+        </div>
+        <button type="submit">Guardar</button>
+        <span class="muted" id="push-status" style="margin-left:12px"></span>
+        <p class="msg" id="settings-msg"></p>
       </form>
-      <p class="msg" id="pass-msg"></p>
     </div>
   </main>
+</div>
+
+<div class="overlay" id="pass-overlay" hidden>
+  <form class="card" id="pass-form">
+    <h1 style="margin-bottom:16px;font-size:1.1rem">Cambiar clave</h1>
+    <input id="p-current" type="password" placeholder="clave actual" autocomplete="current-password" required>
+    <input id="p-new" type="password" placeholder="clave nueva (mín. 8)" autocomplete="new-password" minlength="8" required>
+    <div style="display:flex;gap:8px">
+      <button type="submit">Cambiar</button>
+      <button type="button" class="ghost" id="btn-close-pass">Cancelar</button>
+    </div>
+    <p class="msg" id="pass-msg"></p>
+  </form>
 </div>
 
 <script>
@@ -122,7 +165,10 @@ async function api(path, options = {}) {
   if (response.status === 401) { logout(); throw new Error("Sesión expirada"); }
   if (!response.ok) {
     let detail = "HTTP " + response.status;
-    try { detail = (await response.json()).detail || detail; } catch (e) {}
+    try {
+      const body = await response.json();
+      detail = typeof body.detail === "string" ? body.detail : detail;
+    } catch (e) {}
     throw new Error(detail);
   }
   return response.status === 204 ? null : response.json();
@@ -136,6 +182,12 @@ function esc(value) {
 
 function fmtDate(value) {
   return value ? new Date(value).toLocaleString() : "—";
+}
+
+function setMsg(id, text, ok) {
+  const el = $(id);
+  el.textContent = text;
+  el.className = "msg " + (ok ? "ok" : "err");
 }
 
 async function loadStatus() {
@@ -160,7 +212,8 @@ async function loadDevices() {
         <td>${esc(d.model)}</td>
         <td>${esc(d.username)}</td>
         <td><span class="badge ${d.enabled ? "ok" : "off"}">${d.enabled ? "activo" : "pausado"}</span></td>
-        <td style="text-align:right">
+        <td style="text-align:right;white-space:nowrap">
+          <button class="ghost" onclick="backupNow(${d.id})">Respaldar ahora</button>
           <button class="ghost" onclick="toggleDevice(${d.id}, ${!d.enabled})">${d.enabled ? "Pausar" : "Activar"}</button>
           <button class="danger" onclick="deleteDevice(${d.id}, '${esc(d.name)}')">Eliminar</button>
         </td>
@@ -168,10 +221,22 @@ async function loadDevices() {
     : '<tr><td colspan="6" class="muted">Sin routers registrados.</td></tr>';
 }
 
+async function loadSettings() {
+  const s = await api("/api/settings");
+  $("s-interval").value = s.backup_interval_minutes;
+  $("s-git-enabled").checked = s.git_remote_enabled;
+  $("s-git-url").value = s.git_remote_url;
+  if (s.last_push_ok === null) {
+    $("push-status").textContent = "";
+  } else {
+    $("push-status").textContent = "Último push: " +
+      (s.last_push_ok ? "OK" : "falló (" + s.last_push_detail + ")") +
+      " · " + fmtDate(s.last_push_at);
+  }
+}
+
 async function refresh() {
-  try {
-    await Promise.all([loadStatus(), loadDevices()]);
-  } catch (error) { /* mensajes ya gestionados */ }
+  try { await Promise.all([loadStatus(), loadDevices()]); } catch (e) {}
 }
 
 async function reloadOxidized(silent) {
@@ -183,11 +248,13 @@ async function reloadOxidized(silent) {
   }
 }
 
-function setMsg(id, text, ok) {
-  const el = $(id);
-  el.textContent = text;
-  el.className = "msg " + (ok ? "ok" : "err");
-}
+window.backupNow = async (id) => {
+  try {
+    const result = await api("/api/devices/" + id + "/backup", { method: "POST" });
+    setMsg("device-msg", "Respaldo de " + result.node + " encolado.", true);
+    setTimeout(refresh, 8000);
+  } catch (error) { setMsg("device-msg", error.message, false); }
+};
 
 window.toggleDevice = async (id, enabled) => {
   try {
@@ -215,7 +282,11 @@ $("login-form").addEventListener("submit", async (event) => {
   const body = new URLSearchParams({
     username: $("login-user").value, password: $("login-pass").value });
   const response = await fetch("/api/auth/login", { method: "POST", body });
-  if (!response.ok) { $("login-msg").textContent = "Usuario o clave incorrectos."; return; }
+  if (!response.ok) {
+    $("login-msg").textContent = response.status === 503
+      ? "Demasiados intentos; espere un minuto." : "Usuario o clave incorrectos.";
+    return;
+  }
   token = (await response.json()).access_token;
   localStorage.setItem("oxm_token", token);
   $("login-msg").textContent = "";
@@ -242,6 +313,23 @@ $("device-form").addEventListener("submit", async (event) => {
   } catch (error) { setMsg("device-msg", error.message, false); }
 });
 
+$("settings-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  try {
+    await api("/api/settings", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        backup_interval_minutes: Number($("s-interval").value),
+        git_remote_enabled: $("s-git-enabled").checked,
+        git_remote_url: $("s-git-url").value,
+      }),
+    });
+    setMsg("settings-msg", "Configuración guardada.", true);
+    loadSettings();
+  } catch (error) { setMsg("settings-msg", error.message, false); }
+});
+
 $("pass-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   try {
@@ -255,18 +343,33 @@ $("pass-form").addEventListener("submit", async (event) => {
     });
     $("pass-form").reset();
     setMsg("pass-msg", "Clave actualizada. Úsala en el próximo ingreso.", true);
+    setTimeout(() => { $("pass-overlay").hidden = true; }, 1500);
   } catch (error) { setMsg("pass-msg", error.message, false); }
 });
 
+$("btn-user").addEventListener("click", (event) => {
+  event.stopPropagation();
+  $("user-menu").hidden = !$("user-menu").hidden;
+});
+document.addEventListener("click", () => { $("user-menu").hidden = true; });
+$("btn-open-pass").addEventListener("click", () => {
+  $("pass-overlay").hidden = false;
+  $("pass-msg").textContent = "";
+});
+$("btn-close-pass").addEventListener("click", () => {
+  $("pass-overlay").hidden = true;
+  $("pass-form").reset();
+});
 $("btn-logout").addEventListener("click", logout);
 $("btn-reload").addEventListener("click", () => reloadOxidized(false));
 
 async function enterApp() {
   try {
     const me = await api("/api/auth/me");
-    $("whoami").textContent = me.username;
+    $("btn-user").textContent = me.username + " ▾";
     show("app");
     refresh();
+    loadSettings();
     setInterval(refresh, 60000);
   } catch (error) { logout(); }
 }

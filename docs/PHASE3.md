@@ -16,9 +16,24 @@
   vacío ese marcador falla su recolección horaria por diseño y no debe
   ensuciar el estado.
 
-Queda pendiente de la Fase 3: API de diffs entre versiones (requiere montar
-`backups.git` de solo lectura en el backend y leerlo con una librería Git),
-respaldo manual bajo demanda y el backup binario de RouterOS (collector).
+## Programación y envío a Git remoto
+
+- El intervalo de respaldo se configura desde el panel (sección Configuración,
+  5–10080 minutos; tabla `settings`). Quien programa es el **backend**: un
+  bucle en segundo plano encola cada equipo vía `GET /node/next/<name>` de
+  oxidized-web, por lo que los cambios de intervalo aplican sin reiniciar
+  nada. El `interval` interno de Oxidized queda anulado (1 año).
+- `POST /api/devices/{id}/backup` («Respaldar ahora» en el panel) encola un
+  respaldo inmediato de un equipo.
+- Envío opcional a un Git remoto: toggle + URL (puede incluir token embebido,
+  p. ej. `https://usuario:token@github.com/u/respaldos.git`). Tras cada ciclo
+  (con 2 min de gracia para que Oxidized termine de commitear) el backend hace
+  `git push` del repo `backups.git` montado de solo lectura. El resultado del
+  último push se muestra en el panel; la URL nunca se devuelve con el token
+  (se enmascara como `usuario:***@`).
+
+Queda pendiente de la Fase 3: API de diffs entre versiones (leer `backups.git`
+ya montado en el backend) y el backup binario de RouterOS (collector).
 
 ## Criterio de aceptación
 

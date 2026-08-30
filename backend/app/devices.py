@@ -1,7 +1,10 @@
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from .auth import current_user
+from .config import get_settings
 from .repository import DeviceRepository, DuplicateDeviceError
+from .scheduler import trigger_node_backup
 from .schemas import DeviceCreate, DeviceOut, DeviceUpdate
 
 
@@ -60,3 +63,18 @@ async def delete_device(request: Request, device_id: int) -> None:
     deleted = await _repository(request).delete_device(device_id)
     if not deleted:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found.")
+
+
+@router.post("/{device_id}/backup", status_code=status.HTTP_202_ACCEPTED)
+async def backup_now(request: Request, device_id: int) -> dict:
+    device = await _repository(request).get_device(device_id)
+    if device is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found.")
+    try:
+        await trigger_node_backup(get_settings().oxidized_url, device["name"])
+    except httpx.HTTPError:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Oxidized no aceptó la solicitud de respaldo.",
+        )
+    return {"status": "queued", "node": device["name"]}

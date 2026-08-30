@@ -34,6 +34,12 @@ CREATE TABLE IF NOT EXISTS backup_events (
 
 CREATE INDEX IF NOT EXISTS backup_events_node_idx
     ON backup_events (node, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 """
 
 

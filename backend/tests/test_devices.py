@@ -84,6 +84,21 @@ async def test_patch_updates_fields(auth_headers) -> None:
     assert response.json()["enabled"] is False
 
 
+async def test_backup_now_missing_device_returns_404(auth_headers) -> None:
+    async with client(auth_headers) as api:
+        response = await api.post("/api/devices/999/backup")
+
+    assert response.status_code == 404
+
+
+async def test_backup_now_reports_unreachable_oxidized(auth_headers) -> None:
+    async with client(auth_headers) as api:
+        created = (await api.post("/api/devices", json=DEVICE)).json()
+        response = await api.post(f"/api/devices/{created['id']}/backup")
+
+    assert response.status_code == 502
+
+
 async def test_delete_device(auth_headers) -> None:
     async with client(auth_headers) as api:
         created = (await api.post("/api/devices", json=DEVICE)).json()

@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     admin_username: str = "admin"
     admin_password: str = ""
     access_token_ttl_minutes: int = 480
+    oxidized_backup_repo: str = "/oxidized-data/backups.git"
 
     model_config = SettingsConfigDict(
         env_file=".env",

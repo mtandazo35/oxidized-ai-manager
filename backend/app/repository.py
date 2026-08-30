@@ -76,6 +76,37 @@ class DeviceRepository:
         return [dict(row) for row in rows]
 
 
+SETTINGS_DEFAULTS = {
+    "backup_interval_minutes": "60",
+    "git_remote_enabled": "false",
+    "git_remote_url": "",
+    "last_push_ok": "",
+    "last_push_at": "",
+    "last_push_detail": "",
+}
+
+
+class SettingsRepository:
+    def __init__(self, pool: asyncpg.Pool) -> None:
+        self._pool = pool
+
+    async def get_all(self) -> dict[str, str]:
+        rows = await self._pool.fetch("SELECT key, value FROM settings")
+        stored = {row["key"]: row["value"] for row in rows}
+        return {**SETTINGS_DEFAULTS, **stored}
+
+    async def set_many(self, values: dict[str, str]) -> None:
+        async with self._pool.acquire() as connection:
+            for key, value in values.items():
+                await connection.execute(
+                    "INSERT INTO settings (key, value) VALUES ($1, $2) "
+                    "ON CONFLICT (key) DO UPDATE "
+                    "SET value = EXCLUDED.value, updated_at = now()",
+                    key,
+                    value,
+                )
+
+
 class BackupEventRepository:
     def __init__(self, pool: asyncpg.Pool) -> None:
         self._pool = pool
