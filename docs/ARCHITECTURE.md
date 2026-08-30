@@ -33,7 +33,7 @@ Router -> Oxidized -> configuración -> Git -> evento -> Diff Agent -> clasifica
 Usuario -> propuesta -> validación -> backup -> aprobación -> piloto -> verificación -> lotes -> auditoría.
 
 ## Distribución inicial
-Comenzar en una Raspberry Pi 4 y separar workers a la segunda cuando el MVP sea estable.
+Todo el stack corre en una máquina Debian 13 x86_64. Separar workers a una segunda máquina solo si la carga lo exige tras el MVP.
 
 ## Escalabilidad
 No introducir Kubernetes, Kafka ni infraestructura distribuida compleja durante el MVP. Docker Compose es suficiente.

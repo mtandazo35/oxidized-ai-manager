@@ -9,23 +9,17 @@ Conseguir un flujo completo y verificable:
 MikroTik -> Oxidized -> backup -> Git -> detectar cambio -> diff -> mostrarlo por API/dashboard -> analizarlo posteriormente con un agente.
 
 ## Entorno inicial
-El laboratorio está pensado para dos Raspberry Pi 4. Para reducir complejidad, la primera fase puede ejecutarse en una sola Raspberry y posteriormente distribuir workers/agentes a la segunda.
+El despliegue objetivo es una máquina Debian 13 (trixie) x86_64 que concentra todo el stack:
 
-### Raspberry Pi 1
 - Oxidized
 - Git
 - PostgreSQL
 - Redis
 - Backend/API
 - MikroTik Collector
+- Agent workers, Scheduler y agentes (Audit, Security, Diff, Report) cuando lleguen sus fases
 
-### Raspberry Pi 2
-- Agent workers
-- Scheduler
-- Audit Agent
-- Security Agent
-- Diff Agent
-- Report Agent
+Si la carga lo exige más adelante, los workers/agentes pueden separarse a una segunda máquina.
 
 ## Backups MikroTik
 Se contemplan dos tipos:

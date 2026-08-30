@@ -8,7 +8,7 @@
 - FastAPI
 - health checks
 - configuración segura
-- documentación ARM64
+- documentación de despliegue (Debian 13)
 
 Criterio de salida: stack levanta correctamente y los servicios reportan estado saludable.
 

@@ -6,11 +6,10 @@ No hay todavía agentes IA ni ejecución de cambios. Con el inventario vacío, l
 
 ## Requisitos
 
-- Docker Engine 24 o posterior con Docker Compose v2.
+- Debian 13 (trixie) o similar, x86_64. Docker Engine 24 o posterior con Docker Compose v2.
 - Aproximadamente 2 GB de RAM y 3 GB de espacio libre para el primer build.
-- En Raspberry Pi 4: Raspberry Pi OS de 64 bits (`uname -m` debe mostrar `aarch64`).
 
-Las imágenes seleccionadas ofrecen soporte `linux/arm64`; no se fija `platform` para que Docker elija la arquitectura nativa del host.
+Las imágenes seleccionadas son multi-arch (amd64/arm64); no se fija `platform` para que Docker elija la arquitectura nativa del host.
 
 ## Instalación
 

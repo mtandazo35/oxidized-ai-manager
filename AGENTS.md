@@ -12,7 +12,7 @@ There is no executable stack yet. Phase 1 contributions must establish and docum
 
 - `cp .env.example .env` — create local configuration; never commit `.env`.
 - `docker compose config` — validate the resolved Compose configuration.
-- `docker compose up --build` — build and start the local ARM64-compatible stack.
+- `docker compose up --build` — build and start the local stack.
 - `docker compose ps` — verify service health.
 - `pytest -q` — run backend tests from the configured Python environment.
 
@@ -32,4 +32,4 @@ This folder has no Git history, so adopt Conventional Commits: `feat: add API he
 
 ## Security & Architecture Constraints
 
-Read all files in `docs/` before architectural changes. Preserve ARM64/Raspberry Pi 4 support and keep Oxidized decoupled. Router access remains strictly read-only in early phases. AI output must never execute directly on routers. Do not commit credentials, backups, device exports, tokens, SNMP communities, or private keys.
+Read all files in `docs/` before architectural changes. The deployment target is a Debian 13 x86_64 machine; prefer multi-arch images where practical. Keep Oxidized decoupled. Router access remains strictly read-only in early phases. AI output must never execute directly on routers. Do not commit credentials, backups, device exports, tokens, SNMP communities, or private keys.
