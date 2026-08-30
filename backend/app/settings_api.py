@@ -22,6 +22,10 @@ async def _settings_out(request: Request) -> dict:
         interval = int(values["backup_interval_minutes"])
     except ValueError:
         interval = 60
+    try:
+        push_interval = int(values["git_push_interval_minutes"])
+    except ValueError:
+        push_interval = 60
     last_push_at = None
     if values["last_push_at"]:
         try:
@@ -32,6 +36,7 @@ async def _settings_out(request: Request) -> dict:
         "backup_interval_minutes": interval,
         "git_remote_enabled": values["git_remote_enabled"] == "true",
         "git_remote_url": mask_remote_url(values["git_remote_url"]),
+        "git_push_interval_minutes": push_interval,
         "last_push_ok": {"true": True, "false": False}.get(values["last_push_ok"]),
         "last_push_at": last_push_at,
         "last_push_detail": values["last_push_detail"],
@@ -64,6 +69,7 @@ async def update_settings_view(request: Request, payload: SettingsUpdate) -> dic
             "backup_interval_minutes": str(payload.backup_interval_minutes),
             "git_remote_enabled": "true" if payload.git_remote_enabled else "false",
             "git_remote_url": url,
+            "git_push_interval_minutes": str(payload.git_push_interval_minutes),
         }
     )
     return await _settings_out(request)

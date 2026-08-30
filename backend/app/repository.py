@@ -105,6 +105,7 @@ SETTINGS_DEFAULTS = {
     "backup_interval_minutes": "60",
     "git_remote_enabled": "false",
     "git_remote_url": "",
+    "git_push_interval_minutes": "60",
     "last_push_ok": "",
     "last_push_at": "",
     "last_push_detail": "",

@@ -88,12 +88,14 @@ class SettingsUpdate(BaseModel):
     backup_interval_minutes: int = Field(ge=5, le=10080)
     git_remote_enabled: bool
     git_remote_url: str = Field(default="", max_length=300)
+    git_push_interval_minutes: int = Field(default=60, ge=5, le=10080)
 
 
 class SettingsOut(BaseModel):
     backup_interval_minutes: int
     git_remote_enabled: bool
     git_remote_url: str
+    git_push_interval_minutes: int
     last_push_ok: bool | None
     last_push_at: datetime | None
     last_push_detail: str

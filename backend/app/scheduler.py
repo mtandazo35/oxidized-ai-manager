@@ -11,9 +11,6 @@ from .config import Settings
 
 log = logging.getLogger("oxidized-ai-manager.scheduler")
 
-# Oxidized queues the collection asynchronously; wait before pushing so the
-# resulting commits are included in the same cycle.
-PUSH_DELAY_SECONDS = 120
 CREDENTIAL_PATTERN = re.compile(r"(https?://[^/:@]+):[^@]+@")
 
 
@@ -97,14 +94,8 @@ async def run_tick(
     return triggered
 
 
-async def push_if_enabled(app, settings: Settings) -> None:
-    values = await app.state.settings.get_all()
-    if values["git_remote_enabled"] != "true" or not values["git_remote_url"]:
-        return
-    await asyncio.sleep(PUSH_DELAY_SECONDS)
-    ok, detail = await push_backups(
-        settings.oxidized_backup_repo, values["git_remote_url"]
-    )
+async def push_now(app, settings: Settings, remote_url: str) -> None:
+    ok, detail = await push_backups(settings.oxidized_backup_repo, remote_url)
     await app.state.settings.set_many(
         {
             "last_push_ok": "true" if ok else "false",
@@ -119,12 +110,21 @@ async def push_if_enabled(app, settings: Settings) -> None:
 async def scheduler_loop(app, settings: Settings) -> None:
     last_run: dict[str, float] = {}
     loop = asyncio.get_running_loop()
+    last_push = loop.time()
     while True:
         try:
             await asyncio.sleep(60)
-            triggered = await run_tick(app, settings, last_run, loop.time())
-            if triggered:
-                await push_if_enabled(app, settings)
+            await run_tick(app, settings, last_run, loop.time())
+            values = await app.state.settings.get_all()
+            if values["git_remote_enabled"] == "true" and values["git_remote_url"]:
+                try:
+                    push_minutes = int(values["git_push_interval_minutes"])
+                except ValueError:
+                    push_minutes = 60
+                now = loop.time()
+                if is_due(now - last_push, push_minutes):
+                    last_push = now
+                    await push_now(app, settings, values["git_remote_url"])
         except asyncio.CancelledError:
             raise
         except Exception:

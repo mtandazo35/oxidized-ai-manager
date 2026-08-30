@@ -29,7 +29,25 @@ async def test_defaults(auth_headers) -> None:
     assert body["backup_interval_minutes"] == 60
     assert body["git_remote_enabled"] is False
     assert body["git_remote_url"] == ""
+    assert body["git_push_interval_minutes"] == 60
     assert body["last_push_ok"] is None
+
+
+async def test_push_interval_saved(auth_headers) -> None:
+    async with client() as api:
+        response = await api.put(
+            "/api/settings",
+            headers=auth_headers,
+            json={
+                "backup_interval_minutes": 60,
+                "git_remote_enabled": False,
+                "git_remote_url": "",
+                "git_push_interval_minutes": 240,
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json()["git_push_interval_minutes"] == 240
 
 
 async def test_update_and_mask_credentials(auth_headers) -> None:
