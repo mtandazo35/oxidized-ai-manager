@@ -37,6 +37,9 @@ class DeviceOut(BaseModel):
     model: str
     username: str
     enabled: bool
+    identity: str = ""
+    ros_version: str = ""
+    board: str = ""
     created_at: datetime
     updated_at: datetime
 

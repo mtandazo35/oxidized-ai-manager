@@ -50,6 +50,9 @@ class FakeDeviceRepository:
         now = datetime.now(timezone.utc)
         device = {
             "id": self._next_id,
+            "identity": "",
+            "ros_version": "",
+            "board": "",
             **data,
             "created_at": now,
             "updated_at": now,
@@ -73,6 +76,13 @@ class FakeDeviceRepository:
         device.update(data)
         device["updated_at"] = datetime.now(timezone.utc)
         return self._public(device)
+
+    async def update_metadata(self, name: str, meta: dict[str, Any]) -> None:
+        for device in self._devices.values():
+            if device["name"] == name:
+                for key in ("identity", "ros_version", "board"):
+                    if key in meta:
+                        device[key] = meta[key]
 
     async def delete_device(self, device_id: int) -> bool:
         return self._devices.pop(device_id, None) is not None

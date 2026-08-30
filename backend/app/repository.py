@@ -8,8 +8,11 @@ class DuplicateDeviceError(Exception):
 
 
 PUBLIC_COLUMNS = (
-    "id, name, address, port, model, username, enabled, created_at, updated_at"
+    "id, name, address, port, model, username, enabled, "
+    "identity, ros_version, board, created_at, updated_at"
 )
+
+METADATA_FIELDS = ("identity", "ros_version", "board")
 
 
 class DeviceRepository:
@@ -65,6 +68,20 @@ class DeviceRepository:
         except asyncpg.UniqueViolationError as exc:
             raise DuplicateDeviceError(data.get("name", "")) from exc
         return dict(row) if row else None
+
+    async def update_metadata(self, name: str, meta: dict[str, str]) -> None:
+        values = {key: meta[key] for key in METADATA_FIELDS if key in meta}
+        if not values:
+            return
+        assignments = ", ".join(
+            f"{column} = ${position}"
+            for position, column in enumerate(values, start=2)
+        )
+        await self._pool.execute(
+            f"UPDATE devices SET {assignments}, updated_at = now() WHERE name = $1",
+            name,
+            *values.values(),
+        )
 
     async def delete_device(self, device_id: int) -> bool:
         result = await self._pool.execute(

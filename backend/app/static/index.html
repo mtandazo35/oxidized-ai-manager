@@ -127,7 +127,7 @@
       </form>
       <p class="msg" id="device-msg"></p>
       <table>
-        <thead><tr><th>Nombre</th><th>Dirección</th><th>Puerto</th><th>Modelo</th><th>Usuario</th><th>Estado</th><th></th></tr></thead>
+        <thead><tr><th>Nombre</th><th>Identity</th><th>Dirección</th><th>Puerto</th><th>Versión</th><th>Usuario</th><th>Estado</th><th></th></tr></thead>
         <tbody id="devices-body"></tbody>
       </table>
     </div>
@@ -332,9 +332,10 @@ async function loadDevices() {
   $("devices-body").innerHTML = rows.length
     ? rows.map((d) => `<tr>
         <td>${esc(d.name)}</td>
+        <td>${d.identity ? esc(d.identity) : '<span class="muted">—</span>'}</td>
         <td>${esc(d.address)}</td>
         <td>${esc(d.port)}</td>
-        <td>${esc(d.model)}</td>
+        <td title="${esc(d.board)}">${d.ros_version ? esc(d.ros_version) : '<span class="muted">—</span>'}</td>
         <td>${esc(d.username)}</td>
         <td><span class="badge ${d.enabled ? "ok" : "off"}">${d.enabled ? "activo" : "pausado"}</span></td>
         <td style="text-align:right;white-space:nowrap">
@@ -343,7 +344,7 @@ async function loadDevices() {
           <button class="danger" onclick="deleteDevice(${d.id}, '${esc(d.name)}')">Eliminar</button>
         </td>
       </tr>`).join("")
-    : '<tr><td colspan="7" class="muted">Sin routers registrados.</td></tr>';
+    : '<tr><td colspan="8" class="muted">Sin routers registrados.</td></tr>';
 }
 
 async function loadSettings() {

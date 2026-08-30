@@ -5,6 +5,8 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 
 from .auth import current_user
 from .config import get_settings
+from .gitrepo import GitRepoError, NotFoundInRepoError, show_config
+from .metadata import parse_routeros_metadata
 from .schemas import BackupEventIn, OxidizedNode
 
 
@@ -65,6 +67,17 @@ async def oxidized_event(
     await request.app.state.backup_events.record_event(
         payload.node, payload.event, payload.commit
     )
+    if payload.event in ("node_success", "post_store"):
+        settings = get_settings()
+        try:
+            config_text = await show_config(
+                settings.oxidized_backup_repo, payload.node, "HEAD"
+            )
+        except (GitRepoError, NotFoundInRepoError, OSError):
+            return
+        meta = parse_routeros_metadata(config_text)
+        if meta:
+            await request.app.state.devices.update_metadata(payload.node, meta)
 
 
 @router.post(
