@@ -86,7 +86,7 @@
 </head>
 <body>
 
-<div id="login-view">
+<div id="login-view" hidden>
   <form class="card" id="login-form">
     <h1 style="margin-bottom:16px">Oxidized AI Manager</h1>
     <input id="login-user" placeholder="Usuario" autocomplete="username" required>
@@ -1035,7 +1035,15 @@ async function enterApp() {
   } catch (error) { logout(); }
 }
 
-if (token) { enterApp(); } else { show("login"); }
+if (token) {
+  // Sesión guardada: pinta el panel de inmediato y valida en segundo plano
+  // para evitar el destello de la pantalla de login en cada refresco.
+  show("app");
+  switchTab(initialTab());
+  enterApp();
+} else {
+  show("login");
+}
 </script>
 </body>
 </html>
