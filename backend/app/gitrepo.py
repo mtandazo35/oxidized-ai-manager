@@ -25,7 +25,11 @@ async def _git(repo_path: str, *args: str) -> str:
         *args,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
-        env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
+        env={
+            **os.environ,
+            "GIT_TERMINAL_PROMPT": "0",
+            "TZ": os.environ.get("APP_TIMEZONE", "America/Guayaquil"),
+        },
     )
     try:
         stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=30)
@@ -74,7 +78,8 @@ async def show_diff(repo_path: str, node: str, commit: str) -> str:
     return await _git(
         repo_path,
         "show",
-        "--format=commit %h · %ci",
+        "--date=format-local:%Y-%m-%d %H:%M:%S",
+        "--format=commit %h · %cd",
         commit,
         "--",
         node,

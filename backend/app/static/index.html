@@ -61,9 +61,15 @@
   .version-list .vrow > button:first-child.sel { outline: 1px solid #3b82f6; }
   .version-list .mini { padding: 6px 8px; font-size: .75rem; }
   pre.diff { background: #0b1220; border: 1px solid #1e293b; border-radius: 8px;
-    padding: 12px; overflow: auto; max-height: 50vh; font-size: .8rem;
-    line-height: 1.35; margin: 0; white-space: pre; }
-  .dadd { color: #4ade80; } .ddel { color: #f87171; } .dhunk { color: #60a5fa; }
+    padding: 12px 0; overflow: auto; max-height: 50vh; font-size: .8rem;
+    line-height: 1.4; margin: 0; white-space: pre; }
+  pre.diff .dline { display: block; padding: 0 12px; min-height: 1.4em; }
+  .dadd { color: #bbf7d0; background: rgba(34, 197, 94, .16);
+    box-shadow: inset 3px 0 0 #22c55e; }
+  .ddel { color: #fecaca; background: rgba(239, 68, 68, .16);
+    box-shadow: inset 3px 0 0 #ef4444; }
+  .dhunk { color: #60a5fa; background: rgba(59, 130, 246, .10); }
+  .dmeta { color: #475569; }
   .field { display: flex; align-items: center; gap: 8px; }
   label { font-size: .9rem; color: #cbd5e1; }
   nav.tabs { display: flex; gap: 4px; padding: 0 16px; background: #1e293b;
@@ -533,12 +539,15 @@ let changesNode = "";
 
 function renderDiff(text) {
   $("changes-view").innerHTML = text.split("\n").map((line) => {
-    const safe = esc(line);
-    if (line.startsWith("+") && !line.startsWith("+++")) return `<span class="dadd">${safe}</span>`;
-    if (line.startsWith("-") && !line.startsWith("---")) return `<span class="ddel">${safe}</span>`;
-    if (line.startsWith("@@") || line.startsWith("commit ")) return `<span class="dhunk">${safe}</span>`;
-    return safe;
-  }).join("\n");
+    const safe = esc(line) || " ";
+    let cls = "";
+    if (line.startsWith("diff --git") || line.startsWith("index ") ||
+        line.startsWith("+++") || line.startsWith("---")) cls = "dmeta";
+    else if (line.startsWith("+")) cls = "dadd";
+    else if (line.startsWith("-")) cls = "ddel";
+    else if (line.startsWith("@@") || line.startsWith("commit ")) cls = "dhunk";
+    return `<span class="dline${cls ? " " + cls : ""}">${safe}</span>`;
+  }).join("");
 }
 
 function selectVersion(commit) {
