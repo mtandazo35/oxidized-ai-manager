@@ -112,7 +112,21 @@
         <input id="d-username" placeholder="usuario SSH">
         <input id="d-password" type="password" placeholder="clave SSH">
         <button type="submit">Agregar</button>
+        <button type="button" class="ghost" id="btn-import-toggle">Importar CSV</button>
       </form>
+      <div id="import-area" hidden style="margin:10px 0">
+        <p class="muted" style="margin:4px 0 8px">
+          Un router por línea: <code>nombre,ip,puerto,usuario,clave</code> —
+          puerto, usuario y clave son opcionales (puerto 22 por defecto).
+          También acepta ; o tabulador como separador y líneas con #.
+        </p>
+        <textarea id="import-text" rows="7" style="width:100%;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:8px 10px;font-family:monospace;font-size:.85rem" placeholder="rb-core-01,192.0.2.10,2222,backup,MiClave&#10;rb-sucursal-02,192.0.2.20"></textarea>
+        <div class="inline" style="display:flex;gap:8px;margin-top:8px">
+          <input type="file" id="import-file" accept=".csv,.txt" style="border:0;padding:4px 0">
+          <button type="button" id="btn-import">Importar</button>
+        </div>
+        <p class="msg" id="import-msg"></p>
+      </div>
       <p class="msg" id="device-msg"></p>
       <table>
         <thead><tr><th>Nombre</th><th>Dirección</th><th>Puerto</th><th>Modelo</th><th>Usuario</th><th>Estado</th><th></th></tr></thead>
@@ -440,6 +454,41 @@ $("btn-close-pass").addEventListener("click", () => {
 });
 $("btn-logout").addEventListener("click", logout);
 $("btn-reload").addEventListener("click", () => reloadOxidized(false));
+
+$("btn-import-toggle").addEventListener("click", () => {
+  $("import-area").hidden = !$("import-area").hidden;
+});
+
+$("import-file").addEventListener("change", () => {
+  const file = $("import-file").files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => { $("import-text").value = reader.result; };
+  reader.readAsText(file);
+});
+
+$("btn-import").addEventListener("click", async () => {
+  const text = $("import-text").value.trim();
+  if (!text) { setMsg("import-msg", "Pegue el listado o cargue un archivo.", false); return; }
+  try {
+    const result = await api("/api/devices/import", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+    let summary = result.created + " creados";
+    if (result.duplicates.length) summary += ", " + result.duplicates.length + " duplicados (" + result.duplicates.join(", ") + ")";
+    if (result.errors.length) summary += ", " + result.errors.length + " con error: " +
+      result.errors.map((e) => "línea " + e.line + " (" + e.message + ")").join("; ");
+    setMsg("import-msg", summary, result.errors.length === 0);
+    if (result.created) {
+      $("import-text").value = "";
+      $("import-file").value = "";
+      await reloadOxidized(true);
+      refresh();
+    }
+  } catch (error) { setMsg("import-msg", error.message, false); }
+});
 
 function switchTab(tab) {
   $("tab-dashboard").hidden = tab !== "dashboard";

@@ -1,11 +1,18 @@
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from pydantic import ValidationError
 
 from .auth import current_user
 from .config import get_settings
 from .repository import DeviceRepository, DuplicateDeviceError
 from .scheduler import trigger_node_backup
-from .schemas import DeviceCreate, DeviceOut, DeviceUpdate
+from .schemas import (
+    DeviceCreate,
+    DeviceImportRequest,
+    DeviceImportResult,
+    DeviceOut,
+    DeviceUpdate,
+)
 
 
 router = APIRouter(
@@ -63,6 +70,59 @@ async def delete_device(request: Request, device_id: int) -> None:
     deleted = await _repository(request).delete_device(device_id)
     if not deleted:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found.")
+
+
+HEADER_WORDS = {"name", "nombre", "host", "router"}
+
+
+def _parse_import_line(line: str) -> dict:
+    for delimiter in (";", "\t"):
+        line = line.replace(delimiter, ",")
+    parts = [part.strip() for part in line.split(",")]
+    if len(parts) < 2:
+        raise ValueError("Se esperan al menos nombre e IP separados por coma.")
+    data = {"name": parts[0], "address": parts[1]}
+    if len(parts) > 2 and parts[2]:
+        if not parts[2].isdigit():
+            raise ValueError(f"Puerto no numérico: {parts[2]!r}.")
+        data["port"] = int(parts[2])
+    if len(parts) > 3:
+        data["username"] = parts[3]
+    if len(parts) > 4:
+        data["password"] = parts[4]
+    return data
+
+
+@router.post("/import", response_model=DeviceImportResult)
+async def import_devices(
+    request: Request, payload: DeviceImportRequest
+) -> dict:
+    created = 0
+    duplicates: list[str] = []
+    errors: list[dict] = []
+    for line_number, raw_line in enumerate(payload.text.splitlines(), start=1):
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        first_field = line.split(",")[0].split(";")[0].strip().lower()
+        if line_number == 1 and first_field in HEADER_WORDS:
+            continue
+        try:
+            device = DeviceCreate(**_parse_import_line(line))
+        except (ValueError, ValidationError) as error:
+            if isinstance(error, ValidationError):
+                field = error.errors()[0].get("loc", ["?"])[0]
+                message = f"Valor inválido en el campo '{field}'."
+            else:
+                message = str(error)
+            errors.append({"line": line_number, "message": message})
+            continue
+        try:
+            await _repository(request).create_device(device.model_dump())
+            created += 1
+        except DuplicateDeviceError:
+            duplicates.append(device.name)
+    return {"created": created, "duplicates": duplicates, "errors": errors}
 
 
 @router.post("/{device_id}/backup", status_code=status.HTTP_202_ACCEPTED)

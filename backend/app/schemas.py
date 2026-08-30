@@ -60,6 +60,21 @@ class OxidizedNode(BaseModel):
     password: str
 
 
+class DeviceImportRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=262144)
+
+
+class DeviceImportError(BaseModel):
+    line: int
+    message: str
+
+
+class DeviceImportResult(BaseModel):
+    created: int
+    duplicates: list[str]
+    errors: list[DeviceImportError]
+
+
 class SettingsUpdate(BaseModel):
     backup_interval_minutes: int = Field(ge=5, le=10080)
     git_remote_enabled: bool
