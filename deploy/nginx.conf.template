@@ -10,16 +10,16 @@ http {
 
     server {
         listen 80;
-        server_name 178.156.243.184;
+        server_name ${PUBLIC_HOST};
         return 301 https://$host$request_uri;
     }
 
     server {
         listen 443 ssl;
-        server_name 178.156.243.184;
+        server_name ${PUBLIC_HOST};
 
-        ssl_certificate /etc/letsencrypt/live/178.156.243.184/fullchain.pem;
-        ssl_certificate_key /etc/letsencrypt/live/178.156.243.184/privkey.pem;
+        ssl_certificate /etc/letsencrypt/live/${PUBLIC_HOST}/fullchain.pem;
+        ssl_certificate_key /etc/letsencrypt/live/${PUBLIC_HOST}/privkey.pem;
         ssl_protocols TLSv1.2 TLSv1.3;
         ssl_session_cache shared:TLS:10m;
         ssl_session_timeout 1d;

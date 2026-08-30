@@ -25,7 +25,6 @@ extensions:
       - 127.0.0.1
       - oxidized
       - backend
-      - 178.156.243.184
 input:
   default: ssh
   debug: false

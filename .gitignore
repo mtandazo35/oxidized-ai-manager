@@ -26,3 +26,6 @@ backups/
 
 # Local databases
 *.sqlite3
+
+# Nginx generado por host (se renderiza desde deploy/nginx.conf.template)
+deploy/nginx.conf

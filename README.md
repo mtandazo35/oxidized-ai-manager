@@ -23,6 +23,13 @@ El script genera `.env` con secretos aleatorios, aplica el ajuste de kernel para
 Redis, levanta el stack e imprime la clave inicial de `admin`. Es idempotente:
 si vuelve a ejecutarlo, conserva el `.env` existente.
 
+Para publicar con HTTPS en cualquier IP o dominio (renderiza Nginx desde la
+plantilla y, con `--cert`, emite el certificado Let's Encrypt):
+
+```bash
+sudo ./install.sh --public tu-dominio-o-ip --cert
+```
+
 ## Instalación manual
 
 ```bash

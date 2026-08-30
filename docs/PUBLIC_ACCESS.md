@@ -1,11 +1,22 @@
 # Acceso web público
 
-El despliegue de referencia publica el **panel de la plataforma** (y su API)
-mediante Nginx en `https://178.156.243.184`. El login es el de la plataforma
-(usuario en PostgreSQL, clave cambiable desde el propio panel). PostgreSQL,
-Redis, el puerto directo de Oxidized y oxidized-web permanecen sin exposición
-pública; oxidized-web queda como herramienta interna (túnel SSH al puerto 8888
-si se necesita).
+El despliegue publica el **panel de la plataforma** (y su API) mediante Nginx en
+`https://<PUBLIC_HOST>`, donde `PUBLIC_HOST` es la IP o dominio del host (se
+define en `.env` y el instalador renderiza `deploy/nginx.conf` desde
+`deploy/nginx.conf.template`). El login es el de la plataforma (usuario en
+PostgreSQL, clave cambiable desde el propio panel). PostgreSQL, Redis, el puerto
+directo de Oxidized y oxidized-web permanecen sin exposición pública.
+
+## Puesta en marcha
+
+```bash
+sudo ./install.sh --public tu-dominio-o-ip --cert
+```
+
+Esto fija `PUBLIC_HOST`, genera el `nginx.conf` para ese host, emite el
+certificado (Certbot, standalone) y levanta el stack con el overlay público.
+Sin `--cert`, coloque usted el certificado en
+`/etc/letsencrypt/live/<PUBLIC_HOST>/` antes de exponer HTTPS.
 
 El `.htpasswd` de Nginx quedó retirado: la autenticación la aplica el backend
 con tokens JWT. La página de login y `/docs` son públicas; todos los endpoints
