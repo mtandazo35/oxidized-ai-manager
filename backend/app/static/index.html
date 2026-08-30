@@ -53,6 +53,12 @@
   .overlay input { width: 100%; margin-bottom: 10px; }
   .field { display: flex; align-items: center; gap: 8px; }
   label { font-size: .9rem; color: #cbd5e1; }
+  nav.tabs { display: flex; gap: 4px; padding: 0 16px; background: #1e293b;
+    border-bottom: 1px solid #334155; }
+  nav.tabs button { background: transparent; color: #94a3b8; border-radius: 0;
+    padding: 10px 16px; border-bottom: 2px solid transparent; }
+  nav.tabs button:hover { color: #e2e8f0; background: transparent; }
+  nav.tabs button.active { color: #e2e8f0; border-bottom-color: #3b82f6; }
 </style>
 </head>
 <body>
@@ -81,7 +87,12 @@
       </div>
     </div>
   </header>
+  <nav class="tabs">
+    <button id="tab-btn-dashboard" class="active">Respaldos</button>
+    <button id="tab-btn-config">Configuración</button>
+  </nav>
   <main>
+    <div id="tab-dashboard">
     <h2>Estado de respaldos</h2>
     <div class="card">
       <table>
@@ -105,7 +116,9 @@
         <tbody id="devices-body"></tbody>
       </table>
     </div>
+    </div>
 
+    <div id="tab-config" hidden>
     <h2>Configuración</h2>
     <div class="card">
       <form id="settings-form">
@@ -125,6 +138,7 @@
         <span class="muted" id="push-status" style="margin-left:12px"></span>
         <p class="msg" id="settings-msg"></p>
       </form>
+    </div>
     </div>
   </main>
 </div>
@@ -363,13 +377,23 @@ $("btn-close-pass").addEventListener("click", () => {
 $("btn-logout").addEventListener("click", logout);
 $("btn-reload").addEventListener("click", () => reloadOxidized(false));
 
+function switchTab(tab) {
+  $("tab-dashboard").hidden = tab !== "dashboard";
+  $("tab-config").hidden = tab !== "config";
+  $("tab-btn-dashboard").classList.toggle("active", tab === "dashboard");
+  $("tab-btn-config").classList.toggle("active", tab === "config");
+  if (tab === "config") loadSettings();
+}
+$("tab-btn-dashboard").addEventListener("click", () => switchTab("dashboard"));
+$("tab-btn-config").addEventListener("click", () => switchTab("config"));
+
 async function enterApp() {
   try {
     const me = await api("/api/auth/me");
     $("btn-user").textContent = me.username + " ▾";
     show("app");
+    switchTab("dashboard");
     refresh();
-    loadSettings();
     setInterval(refresh, 60000);
   } catch (error) { logout(); }
 }
