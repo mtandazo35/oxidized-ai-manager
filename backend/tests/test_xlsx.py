@@ -57,6 +57,26 @@ async def test_convert_xlsx_to_rows(auth_headers) -> None:
     assert lines[2] == "rb-core-02,192.0.2.20"
 
 
+async def test_template_download_is_valid_xlsx(auth_headers) -> None:
+    from openpyxl import load_workbook
+
+    async with client(auth_headers) as api:
+        response = await api.get("/api/devices/import-template")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/vnd.openxml")
+    workbook = load_workbook(io.BytesIO(response.content))
+    header = [cell.value for cell in workbook.active[1]]
+    assert header == ["nombre", "ip", "puerto", "usuario", "clave", "grupo"]
+
+
+async def test_template_requires_login() -> None:
+    async with client() as api:
+        response = await api.get("/api/devices/import-template")
+
+    assert response.status_code == 401
+
+
 async def test_convert_rejects_non_xlsx(auth_headers) -> None:
     async with client(auth_headers) as api:
         response = await api.post(

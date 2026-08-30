@@ -2,7 +2,9 @@ import io
 
 import httpx
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
-from openpyxl import load_workbook
+from fastapi.responses import Response
+from openpyxl import Workbook, load_workbook
+from openpyxl.styles import Font
 from pydantic import ValidationError
 
 from .auth import current_user
@@ -43,6 +45,35 @@ async def create_device(request: Request, payload: DeviceCreate) -> dict:
             status_code=status.HTTP_409_CONFLICT,
             detail="A device with this name already exists.",
         )
+
+
+XLSX_MEDIA_TYPE = (
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+)
+
+
+@router.get("/import-template")
+async def import_template() -> Response:
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Routers"
+    sheet.append(["nombre", "ip", "puerto", "usuario", "clave", "grupo"])
+    for cell in sheet[1]:
+        cell.font = Font(bold=True)
+    sheet.append(["# Borre las filas de ejemplo que empiezan con #"])
+    sheet.append(["#rb-core-01", "192.0.2.10", 2222, "backup", "ClaveSegura", "EmpresaA"])
+    sheet.append(["#rb-sucursal-02", "192.0.2.20", 22, "backup", "ClaveSegura", "EmpresaB"])
+    for column, width in zip("ABCDEF", (22, 18, 10, 16, 18, 18)):
+        sheet.column_dimensions[column].width = width
+    buffer = io.BytesIO()
+    workbook.save(buffer)
+    return Response(
+        content=buffer.getvalue(),
+        media_type=XLSX_MEDIA_TYPE,
+        headers={
+            "Content-Disposition": 'attachment; filename="plantilla-routers.xlsx"'
+        },
+    )
 
 
 @router.get("/{device_id}", response_model=DeviceOut)

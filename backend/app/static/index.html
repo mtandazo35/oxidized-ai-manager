@@ -150,7 +150,10 @@
         (<code>nombre,ip,puerto,usuario,clave,grupo</code> — puerto, usuario, clave y
         grupo/empresa opcionales; puerto 22 por defecto). Acepta coma, punto y coma o tabulador.
       </p>
-      <button type="button" class="ghost" id="btn-template">⬇ Descargar plantilla</button>
+      <div style="display:flex;gap:8px;margin-bottom:10px">
+        <button type="button" class="ghost" id="btn-template-xlsx">⬇ Plantilla Excel (.xlsx)</button>
+        <button type="button" class="ghost" id="btn-template">⬇ Plantilla CSV</button>
+      </div>
       <p class="muted" style="margin-bottom:6px"><strong>Paso 2.</strong> Suba el archivo (CSV, TXT o <strong>Excel .xlsx</strong> — la plantilla también se puede llenar y guardar en Excel) o pegue el contenido:</p>
       <input type="file" id="bulk-file" accept=".csv,.txt,.xlsx" style="border:0;padding:4px 0">
       <textarea id="bulk-text" rows="8" style="width:100%;margin-top:8px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:8px 10px;font-family:monospace;font-size:.85rem" placeholder="rb-core-01,192.0.2.10,2222,backup,MiClave&#10;rb-sucursal-02,192.0.2.20"></textarea>
@@ -779,6 +782,22 @@ const CSV_TEMPLATE = [
   "rb-sucursal-02,192.0.2.20,22,backup,ClaveSegura,EmpresaB",
   "",
 ].join("\n");
+
+$("btn-template-xlsx").addEventListener("click", async () => {
+  try {
+    const response = await fetch("/api/devices/import-template", {
+      headers: { "Authorization": "Bearer " + token },
+    });
+    if (response.status === 401) { logout(); return; }
+    if (!response.ok) throw new Error("No se pudo generar la plantilla.");
+    const blob = await response.blob();
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = "plantilla-routers.xlsx";
+    link.click();
+    URL.revokeObjectURL(link.href);
+  } catch (error) { setMsg("bulk-msg", error.message, false); }
+});
 
 $("btn-template").addEventListener("click", () => {
   const blob = new Blob([CSV_TEMPLATE], { type: "text/csv;charset=utf-8" });
