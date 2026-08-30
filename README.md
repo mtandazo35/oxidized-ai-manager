@@ -59,7 +59,7 @@ curl -X POST http://127.0.0.1:8000/api/auth/change-password \
   -d '{"current_password":"SU_CLAVE","new_password":"CLAVE_NUEVA_LARGA"}'
 ```
 
-En `http://127.0.0.1:8000/docs` el botón **Authorize** permite iniciar sesión de forma interactiva.
+En `http://127.0.0.1:8000/` hay un **panel web** con el mismo login: estado de respaldos, alta/baja de routers y cambio de clave. En `/docs` el botón **Authorize** permite usar la API de forma interactiva.
 
 ## Inventario de routers
 

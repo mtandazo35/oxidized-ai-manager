@@ -1,8 +1,9 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 from .auth import router as auth_router
 from .backups import router as backups_router
@@ -49,13 +50,12 @@ app.include_router(devices_router)
 app.include_router(oxidized_router)
 
 
+PANEL_FILE = Path(__file__).parent / "static" / "index.html"
+
+
 @app.get("/", include_in_schema=False)
-async def root() -> dict[str, str]:
-    return {
-        "service": settings.app_name,
-        "version": settings.app_version,
-        "docs": "/docs",
-    }
+async def root() -> FileResponse:
+    return FileResponse(PANEL_FILE, media_type="text/html")
 
 
 @app.get("/health/live")

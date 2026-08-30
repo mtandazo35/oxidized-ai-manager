@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Oxidized AI Manager</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, sans-serif; background: #0f172a; color: #e2e8f0; }
+  main { max-width: 1080px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-size: 1.3rem; margin: 0; }
+  h2 { font-size: 1.05rem; margin: 32px 0 12px; color: #93c5fd; }
+  header.bar { display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 16px; background: #1e293b; border-bottom: 1px solid #334155; }
+  table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #1e293b; }
+  th { color: #94a3b8; font-weight: 600; }
+  tr:hover td { background: #16233b; }
+  input, select { background: #1e293b; color: #e2e8f0; border: 1px solid #334155;
+    border-radius: 6px; padding: 8px 10px; font-size: .9rem; }
+  input:focus { outline: 1px solid #3b82f6; }
+  button { background: #2563eb; color: #fff; border: 0; border-radius: 6px;
+    padding: 8px 14px; font-size: .9rem; cursor: pointer; }
+  button:hover { background: #1d4ed8; }
+  button.ghost { background: #334155; }
+  button.danger { background: #7f1d1d; }
+  form.inline { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+  .card { background: #111c33; border: 1px solid #1e293b; border-radius: 10px; padding: 16px; }
+  .msg { min-height: 1.2em; font-size: .85rem; margin: 8px 0; }
+  .msg.err { color: #f87171; } .msg.ok { color: #4ade80; }
+  .badge { padding: 2px 8px; border-radius: 999px; font-size: .75rem; }
+  .badge.ok { background: #14532d; color: #86efac; }
+  .badge.fail { background: #7f1d1d; color: #fca5a5; }
+  .badge.off { background: #374151; color: #d1d5db; }
+  #login-view { display: grid; place-items: center; min-height: 100vh; }
+  #login-view .card { width: 320px; }
+  #login-view input { width: 100%; margin-bottom: 10px; }
+  #login-view button { width: 100%; }
+  .muted { color: #64748b; font-size: .8rem; }
+</style>
+</head>
+<body>
+
+<div id="login-view">
+  <form class="card" id="login-form">
+    <h1 style="margin-bottom:16px">Oxidized AI Manager</h1>
+    <input id="login-user" placeholder="Usuario" autocomplete="username" required>
+    <input id="login-pass" type="password" placeholder="Clave" autocomplete="current-password" required>
+    <button type="submit">Ingresar</button>
+    <p class="msg err" id="login-msg"></p>
+  </form>
+</div>
+
+<div id="app-view" hidden>
+  <header class="bar">
+    <h1>Oxidized AI Manager</h1>
+    <div>
+      <span id="whoami" class="muted"></span>
+      <button class="ghost" id="btn-reload">Recargar Oxidized</button>
+      <button class="ghost" id="btn-logout">Salir</button>
+    </div>
+  </header>
+  <main>
+    <h2>Estado de respaldos</h2>
+    <div class="card">
+      <table>
+        <thead><tr><th>Router</th><th>Último evento</th><th>Fecha</th><th>Último éxito</th><th>Commit</th></tr></thead>
+        <tbody id="status-body"><tr><td colspan="5" class="muted">Sin eventos todavía.</td></tr></tbody>
+      </table>
+    </div>
+
+    <h2>Routers</h2>
+    <div class="card">
+      <form class="inline" id="device-form">
+        <input id="d-name" placeholder="nombre (rb-core-01)" required pattern="[A-Za-z0-9][A-Za-z0-9._-]*">
+        <input id="d-address" placeholder="IP o host" required>
+        <input id="d-username" placeholder="usuario SSH">
+        <input id="d-password" type="password" placeholder="clave SSH">
+        <button type="submit">Agregar</button>
+      </form>
+      <p class="msg" id="device-msg"></p>
+      <table>
+        <thead><tr><th>Nombre</th><th>Dirección</th><th>Modelo</th><th>Usuario</th><th>Estado</th><th></th></tr></thead>
+        <tbody id="devices-body"></tbody>
+      </table>
+    </div>
+
+    <h2>Cambiar clave</h2>
+    <div class="card">
+      <form class="inline" id="pass-form">
+        <input id="p-current" type="password" placeholder="clave actual" autocomplete="current-password" required>
+        <input id="p-new" type="password" placeholder="clave nueva (mín. 8)" autocomplete="new-password" minlength="8" required>
+        <button type="submit">Cambiar</button>
+      </form>
+      <p class="msg" id="pass-msg"></p>
+    </div>
+  </main>
+</div>
+
+<script>
+"use strict";
+let token = localStorage.getItem("oxm_token") || "";
+const $ = (id) => document.getElementById(id);
+
+function show(view) {
+  $("login-view").hidden = view !== "login";
+  $("app-view").hidden = view !== "app";
+}
+
+function logout() {
+  token = "";
+  localStorage.removeItem("oxm_token");
+  show("login");
+}
+
+async function api(path, options = {}) {
+  options.headers = Object.assign(
+    { "Authorization": "Bearer " + token }, options.headers || {});
+  const response = await fetch(path, options);
+  if (response.status === 401) { logout(); throw new Error("Sesión expirada"); }
+  if (!response.ok) {
+    let detail = "HTTP " + response.status;
+    try { detail = (await response.json()).detail || detail; } catch (e) {}
+    throw new Error(detail);
+  }
+  return response.status === 204 ? null : response.json();
+}
+
+function esc(value) {
+  const div = document.createElement("div");
+  div.innerText = value == null ? "" : String(value);
+  return div.innerHTML;
+}
+
+function fmtDate(value) {
+  return value ? new Date(value).toLocaleString() : "—";
+}
+
+async function loadStatus() {
+  const rows = await api("/api/backups/status");
+  $("status-body").innerHTML = rows.length
+    ? rows.map((r) => `<tr>
+        <td>${esc(r.node)}</td>
+        <td><span class="badge ${r.last_event === "node_success" ? "ok" : "fail"}">${esc(r.last_event)}</span></td>
+        <td>${fmtDate(r.last_event_at)}</td>
+        <td>${fmtDate(r.last_success_at)}</td>
+        <td class="muted">${esc((r.last_commit || "").slice(0, 10))}</td>
+      </tr>`).join("")
+    : '<tr><td colspan="5" class="muted">Sin eventos todavía.</td></tr>';
+}
+
+async function loadDevices() {
+  const rows = await api("/api/devices");
+  $("devices-body").innerHTML = rows.length
+    ? rows.map((d) => `<tr>
+        <td>${esc(d.name)}</td>
+        <td>${esc(d.address)}</td>
+        <td>${esc(d.model)}</td>
+        <td>${esc(d.username)}</td>
+        <td><span class="badge ${d.enabled ? "ok" : "off"}">${d.enabled ? "activo" : "pausado"}</span></td>
+        <td style="text-align:right">
+          <button class="ghost" onclick="toggleDevice(${d.id}, ${!d.enabled})">${d.enabled ? "Pausar" : "Activar"}</button>
+          <button class="danger" onclick="deleteDevice(${d.id}, '${esc(d.name)}')">Eliminar</button>
+        </td>
+      </tr>`).join("")
+    : '<tr><td colspan="6" class="muted">Sin routers registrados.</td></tr>';
+}
+
+async function refresh() {
+  try {
+    await Promise.all([loadStatus(), loadDevices()]);
+  } catch (error) { /* mensajes ya gestionados */ }
+}
+
+async function reloadOxidized(silent) {
+  try {
+    await api("/api/oxidized/reload", { method: "POST" });
+    if (!silent) setMsg("device-msg", "Oxidized recargado.", true);
+  } catch (error) {
+    if (!silent) setMsg("device-msg", "Reload: " + error.message, false);
+  }
+}
+
+function setMsg(id, text, ok) {
+  const el = $(id);
+  el.textContent = text;
+  el.className = "msg " + (ok ? "ok" : "err");
+}
+
+window.toggleDevice = async (id, enabled) => {
+  try {
+    await api("/api/devices/" + id, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled }),
+    });
+    await reloadOxidized(true);
+    refresh();
+  } catch (error) { setMsg("device-msg", error.message, false); }
+};
+
+window.deleteDevice = async (id, name) => {
+  if (!confirm("¿Eliminar " + name + " del inventario?")) return;
+  try {
+    await api("/api/devices/" + id, { method: "DELETE" });
+    await reloadOxidized(true);
+    refresh();
+  } catch (error) { setMsg("device-msg", error.message, false); }
+};
+
+$("login-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const body = new URLSearchParams({
+    username: $("login-user").value, password: $("login-pass").value });
+  const response = await fetch("/api/auth/login", { method: "POST", body });
+  if (!response.ok) { $("login-msg").textContent = "Usuario o clave incorrectos."; return; }
+  token = (await response.json()).access_token;
+  localStorage.setItem("oxm_token", token);
+  $("login-msg").textContent = "";
+  enterApp();
+});
+
+$("device-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  try {
+    await api("/api/devices", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: $("d-name").value,
+        address: $("d-address").value,
+        username: $("d-username").value,
+        password: $("d-password").value,
+      }),
+    });
+    $("device-form").reset();
+    setMsg("device-msg", "Router agregado.", true);
+    await reloadOxidized(true);
+    refresh();
+  } catch (error) { setMsg("device-msg", error.message, false); }
+});
+
+$("pass-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  try {
+    await api("/api/auth/change-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        current_password: $("p-current").value,
+        new_password: $("p-new").value,
+      }),
+    });
+    $("pass-form").reset();
+    setMsg("pass-msg", "Clave actualizada. Úsala en el próximo ingreso.", true);
+  } catch (error) { setMsg("pass-msg", error.message, false); }
+});
+
+$("btn-logout").addEventListener("click", logout);
+$("btn-reload").addEventListener("click", () => reloadOxidized(false));
+
+async function enterApp() {
+  try {
+    const me = await api("/api/auth/me");
+    $("whoami").textContent = me.username;
+    show("app");
+    refresh();
+    setInterval(refresh, 60000);
+  } catch (error) { logout(); }
+}
+
+if (token) { enterApp(); } else { show("login"); }
+</script>
+</body>
+</html>

@@ -13,12 +13,12 @@ async def request(path: str):
         return await client.get(path)
 
 
-async def test_root_identifies_service() -> None:
+async def test_root_serves_panel() -> None:
     response = await request("/")
 
     assert response.status_code == 200
-    assert response.json()["service"] == "Oxidized AI Manager"
-    assert response.json()["docs"] == "/docs"
+    assert response.headers["content-type"].startswith("text/html")
+    assert "Oxidized AI Manager" in response.text
 
 
 async def test_liveness_does_not_require_dependencies() -> None:

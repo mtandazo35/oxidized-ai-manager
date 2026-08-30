@@ -78,6 +78,20 @@ async def test_status_aggregates_last_backup(auth_headers) -> None:
     assert status["rb-lab-02"]["last_event"] == "node_success"
 
 
+async def test_reload_requires_login() -> None:
+    async with client() as api:
+        response = await api.post("/api/oxidized/reload")
+
+    assert response.status_code == 401
+
+
+async def test_reload_reports_unreachable_oxidized(auth_headers) -> None:
+    async with client() as api:
+        response = await api.post("/api/oxidized/reload", headers=auth_headers)
+
+    assert response.status_code == 502
+
+
 async def test_events_filter_by_node(auth_headers) -> None:
     async with client() as api:
         await post_event(api, "rb-lab-01", "node_success", "abc123")
