@@ -58,6 +58,15 @@ async def test_import_mixed_lines(auth_headers) -> None:
     assert devices["rb-core-03"]["port"] == 9922
 
 
+async def test_import_with_group_column(auth_headers) -> None:
+    async with client(auth_headers) as api:
+        await do_import(api, "rb-emp-01,192.0.2.60,22,backup,Clave,EmpresaX")
+        listed = await api.get("/api/devices")
+
+    devices = {d["name"]: d for d in listed.json()}
+    assert devices["rb-emp-01"]["group_name"] == "EmpresaX"
+
+
 async def test_import_reports_duplicates(auth_headers) -> None:
     async with client(auth_headers) as api:
         first = await do_import(api, "rb-core-01,192.0.2.10")

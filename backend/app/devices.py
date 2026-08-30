@@ -90,6 +90,8 @@ def _parse_import_line(line: str) -> dict:
         data["username"] = parts[3]
     if len(parts) > 4:
         data["password"] = parts[4]
+    if len(parts) > 5:
+        data["group_name"] = parts[5]
     return data
 
 

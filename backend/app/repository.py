@@ -8,7 +8,7 @@ class DuplicateDeviceError(Exception):
 
 
 PUBLIC_COLUMNS = (
-    "id, name, address, port, model, username, enabled, "
+    "id, name, address, port, model, username, enabled, group_name, "
     "identity, ros_version, board, created_at, updated_at"
 )
 
@@ -35,8 +35,8 @@ class DeviceRepository:
         try:
             row = await self._pool.fetchrow(
                 "INSERT INTO devices "
-                "(name, address, port, model, username, password, enabled) "
-                f"VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING {PUBLIC_COLUMNS}",
+                "(name, address, port, model, username, password, enabled, group_name) "
+                f"VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING {PUBLIC_COLUMNS}",
                 data["name"],
                 data["address"],
                 data["port"],
@@ -44,6 +44,7 @@ class DeviceRepository:
                 data["username"],
                 data["password"],
                 data["enabled"],
+                data["group_name"],
             )
         except asyncpg.UniqueViolationError as exc:
             raise DuplicateDeviceError(data["name"]) from exc

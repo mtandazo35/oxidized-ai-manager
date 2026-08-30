@@ -17,6 +17,7 @@ class DeviceCreate(BaseModel):
     username: str = Field(default="", max_length=128)
     password: str = Field(default="", max_length=256)
     enabled: bool = True
+    group_name: str = Field(default="", max_length=64)
 
 
 class DeviceUpdate(BaseModel):
@@ -27,6 +28,7 @@ class DeviceUpdate(BaseModel):
     username: str | None = Field(default=None, max_length=128)
     password: str | None = Field(default=None, max_length=256)
     enabled: bool | None = None
+    group_name: str | None = Field(default=None, max_length=64)
 
 
 class DeviceOut(BaseModel):
@@ -37,6 +39,7 @@ class DeviceOut(BaseModel):
     model: str
     username: str
     enabled: bool
+    group_name: str = ""
     identity: str = ""
     ros_version: str = ""
     board: str = ""

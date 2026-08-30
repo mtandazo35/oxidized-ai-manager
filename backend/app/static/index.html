@@ -107,6 +107,10 @@
   </nav>
   <main>
     <div id="tab-dashboard">
+    <div style="display:flex;gap:8px;margin-top:24px;flex-wrap:wrap">
+      <input id="filter-text" placeholder="Filtrar: nombre, identity, IP, puerto, versión, usuario…" style="flex:1;min-width:260px;max-width:460px">
+      <select id="filter-group"><option value="">Todas las empresas</option></select>
+    </div>
     <h2>Estado de respaldos</h2>
     <div class="card">
       <table>
@@ -123,11 +127,12 @@
         <input id="d-port" type="number" min="1" max="65535" value="22" title="Puerto SSH" style="width:80px">
         <input id="d-username" placeholder="usuario SSH">
         <input id="d-password" type="password" placeholder="clave SSH">
+        <input id="d-group" placeholder="grupo/empresa" style="width:140px">
         <button type="submit">Agregar</button>
       </form>
       <p class="msg" id="device-msg"></p>
       <table>
-        <thead><tr><th>Nombre</th><th>Identity</th><th>Dirección</th><th>Puerto</th><th>Versión</th><th>Usuario</th><th>Estado</th><th></th></tr></thead>
+        <thead><tr><th>Nombre</th><th>Identity</th><th>Grupo</th><th>Dirección</th><th>Puerto</th><th>Versión</th><th>Usuario</th><th>Estado</th><th></th></tr></thead>
         <tbody id="devices-body"></tbody>
       </table>
     </div>
@@ -138,8 +143,8 @@
     <div class="card">
       <p class="muted" style="margin-top:0">
         <strong>Paso 1.</strong> Descargue la plantilla, llénela con un router por línea
-        (<code>nombre,ip,puerto,usuario,clave</code> — puerto, usuario y clave opcionales;
-        puerto 22 por defecto). Acepta coma, punto y coma o tabulador.
+        (<code>nombre,ip,puerto,usuario,clave,grupo</code> — puerto, usuario, clave y
+        grupo/empresa opcionales; puerto 22 por defecto). Acepta coma, punto y coma o tabulador.
       </p>
       <button type="button" class="ghost" id="btn-template">⬇ Descargar plantilla</button>
       <p class="muted" style="margin-bottom:6px"><strong>Paso 2.</strong> Suba el archivo o pegue el contenido:</p>
@@ -258,6 +263,30 @@ function setMsg(id, text, ok) {
 }
 
 const pendingBackups = {};
+let allDevices = [];
+let statusCache = { evByNode: {}, oxByNode: {}, eventNodes: [] };
+
+function deviceMatchesFilter(device) {
+  const query = $("filter-text").value.trim().toLowerCase();
+  const group = $("filter-group").value;
+  if (group && (device.group_name || "") !== group) return false;
+  if (!query) return true;
+  return [
+    device.name, device.identity, device.address, String(device.port),
+    device.ros_version, device.username, device.group_name,
+  ].some((value) => (value || "").toLowerCase().includes(query));
+}
+
+function updateGroupOptions() {
+  const select = $("filter-group");
+  const current = select.value;
+  const groups = [...new Set(
+    allDevices.map((d) => d.group_name).filter(Boolean)
+  )].sort();
+  select.innerHTML = '<option value="">Todas las empresas</option>' +
+    groups.map((g) => `<option value="${esc(g)}">${esc(g)}</option>`).join("");
+  if (groups.includes(current)) select.value = current;
+}
 
 function currentStateBadge(name, oxByNode) {
   if (pendingBackups[name]) return '<span class="badge run">respaldando…</span>';
@@ -268,36 +297,21 @@ function currentStateBadge(name, oxByNode) {
   return `<span class="badge fail">${esc(ox.status)}</span>`;
 }
 
-async function loadStatus() {
-  const [events, devices, oxStatus] = await Promise.all([
-    api("/api/backups/status"),
-    api("/api/devices"),
-    api("/api/backups/oxidized-status"),
-  ]);
-  const evByNode = {};
-  events.forEach((e) => { evByNode[e.node] = e; });
-  const oxByNode = {};
-  oxStatus.forEach((n) => { oxByNode[n.name] = n; });
+function renderStatus() {
+  const evByNode = statusCache.evByNode;
+  const oxByNode = statusCache.oxByNode;
+  const visibleDeviceNames = allDevices
+    .filter(deviceMatchesFilter)
+    .map((d) => d.name);
+  const query = $("filter-text").value.trim().toLowerCase();
+  const groupFilter = $("filter-group").value;
+  const deviceNameSet = new Set(allDevices.map((d) => d.name));
+  const orphanNodes = statusCache.eventNodes.filter((node) =>
+    !deviceNameSet.has(node) &&
+    !groupFilter &&
+    (!query || node.toLowerCase().includes(query)));
 
-  const now = Date.now();
-  for (const [name, startedAt] of Object.entries(pendingBackups)) {
-    const ev = evByNode[name];
-    if (ev && new Date(ev.last_event_at).getTime() > startedAt) {
-      delete pendingBackups[name];
-      const ok = ev.last_event === "node_success";
-      setMsg("device-msg", name + (ok
-        ? ": respaldo completado."
-        : ": el respaldo falló (revise conexión o credenciales)."), ok);
-    } else if (now - startedAt > 180000) {
-      delete pendingBackups[name];
-      setMsg("device-msg", name + ": el respaldo sigue sin terminar; revise el estado.", false);
-    }
-  }
-
-  const names = [...new Set([
-    ...devices.map((d) => d.name),
-    ...events.map((e) => e.node),
-  ])].sort();
+  const names = [...new Set([...visibleDeviceNames, ...orphanNodes])].sort();
 
   $("status-body").innerHTML = names.length
     ? names.map((name) => {
@@ -327,12 +341,13 @@ function startFastPoll() {
   }, 5000);
 }
 
-async function loadDevices() {
-  const rows = await api("/api/devices");
+function renderDevices() {
+  const rows = allDevices.filter(deviceMatchesFilter);
   $("devices-body").innerHTML = rows.length
     ? rows.map((d) => `<tr>
         <td>${esc(d.name)}</td>
         <td>${d.identity ? esc(d.identity) : '<span class="muted">—</span>'}</td>
+        <td style="cursor:pointer" title="Clic para editar" onclick="editGroup(${d.id}, '${esc(d.group_name || "")}')">${d.group_name ? esc(d.group_name) : '<span class="muted">— ✎</span>'}</td>
         <td>${esc(d.address)}</td>
         <td>${esc(d.port)}</td>
         <td title="${esc(d.board)}">${d.ros_version ? esc(d.ros_version) : '<span class="muted">—</span>'}</td>
@@ -344,8 +359,21 @@ async function loadDevices() {
           <button class="danger" onclick="deleteDevice(${d.id}, '${esc(d.name)}')">Eliminar</button>
         </td>
       </tr>`).join("")
-    : '<tr><td colspan="8" class="muted">Sin routers registrados.</td></tr>';
+    : '<tr><td colspan="9" class="muted">Sin routers que coincidan.</td></tr>';
 }
+
+window.editGroup = async (id, current) => {
+  const value = prompt("Grupo / Empresa:", current);
+  if (value === null) return;
+  try {
+    await api("/api/devices/" + id, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ group_name: value.trim() }),
+    });
+    refresh();
+  } catch (error) { setMsg("device-msg", error.message, false); }
+};
 
 async function loadSettings() {
   const s = await api("/api/settings");
@@ -362,8 +390,42 @@ async function loadSettings() {
 }
 
 async function refresh() {
-  try { await Promise.all([loadStatus(), loadDevices()]); } catch (e) {}
+  try {
+    const [devices, events, oxStatus] = await Promise.all([
+      api("/api/devices"),
+      api("/api/backups/status"),
+      api("/api/backups/oxidized-status"),
+    ]);
+    allDevices = devices;
+    statusCache.evByNode = {};
+    events.forEach((e) => { statusCache.evByNode[e.node] = e; });
+    statusCache.oxByNode = {};
+    oxStatus.forEach((n) => { statusCache.oxByNode[n.name] = n; });
+    statusCache.eventNodes = events.map((e) => e.node);
+
+    const now = Date.now();
+    for (const [name, startedAt] of Object.entries(pendingBackups)) {
+      const ev = statusCache.evByNode[name];
+      if (ev && new Date(ev.last_event_at).getTime() > startedAt) {
+        delete pendingBackups[name];
+        const ok = ev.last_event === "node_success";
+        setMsg("device-msg", name + (ok
+          ? ": respaldo completado."
+          : ": el respaldo falló (revise conexión o credenciales)."), ok);
+      } else if (now - startedAt > 180000) {
+        delete pendingBackups[name];
+        setMsg("device-msg", name + ": el respaldo sigue sin terminar; revise el estado.", false);
+      }
+    }
+
+    updateGroupOptions();
+    renderDevices();
+    renderStatus();
+  } catch (e) {}
 }
+
+$("filter-text").addEventListener("input", () => { renderDevices(); renderStatus(); });
+$("filter-group").addEventListener("change", () => { renderDevices(); renderStatus(); });
 
 async function reloadOxidized(silent) {
   try {
@@ -459,7 +521,7 @@ window.backupNow = async (id) => {
     const result = await api("/api/devices/" + id + "/backup", { method: "POST" });
     pendingBackups[result.node] = Date.now();
     setMsg("device-msg", "Respaldo de " + result.node + " en proceso…", true);
-    loadStatus();
+    renderStatus();
     startFastPoll();
   } catch (error) { setMsg("device-msg", error.message, false); }
 };
@@ -513,6 +575,7 @@ $("device-form").addEventListener("submit", async (event) => {
         port: Number($("d-port").value) || 22,
         username: $("d-username").value,
         password: $("d-password").value,
+        group_name: $("d-group").value.trim(),
       }),
     });
     $("device-form").reset();
@@ -574,11 +637,11 @@ $("btn-logout").addEventListener("click", logout);
 $("btn-reload").addEventListener("click", () => reloadOxidized(false));
 
 const CSV_TEMPLATE = [
-  "nombre,ip,puerto,usuario,clave",
-  "# Un router por linea. Puerto, usuario y clave son opcionales (puerto 22 por defecto).",
+  "nombre,ip,puerto,usuario,clave,grupo",
+  "# Un router por linea. Puerto, usuario, clave y grupo/empresa son opcionales (puerto 22 por defecto).",
   "# Borre estas lineas de ejemplo antes de subir:",
-  "rb-core-01,192.0.2.10,2222,backup,ClaveSegura",
-  "rb-sucursal-02,192.0.2.20,22,backup,ClaveSegura",
+  "rb-core-01,192.0.2.10,2222,backup,ClaveSegura,EmpresaA",
+  "rb-sucursal-02,192.0.2.20,22,backup,ClaveSegura,EmpresaB",
   "",
 ].join("\n");
 
@@ -615,6 +678,7 @@ function parseBulkLine(raw) {
   }
   if (parts.length > 3) device.username = parts[3];
   if (parts.length > 4) device.password = parts[4];
+  if (parts.length > 5) device.group_name = parts[5];
   return device;
 }
 

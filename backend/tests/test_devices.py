@@ -35,6 +35,19 @@ async def test_create_device_returns_201_without_password(auth_headers) -> None:
     assert "password" not in body
 
 
+async def test_group_name_create_and_update(auth_headers) -> None:
+    async with client(auth_headers) as api:
+        created = (await api.post(
+            "/api/devices", json={**DEVICE, "group_name": "EmpresaA"}
+        )).json()
+        patched = await api.patch(
+            f"/api/devices/{created['id']}", json={"group_name": "EmpresaB"}
+        )
+
+    assert created["group_name"] == "EmpresaA"
+    assert patched.json()["group_name"] == "EmpresaB"
+
+
 async def test_create_device_with_custom_port(auth_headers) -> None:
     async with client(auth_headers) as api:
         response = await api.post(
