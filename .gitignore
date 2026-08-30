@@ -1,0 +1,28 @@
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+
+# Node
+node_modules/
+.next/
+
+# IDE/OS
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Runtime
+logs/
+data/
+backups/
+*.backup
+
+# Local databases
+*.sqlite3

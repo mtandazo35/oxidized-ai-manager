@@ -1,0 +1,46 @@
+---
+username: ""
+password: ""
+model: routeros
+interval: 0
+debug: false
+threads: 1
+timeout: 20
+timelimit: 60
+retries: 1
+prompt: !ruby/regexp /^([\w.@-]+[#>]\s?)$/
+pid: /tmp/oxidized.pid
+crash:
+  directory: /home/oxidized/.config/oxidized/crashes
+  hostnames: false
+vars:
+  remove_secret: true
+extensions:
+  oxidized-web:
+    load: true
+    listen: 0.0.0.0
+    port: 8888
+    vhosts:
+      - localhost
+      - 127.0.0.1
+      - oxidized
+      - backend
+      - 178.156.243.184
+input:
+  default: ssh
+  debug: false
+output:
+  default: file
+  file:
+    directory: /home/oxidized/.config/oxidized/configs
+source:
+  default: csv
+  csv:
+    file: /home/oxidized/.config/oxidized/router.db
+    delimiter: !ruby/regexp /:/
+    map:
+      name: 0
+      ip: 1
+      model: 2
+      username: 3
+      password: 4

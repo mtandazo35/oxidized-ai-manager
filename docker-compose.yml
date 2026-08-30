@@ -1,0 +1,127 @@
+name: oxidized-ai-manager
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-oxidized_ai}
+      POSTGRES_USER: ${POSTGRES_USER:-oxidized_ai}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - core
+
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}
+    command:
+      - sh
+      - -c
+      - exec redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli --no-auth-warning -a \"$${REDIS_PASSWORD}\" ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - core
+
+  oxidized-init:
+    image: alpine:3.22
+    restart: "no"
+    user: "0:0"
+    command:
+      - sh
+      - -c
+      - >-
+        cp /seed/config /target/config &&
+        { test -s /target/router.db || cp /seed/router.db /target/router.db; } &&
+        mkdir -p /target/configs /target/crashes &&
+        chown -R 30000:30000 /target
+    volumes:
+      - ./oxidized/config:/seed/config:ro
+      - ./oxidized/router.db:/seed/router.db:ro
+      - oxidized_data:/target
+
+  oxidized:
+    image: ${OXIDIZED_IMAGE:-oxidized/oxidized:0.37.0}
+    restart: unless-stopped
+    init: true
+    depends_on:
+      oxidized-init:
+        condition: service_completed_successfully
+    ports:
+      - "${OXIDIZED_BIND_ADDRESS:-127.0.0.1}:${OXIDIZED_PORT:-8888}:8888"
+    volumes:
+      - oxidized_data:/home/oxidized/.config/oxidized
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8888/nodes.json"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks:
+      - core
+
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    init: true
+    read_only: true
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      APP_SECRET_KEY: ${APP_SECRET_KEY:?Set APP_SECRET_KEY in .env}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-oxidized_ai}
+      POSTGRES_USER: ${POSTGRES_USER:-oxidized_ai}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      OXIDIZED_URL: http://oxidized:8888
+    ports:
+      - "${API_BIND_ADDRESS:-127.0.0.1}:${API_PORT:-8000}:8000"
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      oxidized:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=5)
+      interval: 15s
+      timeout: 6s
+      retries: 5
+      start_period: 10s
+    networks:
+      - core
+
+networks:
+  core:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  oxidized_data:
