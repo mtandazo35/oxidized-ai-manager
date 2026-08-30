@@ -11,7 +11,19 @@ No hay todavía agentes IA ni ejecución de cambios. Con el inventario vacío, l
 
 Las imágenes seleccionadas son multi-arch (amd64/arm64); no se fija `platform` para que Docker elija la arquitectura nativa del host.
 
-## Instalación
+## ⚡ Instalación rápida (one-liner)
+
+En una máquina Debian 13 con Docker ya instalado:
+
+```bash
+git clone https://github.com/mtandazo35/oxidized-ai-manager.git && cd oxidized-ai-manager && sudo ./install.sh
+```
+
+El script genera `.env` con secretos aleatorios, aplica el ajuste de kernel para
+Redis, levanta el stack e imprime la clave inicial de `admin`. Es idempotente:
+si vuelve a ejecutarlo, conserva el `.env` existente.
+
+## Instalación manual
 
 ```bash
 cp .env.example .env
