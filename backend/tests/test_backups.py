@@ -34,7 +34,7 @@ async def test_event_without_token_returns_401() -> None:
 
 async def test_event_invalid_type_returns_422() -> None:
     async with client() as api:
-        response = await post_event(api, "rb-lab-01", "post_store")
+        response = await post_event(api, "rb-lab-01", "node_reboot")
 
     assert response.status_code == 422
 
@@ -76,6 +76,19 @@ async def test_status_aggregates_last_backup(auth_headers) -> None:
     assert status["rb-lab-01"]["last_commit"] == "abc123"
     assert status["rb-lab-01"]["last_success_at"] is not None
     assert status["rb-lab-02"]["last_event"] == "node_success"
+
+
+async def test_post_store_supplies_commit_without_masking_events(
+    auth_headers,
+) -> None:
+    async with client() as api:
+        await post_event(api, "rb-lab-01", "node_success")
+        await post_event(api, "rb-lab-01", "post_store", "cafe42")
+        response = await api.get("/api/backups/status", headers=auth_headers)
+
+    status = response.json()[0]
+    assert status["last_event"] == "node_success"
+    assert status["last_commit"] == "cafe42"
 
 
 async def test_reload_requires_login() -> None:

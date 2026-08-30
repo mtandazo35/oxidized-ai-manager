@@ -121,15 +121,16 @@ class FakeBackupEventRepository:
         result = []
         for node in sorted(nodes):
             events = nodes[node]
-            latest = events[-1]
+            visible = [e for e in events if e["event"] != "post_store"]
             successes = [e for e in events if e["event"] == "node_success"]
+            commits = [e for e in events if e["commit_ref"]]
             result.append(
                 {
                     "node": node,
-                    "last_event": latest["event"],
-                    "last_event_at": latest["created_at"],
+                    "last_event": visible[-1]["event"] if visible else None,
+                    "last_event_at": visible[-1]["created_at"] if visible else None,
                     "last_success_at": successes[-1]["created_at"] if successes else None,
-                    "last_commit": successes[-1]["commit_ref"] if successes else None,
+                    "last_commit": commits[-1]["commit_ref"] if commits else None,
                 }
             )
         return result

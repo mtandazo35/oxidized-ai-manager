@@ -51,7 +51,8 @@ services:
         cp /seed/config /target/config &&
         sed -i "s|__OXIDIZED_SOURCE_TOKEN__|$$OXIDIZED_SOURCE_TOKEN|" /target/config &&
         mkdir -p /target/configs /target/crashes &&
-        chown -R 30000:30000 /target
+        chown -R 30000:30000 /target &&
+        chmod o+x /target
     volumes:
       - ./oxidized/config:/seed/config:ro
       - oxidized_data:/target

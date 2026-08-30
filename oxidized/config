@@ -38,7 +38,7 @@ output:
 hooks:
   notify-backend:
     type: exec
-    events: [node_success, node_fail]
+    events: [node_success, node_fail, post_store]
     cmd: 'curl -s -m 10 -X POST -H "X-Oxidized-Token: __OXIDIZED_SOURCE_TOKEN__" -H "Content-Type: application/json" -d "{\"node\":\"$OX_NODE_NAME\",\"event\":\"$OX_EVENT\",\"commit\":\"$OX_REPO_COMMITREF\"}" http://backend:8000/api/oxidized/events'
 source:
   default: http

@@ -255,7 +255,7 @@ async function loadStatus() {
         return `<tr>
           <td>${esc(name)}</td>
           <td>${currentStateBadge(name, oxByNode)}</td>
-          <td>${ev ? `<span class="badge ${ev.last_event === "node_success" ? "ok" : "fail"}">${esc(ev.last_event)}</span>` : '<span class="muted">—</span>'}</td>
+          <td>${ev && ev.last_event ? `<span class="badge ${ev.last_event === "node_success" ? "ok" : "fail"}">${esc(ev.last_event)}</span>` : '<span class="muted">—</span>'}</td>
           <td>${fmtDate(ev && ev.last_event_at)}</td>
           <td>${fmtDate(ev && ev.last_success_at)}</td>
           <td class="muted">${esc(((ev && ev.last_commit) || "").slice(0, 10))}</td>

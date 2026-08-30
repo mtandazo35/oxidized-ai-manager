@@ -77,7 +77,7 @@ class SettingsOut(BaseModel):
 
 class BackupEventIn(BaseModel):
     node: str = Field(min_length=1, max_length=128)
-    event: Literal["node_success", "node_fail"]
+    event: Literal["node_success", "node_fail", "post_store"]
     commit: str = Field(default="", max_length=64)
 
 
@@ -91,7 +91,7 @@ class BackupEventOut(BaseModel):
 
 class BackupStatusOut(BaseModel):
     node: str
-    last_event: str
-    last_event_at: datetime
+    last_event: str | None
+    last_event_at: datetime | None
     last_success_at: datetime | None
     last_commit: str | None

@@ -127,12 +127,14 @@ class BackupEventRepository:
         rows = await self._pool.fetch(
             """
             SELECT node,
-                   (array_agg(event ORDER BY created_at DESC))[1] AS last_event,
-                   max(created_at) AS last_event_at,
+                   (array_agg(event ORDER BY created_at DESC)
+                       FILTER (WHERE event <> 'post_store'))[1] AS last_event,
+                   max(created_at) FILTER (WHERE event <> 'post_store')
+                       AS last_event_at,
                    max(created_at) FILTER (WHERE event = 'node_success')
                        AS last_success_at,
                    (array_agg(commit_ref ORDER BY created_at DESC)
-                       FILTER (WHERE event = 'node_success'))[1] AS last_commit
+                       FILTER (WHERE commit_ref <> ''))[1] AS last_commit
             FROM backup_events
             GROUP BY node
             ORDER BY node
