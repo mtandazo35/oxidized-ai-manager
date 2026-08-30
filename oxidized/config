@@ -34,13 +34,14 @@ output:
   file:
     directory: /home/oxidized/.config/oxidized/configs
 source:
-  default: csv
-  csv:
-    file: /home/oxidized/.config/oxidized/router.db
-    delimiter: !ruby/regexp /:/
+  default: http
+  http:
+    url: http://backend:8000/api/oxidized/nodes
     map:
-      name: 0
-      ip: 1
-      model: 2
-      username: 3
-      password: 4
+      name: name
+      ip: ip
+      model: model
+      username: username
+      password: password
+    headers:
+      X-Oxidized-Token: "__OXIDIZED_SOURCE_TOKEN__"

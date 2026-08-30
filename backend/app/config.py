@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     redis_port: int = 6379
     redis_password: str
     oxidized_url: str
+    oxidized_source_token: str
 
     model_config = SettingsConfigDict(
         env_file=".env",

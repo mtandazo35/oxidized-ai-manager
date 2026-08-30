@@ -1,8 +1,8 @@
 # Oxidized AI Manager
 
-Fundación para una plataforma de respaldo, inventario, auditoría y gestión controlada de MikroTik sobre Oxidized. El repositorio implementa **solo la Fase 1**: PostgreSQL, Redis, Oxidized y una API FastAPI mínima con health checks.
+Fundación para una plataforma de respaldo, inventario, auditoría y gestión controlada de MikroTik sobre Oxidized. El repositorio implementa la **Fase 1** (PostgreSQL, Redis, Oxidized, API FastAPI con health checks) y el **inventario de la Fase 2**: los routers se registran vía API en PostgreSQL y Oxidized los lee con `source: http`, sin CSV estático.
 
-No hay todavía inventario real, agentes IA, acceso a MikroTik ni ejecución de cambios. Oxidized usa un marcador local inactivo para poder iniciar sin routers.
+No hay todavía agentes IA ni ejecución de cambios. Con el inventario vacío, la API entrega un marcador inactivo para que Oxidized pueda iniciar sin routers.
 
 ## Requisitos
 
@@ -19,7 +19,7 @@ cp .env.example .env
 nano .env
 ```
 
-Cambie `POSTGRES_PASSWORD`, `REDIS_PASSWORD` y `APP_SECRET_KEY`. Genere valores aleatorios, por ejemplo:
+Cambie `POSTGRES_PASSWORD`, `REDIS_PASSWORD`, `APP_SECRET_KEY` y `OXIDIZED_SOURCE_TOKEN`. Genere valores aleatorios, por ejemplo:
 
 ```bash
 openssl rand -hex 32
@@ -47,6 +47,21 @@ curl http://127.0.0.1:8888/nodes.json
 
 La documentación interactiva de FastAPI está en `http://127.0.0.1:8000/docs`. Los puertos se enlazan a localhost por defecto. Para acceder desde la LAN, configure las variables `*_BIND_ADDRESS` con la IP local concreta del servidor; evite exponer estos servicios a Internet.
 
+## Inventario de routers
+
+Los equipos se administran por API y Oxidized los recibe automáticamente:
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/devices \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"rb-lab-01","address":"192.0.2.10","username":"backup","password":"CAMBIAR"}'
+
+curl http://127.0.0.1:8000/api/devices        # listado sin contraseñas
+curl http://127.0.0.1:8888/reload             # recarga de nodos en Oxidized
+```
+
+Detalles y criterios de aceptación en [docs/PHASE2.md](docs/PHASE2.md).
+
 Consulte diagnósticos con `docker compose logs --tail=100 <servicio>` y detenga el stack con `docker compose down`. No use `docker compose down -v` salvo que pretenda borrar todos los datos locales.
 
 ## Pruebas del backend
@@ -66,4 +81,5 @@ Las pruebas usan dobles para las dependencias; no necesitan contenedores ni rout
 - [Roadmap](docs/ROADMAP.md)
 - [Seguridad](docs/SECURITY.md)
 - [Detalles de la Fase 1](docs/PHASE1.md)
+- [Detalles de la Fase 2 (inventario)](docs/PHASE2.md)
 - [Acceso web público](docs/PUBLIC_ACCESS.md)
