@@ -39,6 +39,7 @@ async def test_empty_inventory_returns_placeholder() -> None:
         {
             "name": "phase1-placeholder",
             "ip": "127.0.0.1",
+            "ssh_port": 22,
             "model": "routeros",
             "username": "",
             "password": "",
@@ -54,6 +55,7 @@ async def test_returns_enabled_devices_with_credentials(auth_headers) -> None:
             json={
                 "name": "rb-lab-01",
                 "address": "192.0.2.10",
+                "port": 9922,
                 "username": "backup",
                 "password": "s3cret",
             },
@@ -73,5 +75,6 @@ async def test_returns_enabled_devices_with_credentials(auth_headers) -> None:
     nodes = response.json()
     assert [node["name"] for node in nodes] == ["rb-lab-01"]
     assert nodes[0]["ip"] == "192.0.2.10"
+    assert nodes[0]["ssh_port"] == 9922
     assert nodes[0]["username"] == "backup"
     assert nodes[0]["password"] == "s3cret"

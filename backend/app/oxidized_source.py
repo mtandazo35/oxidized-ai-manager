@@ -15,6 +15,7 @@ router = APIRouter(prefix="/api/oxidized", tags=["oxidized"])
 PLACEHOLDER_NODE = {
     "name": "phase1-placeholder",
     "ip": "127.0.0.1",
+    "ssh_port": 22,
     "model": "routeros",
     "username": "",
     "password": "",
@@ -43,6 +44,7 @@ async def oxidized_nodes(
         {
             "name": device["name"],
             "ip": device["address"],
+            "ssh_port": device["port"],
             "model": device["model"],
             "username": device["username"],
             "password": device["password"],

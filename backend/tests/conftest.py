@@ -86,6 +86,7 @@ class FakeDeviceRepository:
             {
                 "name": device["name"],
                 "address": device["address"],
+                "port": device["port"],
                 "model": device["model"],
                 "username": device["username"],
                 "password": device["password"],

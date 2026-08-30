@@ -50,5 +50,7 @@ source:
       model: model
       username: username
       password: password
+    vars_map:
+      ssh_port: ssh_port
     headers:
       X-Oxidized-Token: "__OXIDIZED_SOURCE_TOKEN__"

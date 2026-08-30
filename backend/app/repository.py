@@ -7,7 +7,9 @@ class DuplicateDeviceError(Exception):
     """Raised when a device name already exists in the inventory."""
 
 
-PUBLIC_COLUMNS = "id, name, address, model, username, enabled, created_at, updated_at"
+PUBLIC_COLUMNS = (
+    "id, name, address, port, model, username, enabled, created_at, updated_at"
+)
 
 
 class DeviceRepository:
@@ -29,10 +31,12 @@ class DeviceRepository:
     async def create_device(self, data: dict[str, Any]) -> dict[str, Any]:
         try:
             row = await self._pool.fetchrow(
-                "INSERT INTO devices (name, address, model, username, password, enabled) "
-                f"VALUES ($1, $2, $3, $4, $5, $6) RETURNING {PUBLIC_COLUMNS}",
+                "INSERT INTO devices "
+                "(name, address, port, model, username, password, enabled) "
+                f"VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING {PUBLIC_COLUMNS}",
                 data["name"],
                 data["address"],
+                data["port"],
                 data["model"],
                 data["username"],
                 data["password"],
@@ -70,7 +74,7 @@ class DeviceRepository:
 
     async def list_oxidized_nodes(self) -> list[dict[str, Any]]:
         rows = await self._pool.fetch(
-            "SELECT name, address, model, username, password "
+            "SELECT name, address, port, model, username, password "
             "FROM devices WHERE enabled ORDER BY name"
         )
         return [dict(row) for row in rows]

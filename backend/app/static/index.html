@@ -106,13 +106,14 @@
       <form class="inline" id="device-form">
         <input id="d-name" placeholder="nombre (rb-core-01)" required pattern="[A-Za-z0-9][A-Za-z0-9._-]*">
         <input id="d-address" placeholder="IP o host" required>
+        <input id="d-port" type="number" min="1" max="65535" value="22" title="Puerto SSH" style="width:80px">
         <input id="d-username" placeholder="usuario SSH">
         <input id="d-password" type="password" placeholder="clave SSH">
         <button type="submit">Agregar</button>
       </form>
       <p class="msg" id="device-msg"></p>
       <table>
-        <thead><tr><th>Nombre</th><th>Dirección</th><th>Modelo</th><th>Usuario</th><th>Estado</th><th></th></tr></thead>
+        <thead><tr><th>Nombre</th><th>Dirección</th><th>Puerto</th><th>Modelo</th><th>Usuario</th><th>Estado</th><th></th></tr></thead>
         <tbody id="devices-body"></tbody>
       </table>
     </div>
@@ -223,6 +224,7 @@ async function loadDevices() {
     ? rows.map((d) => `<tr>
         <td>${esc(d.name)}</td>
         <td>${esc(d.address)}</td>
+        <td>${esc(d.port)}</td>
         <td>${esc(d.model)}</td>
         <td>${esc(d.username)}</td>
         <td><span class="badge ${d.enabled ? "ok" : "off"}">${d.enabled ? "activo" : "pausado"}</span></td>
@@ -232,7 +234,7 @@ async function loadDevices() {
           <button class="danger" onclick="deleteDevice(${d.id}, '${esc(d.name)}')">Eliminar</button>
         </td>
       </tr>`).join("")
-    : '<tr><td colspan="6" class="muted">Sin routers registrados.</td></tr>';
+    : '<tr><td colspan="7" class="muted">Sin routers registrados.</td></tr>';
 }
 
 async function loadSettings() {
@@ -316,11 +318,13 @@ $("device-form").addEventListener("submit", async (event) => {
       body: JSON.stringify({
         name: $("d-name").value,
         address: $("d-address").value,
+        port: Number($("d-port").value) || 22,
         username: $("d-username").value,
         password: $("d-password").value,
       }),
     });
     $("device-form").reset();
+    $("d-port").value = 22;
     setMsg("device-msg", "Router agregado.", true);
     await reloadOxidized(true);
     refresh();

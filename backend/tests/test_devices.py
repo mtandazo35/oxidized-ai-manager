@@ -30,8 +30,28 @@ async def test_create_device_returns_201_without_password(auth_headers) -> None:
     body = response.json()
     assert body["name"] == "rb-lab-01"
     assert body["model"] == "routeros"
+    assert body["port"] == 22
     assert body["enabled"] is True
     assert "password" not in body
+
+
+async def test_create_device_with_custom_port(auth_headers) -> None:
+    async with client(auth_headers) as api:
+        response = await api.post(
+            "/api/devices", json={**DEVICE, "name": "rb-lab-09", "port": 2222}
+        )
+
+    assert response.status_code == 201
+    assert response.json()["port"] == 2222
+
+
+async def test_invalid_port_is_rejected(auth_headers) -> None:
+    async with client(auth_headers) as api:
+        response = await api.post(
+            "/api/devices", json={**DEVICE, "name": "rb-lab-08", "port": 70000}
+        )
+
+    assert response.status_code == 422
 
 
 async def test_duplicate_name_returns_409(auth_headers) -> None:

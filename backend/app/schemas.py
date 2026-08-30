@@ -12,6 +12,7 @@ MODEL_PATTERN = r"^[a-z0-9_-]{1,64}$"
 class DeviceCreate(BaseModel):
     name: str = Field(pattern=DEVICE_NAME_PATTERN)
     address: str = Field(pattern=ADDRESS_PATTERN)
+    port: int = Field(default=22, ge=1, le=65535)
     model: str = Field(default="routeros", pattern=MODEL_PATTERN)
     username: str = Field(default="", max_length=128)
     password: str = Field(default="", max_length=256)
@@ -21,6 +22,7 @@ class DeviceCreate(BaseModel):
 class DeviceUpdate(BaseModel):
     name: str | None = Field(default=None, pattern=DEVICE_NAME_PATTERN)
     address: str | None = Field(default=None, pattern=ADDRESS_PATTERN)
+    port: int | None = Field(default=None, ge=1, le=65535)
     model: str | None = Field(default=None, pattern=MODEL_PATTERN)
     username: str | None = Field(default=None, max_length=128)
     password: str | None = Field(default=None, max_length=256)
@@ -31,6 +33,7 @@ class DeviceOut(BaseModel):
     id: int
     name: str
     address: str
+    port: int
     model: str
     username: str
     enabled: bool
@@ -51,6 +54,7 @@ class ChangePasswordRequest(BaseModel):
 class OxidizedNode(BaseModel):
     name: str
     ip: str
+    ssh_port: int
     model: str
     username: str
     password: str
