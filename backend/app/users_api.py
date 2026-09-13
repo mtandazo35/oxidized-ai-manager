@@ -17,7 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from .auth import CurrentUser, require_admin
 from .repository import DuplicateUserError
-from .schemas import UserCreate, UserOut, UserUpdate
+from .schemas import ROLES, UserCreate, UserOut, UserUpdate
 from .security import hash_password
 
 
@@ -42,6 +42,66 @@ def _require_group(role: str, group_name: str) -> str:
             detail="Indique la empresa: sin ella la cuenta no vería ningún equipo.",
         )
     return group_name.strip()
+
+
+# Cada permiso dice de qué depende. Los tres primeros criterios se consultan a
+# los predicados reales de CurrentUser, así que la tabla no puede desviarse de
+# lo que la API hace de verdad: si mañana `can_write` cambia, esto cambia solo.
+CAPABILITIES: tuple[tuple[str, str], ...] = (
+    ("Ver equipos, respaldos y diferencias", "todos"),
+    ("Descargar las configuraciones guardadas", "todos"),
+    ("Ver la auditoría de configuraciones", "auditar"),
+    ("Dar de alta, editar y borrar equipos", "escribir"),
+    ("Lanzar respaldos (manual y masivo)", "escribir"),
+    ("Carga masiva de equipos (CSV / Excel)", "escribir"),
+    ("Ver equipos de TODAS las empresas", "admin"),
+    ("Ajustes globales (intervalo, Git remoto)", "admin"),
+    ("Crear y gestionar cuentas", "admin"),
+    ("Bitácora y control de acceso por IP", "admin"),
+    ("Actualizar la plataforma", "admin"),
+)
+
+ROLE_DESCRIPTIONS = {
+    "admin": "Administrador. Todas las empresas y toda la operación.",
+    "operador": "Opera su empresa: inventario y respaldos.",
+    "auditor": "Solo lectura de su empresa, con acceso a la auditoría.",
+    "lector": "Solo lectura de su empresa.",
+}
+
+
+def _grants(role: str, criterion: str) -> bool:
+    usuario = CurrentUser(username="", role=role, group_name="")
+    if criterion == "todos":
+        return True
+    if criterion == "auditar":
+        return usuario.can_audit()
+    if criterion == "escribir":
+        return usuario.can_write()
+    return usuario.is_admin
+
+
+@router.get("/roles")
+async def roles() -> dict:
+    """Qué puede hacer cada rol. Se calcula, no se escribe a mano."""
+    return {
+        "roles": [
+            {
+                "name": role,
+                "description": ROLE_DESCRIPTIONS.get(role, ""),
+                "scope": (
+                    "todas las empresas" if role == "admin" else "solo su empresa"
+                ),
+            }
+            for role in ROLES
+        ],
+        "capabilities": [
+            {
+                "label": label,
+                "grants": {role: _grants(role, criterion) for role in ROLES},
+            }
+            for label, criterion in CAPABILITIES
+        ],
+    }
 
 
 @router.get("", response_model=list[UserOut])

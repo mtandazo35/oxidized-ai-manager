@@ -393,3 +393,58 @@ async def test_me_reports_role_and_company(make_user) -> None:
     assert body["can_audit"] is True
     assert body["can_write"] is False
     assert body["is_admin"] is False
+
+
+# --- Tabla de permisos por rol --------------------------------------------
+
+
+async def test_role_matrix_is_admin_only(make_user) -> None:
+    headers = make_user("op-a", role="operador", group_name="EmpresaA")
+
+    async with client() as api:
+        response = await api.get("/api/users/roles", headers=headers)
+
+    assert response.status_code == 403
+
+
+async def test_role_matrix_lists_every_role_and_capability(auth_headers) -> None:
+    from app.schemas import ROLES
+    from app.users_api import CAPABILITIES
+
+    async with client() as api:
+        response = await api.get("/api/users/roles", headers=auth_headers)
+
+    body = response.json()
+    assert [r["name"] for r in body["roles"]] == list(ROLES)
+    assert len(body["capabilities"]) == len(CAPABILITIES)
+    assert all(r["description"] for r in body["roles"])
+
+
+async def test_role_matrix_matches_the_real_permissions(auth_headers) -> None:
+    """La tabla no puede prometer algo que la API luego niegue."""
+    from app.auth import CurrentUser
+
+    async with client() as api:
+        body = (await api.get("/api/users/roles", headers=auth_headers)).json()
+
+    por_etiqueta = {c["label"]: c["grants"] for c in body["capabilities"]}
+    for role in ("admin", "operador", "auditor", "lector"):
+        usuario = CurrentUser(username="x", role=role, group_name="EmpresaA")
+        assert (
+            por_etiqueta["Ver la auditoría de configuraciones"][role]
+            == usuario.can_audit()
+        )
+        assert (
+            por_etiqueta["Dar de alta, editar y borrar equipos"][role]
+            == usuario.can_write()
+        )
+        assert por_etiqueta["Crear y gestionar cuentas"][role] == usuario.is_admin
+
+
+async def test_only_admin_sees_every_company_in_the_matrix(auth_headers) -> None:
+    async with client() as api:
+        body = (await api.get("/api/users/roles", headers=auth_headers)).json()
+
+    alcance = {r["name"]: r["scope"] for r in body["roles"]}
+    assert alcance["admin"] == "todas las empresas"
+    assert alcance["lector"] == "solo su empresa"

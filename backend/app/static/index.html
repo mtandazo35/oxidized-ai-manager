@@ -363,12 +363,18 @@
         <button type="submit">Crear cuenta</button>
       </form>
       <p class="msg" id="users-msg"></p>
-      <p class="muted" style="margin:4px 0 0">
-        <strong>lector</strong> ve equipos y respaldos ·
-        <strong>auditor</strong> añade la auditoría ·
-        <strong>operador</strong> puede dar de alta y pedir respaldos ·
-        <strong>admin</strong> ve todas las empresas y gestiona ajustes y cuentas.
+      <h3 style="font-size:.95rem;color:var(--accent-hover);margin:18px 0 6px">
+        Qué puede hacer cada rol</h3>
+      <p class="muted" style="margin:0 0 8px">
+        Esta tabla la calcula el servidor a partir de los permisos reales de la
+        API, no está escrita a mano: si cambian los permisos, cambia con ellos.
       </p>
+      <div class="card" style="padding:0;border:0;box-shadow:none">
+        <table id="roles-table">
+          <thead><tr id="roles-head"></tr></thead>
+          <tbody id="roles-body"></tbody>
+        </table>
+      </div>
     </div>
     </div>
 
@@ -1264,7 +1270,7 @@ function switchTab(tab) {
   if (tab === "config") { loadSettings(); loadBulkRun(); }
   if (tab === "system") { loadVersion(); loadPolicy(); loadBlocks(); loadActivity(); }
   if (tab === "audit") loadAudit();
-  if (tab === "users") loadUsers();
+  if (tab === "users") { loadUsers(); loadRoleMatrix(); }
 }
 
 async function loadBulkRun() {
@@ -1470,6 +1476,33 @@ async function loadUsers() {
   } catch (error) {
     $("users-body").innerHTML = "";
     setMsg("users-msg", error.message, false);
+  }
+}
+
+async function loadRoleMatrix() {
+  try {
+    const data = await api("/api/users/roles");
+    $("roles-head").innerHTML = "<th>Permiso</th>" + data.roles.map((r) =>
+      `<th style="text-align:center" title="${esc(r.description)}">${esc(r.name)}</th>`
+    ).join("");
+    $("roles-body").innerHTML = [
+      ...data.capabilities.map((cap) => `
+        <tr>
+          <td style="white-space:normal">${esc(cap.label)}</td>
+          ${data.roles.map((r) => `<td style="text-align:center">${
+            cap.grants[r.name]
+              ? '<span style="color:var(--ok-ink);font-weight:700">✓</span>'
+              : '<span class="muted">—</span>'}</td>`).join("")}
+        </tr>`),
+      `<tr>
+        <td style="white-space:normal"><strong>Alcance</strong></td>
+        ${data.roles.map((r) => `<td style="text-align:center" class="muted">${
+          esc(r.scope)}</td>`).join("")}
+      </tr>`,
+    ].join("");
+  } catch (error) {
+    $("roles-body").innerHTML =
+      `<tr><td class="muted">No se pudo cargar la tabla de permisos.</td></tr>`;
   }
 }
 
