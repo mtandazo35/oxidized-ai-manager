@@ -44,8 +44,11 @@ async def login(api, username, password):
     )
 
 
-async def test_bruteforce_lockout(user_repository) -> None:
+async def test_bruteforce_lockout(user_repository, monkeypatch) -> None:
     from app.auth import _failed_logins
+    # Este caso mide el bloqueo *por cuenta*: relajamos el límite por IP para
+    # que no sea él el que responda 429 y la prueba siga midiendo lo que dice.
+    monkeypatch.setattr("app.middleware.LOGIN_RATE_LIMIT", 100)
     _failed_logins.clear()
     async with client() as api:
         for _ in range(8):

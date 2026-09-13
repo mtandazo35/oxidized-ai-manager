@@ -1,0 +1,13 @@
+[Unit]
+Description=Respaldo de Oxidized AI Manager (PostgreSQL + configuraciones + .env)
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/oxidized-ai-manager
+# La frase de cifrado va en un archivo aparte con permisos 600, NUNCA aquí:
+#   echo 'BACKUP_PASSPHRASE=...' > /etc/oxidized-ai-manager-backup.env
+#   chmod 600 /etc/oxidized-ai-manager-backup.env
+EnvironmentFile=-/etc/oxidized-ai-manager-backup.env
+ExecStart=/opt/oxidized-ai-manager/scripts/backup-system.sh /root/backups

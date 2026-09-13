@@ -113,6 +113,28 @@
   .dmeta { color: #475569; }
   .field { display: flex; align-items: center; gap: 8px; }
   label { font-size: .9rem; color: #cbd5e1; }
+  .sev { padding: 2px 8px; border-radius: 999px; font-size: .75rem; font-weight: 600; }
+  .sev.critical { background: #4c0519; color: #fda4af; }
+  .sev.high { background: #7c2d12; color: #fdba74; }
+  .sev.medium { background: #78350f; color: #fcd34d; }
+  .sev.low { background: #1e3a5f; color: #93c5fd; }
+  .sev.ok { background: #14532d; color: #86efac; }
+  .sev.unknown { background: #374151; color: #d1d5db; }
+  .scorebar { height: 6px; width: 90px; border-radius: 3px; background: #1e293b; overflow: hidden; }
+  .scorebar > span { display: block; height: 100%; }
+  .finding { background: #0b1220; border: 1px solid #1e293b; border-left: 3px solid #475569;
+    border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; }
+  .finding.critical { border-left-color: #f43f5e; }
+  .finding.high { border-left-color: #f97316; }
+  .finding.medium { border-left-color: #f59e0b; }
+  .finding.low { border-left-color: #3b82f6; }
+  .finding h3 { display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+    font-size: .92rem; margin: 0 0 6px; }
+  .finding .ev { display: block; font-family: ui-monospace, monospace; font-size: .78rem;
+    color: #cbd5e1; background: #111c33; border-radius: 4px; padding: 4px 8px;
+    margin: 3px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .finding .rec { font-size: .82rem; color: #94a3b8; margin: 6px 0 0; }
+  #findings-view { max-height: 56vh; overflow-y: auto; }
   nav.tabs { display: flex; gap: 4px; padding: 0 16px; background: #1e293b;
     border-bottom: 1px solid #334155; }
   nav.tabs button { background: transparent; color: #94a3b8; border-radius: 0;
@@ -150,6 +172,7 @@
   </header>
   <nav class="tabs">
     <button id="tab-btn-dashboard" class="active">Respaldos</button>
+    <button id="tab-btn-audit">Auditoría</button>
     <button id="tab-btn-import">Carga masiva</button>
     <button id="tab-btn-config">Configuración</button>
   </nav>
@@ -212,6 +235,33 @@
     </div>
     </div>
 
+    <div id="tab-audit" hidden>
+    <h2>Auditoría de configuraciones</h2>
+    <div class="card">
+      <p class="muted" style="margin-top:0">
+        Hallazgos calculados sobre el <strong>último respaldo</strong> de cada equipo con
+        reglas deterministas: no se consulta nada al router y no se modifica nada.
+        La evidencia sale con las claves censuradas.
+      </p>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <button type="button" id="btn-audit-refresh">Auditar de nuevo</button>
+        <button type="button" class="ghost" id="btn-audit-rules">Ver reglas</button>
+        <input id="audit-filter" type="search" placeholder="🔍 Buscar…"
+          title="Filtra por nombre, identity, empresa o versión"
+          style="width:190px;padding:6px 10px;font-size:.85rem">
+        <span id="audit-totals" class="muted"></span>
+      </div>
+      <p class="msg" id="audit-msg"></p>
+      <table>
+        <thead><tr>
+          <th>Router</th><th>Empresa</th><th>RouterOS</th><th>Riesgo</th><th>Puntaje</th>
+          <th>Crít.</th><th>Alto</th><th>Medio</th><th>Bajo</th><th></th>
+        </tr></thead>
+        <tbody id="audit-body"></tbody>
+      </table>
+    </div>
+    </div>
+
     <div id="tab-config" hidden>
     <h2>Configuración</h2>
     <div class="card">
@@ -266,6 +316,17 @@
     <div class="version-list" id="version-list"></div>
     <p class="msg" id="changes-msg"></p>
     <pre class="diff" id="changes-view"></pre>
+  </div>
+</div>
+
+<div class="overlay" id="findings-overlay" hidden>
+  <div class="card wide">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <h1 style="font-size:1.1rem" id="findings-title">Hallazgos</h1>
+      <button type="button" class="ghost" id="btn-close-findings">Cerrar</button>
+    </div>
+    <p class="msg" id="findings-msg"></p>
+    <div id="findings-view"></div>
   </div>
 </div>
 
@@ -1007,7 +1068,7 @@ $("btn-upload").addEventListener("click", async () => {
   }
 });
 
-const TAB_NAMES = ["dashboard", "import", "config"];
+const TAB_NAMES = ["dashboard", "audit", "import", "config"];
 
 function switchTab(tab) {
   TAB_NAMES.forEach((name) => {
@@ -1016,6 +1077,7 @@ function switchTab(tab) {
   });
   if (location.hash !== "#" + tab) history.replaceState(null, "", "#" + tab);
   if (tab === "config") { loadSettings(); loadBulkRun(); }
+  if (tab === "audit") loadAudit();
 }
 
 async function loadBulkRun() {
@@ -1071,11 +1133,129 @@ $("btn-bulk-run-selected").addEventListener("click", () => {
   runBulkBackup({ scope: "devices", device_ids: ids });
 });
 
+// --- Auditoría (Fase 4) ---------------------------------------------------
+
+const SEV_LABEL = {
+  critical: "Crítico", high: "Alto", medium: "Medio", low: "Bajo",
+  ok: "Sin hallazgos", unknown: "Sin datos",
+};
+const SEV_COLOR = {
+  critical: "#f43f5e", high: "#f97316", medium: "#f59e0b",
+  low: "#3b82f6", ok: "#22c55e", unknown: "#475569",
+};
+let auditRows = [];
+
+function auditMatches(row) {
+  const query = $("audit-filter").value.trim().toLowerCase();
+  if (!query) return true;
+  return [row.node, row.identity, row.group_name, row.ros_version]
+    .some((value) => (value || "").toLowerCase().includes(query));
+}
+
+function renderAudit() {
+  const rows = auditRows.filter(auditMatches);
+  $("audit-body").innerHTML = rows.length
+    ? rows.map((row) => `
+      <tr>
+        <td>${esc(row.node)}${row.identity && row.identity !== row.node
+          ? ` <span class="muted">${esc(row.identity)}</span>` : ""}</td>
+        <td>${esc(row.group_name || "—")}</td>
+        <td>${esc(row.ros_version || "—")}</td>
+        <td><span class="sev ${row.level}">${SEV_LABEL[row.level] || esc(row.level)}</span>${
+          row.error ? ` <span class="muted">${esc(row.error)}</span>` : ""}</td>
+        <td><div class="scorebar" title="${row.score} / 100"><span
+          style="width:${row.score}%;background:${SEV_COLOR[row.level] || "#475569"}"></span></div></td>
+        <td>${row.counts.critical || 0}</td>
+        <td>${row.counts.high || 0}</td>
+        <td>${row.counts.medium || 0}</td>
+        <td>${row.counts.low || 0}</td>
+        <td>${row.error ? "" :
+          `<button type="button" class="ghost mini" onclick="showFindings('${row.node}')">hallazgos</button>`}</td>
+      </tr>`).join("")
+    : '<tr><td colspan="10" class="muted">Sin equipos que coincidan.</td></tr>';
+  const risky = auditRows.filter(
+    (row) => row.level === "critical" || row.level === "high"
+  ).length;
+  const pending = auditRows.filter((row) => row.error).length;
+  $("audit-totals").textContent = auditRows.length
+    ? `${auditRows.length} equipos · ${risky} con riesgo alto o crítico` +
+      (pending ? ` · ${pending} sin respaldo` : "")
+    : "";
+}
+
+async function loadAudit() {
+  $("audit-msg").textContent = "";
+  $("audit-body").innerHTML =
+    '<tr><td colspan="10" class="muted">Auditando el último respaldo de cada equipo…</td></tr>';
+  try {
+    auditRows = await api("/api/audit/summary");
+    renderAudit();
+  } catch (error) {
+    $("audit-body").innerHTML = "";
+    setMsg("audit-msg", error.message, false);
+  }
+}
+
+function findingCard(severity, title, tag, evidence, recommendation) {
+  return `
+    <div class="finding ${severity}">
+      <h3><span class="sev ${severity}">${SEV_LABEL[severity] || esc(severity)}</span>
+        ${esc(title)} <code class="muted">${esc(tag)}</code></h3>
+      ${evidence.map((item) => `<span class="ev">${
+        item.line ? `línea ${item.line}: ` : ""}${esc(item.detail)}</span>`).join("")}
+      <p class="rec">→ ${esc(recommendation)}</p>
+    </div>`;
+}
+
+function openFindings(title) {
+  $("findings-title").textContent = title;
+  $("findings-view").innerHTML = '<span class="muted">Cargando…</span>';
+  $("findings-msg").textContent = "";
+  $("findings-overlay").hidden = false;
+}
+
+window.showFindings = async (node) => {
+  openFindings("Hallazgos de " + node);
+  try {
+    const report = await api(`/api/audit/node?node=${encodeURIComponent(node)}`);
+    $("findings-title").textContent =
+      `${node} · ${report.findings.length} hallazgos de ${report.rules_evaluated} reglas`;
+    $("findings-view").innerHTML = report.findings.length
+      ? report.findings.map((finding) => findingCard(
+          finding.severity, finding.title, finding.rule_id,
+          finding.evidence, finding.recommendation)).join("")
+      : `<p class="muted">Sin hallazgos: la configuración pasa las ${
+          report.rules_evaluated} reglas.</p>`;
+  } catch (error) {
+    $("findings-view").innerHTML = "";
+    setMsg("findings-msg", error.message, false);
+  }
+};
+
+$("btn-audit-refresh").addEventListener("click", loadAudit);
+$("audit-filter").addEventListener("input", renderAudit);
+$("btn-close-findings").addEventListener("click", () => {
+  $("findings-overlay").hidden = true;
+});
+$("btn-audit-rules").addEventListener("click", async () => {
+  openFindings("Reglas evaluadas");
+  try {
+    const catalog = await api("/api/audit/rules");
+    $("findings-view").innerHTML = catalog.rules.map((rule) => findingCard(
+      rule.severity, rule.title, `${rule.id} · ${rule.category}`, [],
+      rule.recommendation)).join("");
+  } catch (error) {
+    $("findings-view").innerHTML = "";
+    setMsg("findings-msg", error.message, false);
+  }
+});
+
 function initialTab() {
   const fromHash = location.hash.slice(1);
   return TAB_NAMES.includes(fromHash) ? fromHash : "dashboard";
 }
 $("tab-btn-dashboard").addEventListener("click", () => switchTab("dashboard"));
+$("tab-btn-audit").addEventListener("click", () => switchTab("audit"));
 $("tab-btn-import").addEventListener("click", () => switchTab("import"));
 $("tab-btn-config").addEventListener("click", () => switchTab("config"));
 

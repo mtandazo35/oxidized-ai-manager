@@ -22,5 +22,9 @@ USER app
 
 EXPOSE 8000
 
+# `--forwarded-allow-ips` NO se fija aquí: uvicorn lee la variable de entorno
+# FORWARDED_ALLOW_IPS (por defecto 127.0.0.1). Se define en .env con la subred
+# de la red Docker del proxy externo, para no confiar en cabeceras
+# X-Forwarded-* de cualquier origen. `--no-server-header` oculta uvicorn.
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", \
-     "--proxy-headers", "--forwarded-allow-ips", "*"]
+     "--proxy-headers", "--no-server-header"]

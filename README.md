@@ -2,7 +2,9 @@
 
 Fundación para una plataforma de respaldo, inventario, auditoría y gestión controlada de MikroTik sobre Oxidized. El repositorio implementa la **Fase 1** (PostgreSQL, Redis, Oxidized, API FastAPI con health checks) y el **inventario de la Fase 2**: los routers se registran vía API en PostgreSQL y Oxidized los lee con `source: http`, sin CSV estático.
 
-No hay todavía agentes IA ni ejecución de cambios. Con el inventario vacío, la API entrega un marcador inactivo para que Oxidized pueda iniciar sin routers.
+La **Fase 4** añade la auditoría de configuraciones: un motor de reglas determinista sobre los respaldos ya versionados (`docs/PHASE4.md`), con pestaña propia en el panel.
+
+No hay ejecución de cambios en los routers: la plataforma es read-only de punta a punta y la auditoría no abre sesión contra ningún equipo. Con el inventario vacío, la API entrega un marcador inactivo para que Oxidized pueda iniciar sin routers.
 
 ## Requisitos
 
@@ -27,12 +29,18 @@ aleatorios, aplica el ajuste de kernel para Redis, levanta el stack e imprime la
 clave inicial de `admin`. Es idempotente: si vuelve a ejecutarlo, conserva el
 `.env` existente.
 
-Para publicar con HTTPS en cualquier IP o dominio (renderiza Nginx desde la
-plantilla y, con `--cert`, emite el certificado Let's Encrypt):
+Por defecto el panel queda **solo en `127.0.0.1`** del host. Para exponerlo se
+usa un **Nginx Proxy Manager externo** (no forma parte de este repositorio):
+el backend se conecta a su red Docker y no publica ningún puerto en la LAN.
 
 ```bash
-sudo ./install.sh --public tu-dominio-o-ip --cert
+docker network ls                        # localice la red de NPM
+sudo ./install.sh --proxy npm_default
 ```
+
+Después cree el proxy host en NPM apuntando a `backend:8000` (esquema `http`).
+Detalles, certificado sin dominio público y listas de acceso en
+[docs/PUBLIC_ACCESS.md](docs/PUBLIC_ACCESS.md).
 
 ## Instalación manual
 
@@ -109,7 +117,47 @@ curl -H "Authorization: Bearer $TOKEN" 'http://127.0.0.1:8000/api/backups/events
 
 Detalles y criterios de aceptación en [docs/PHASE2.md](docs/PHASE2.md).
 
+## Auditoría de configuraciones
+
+Reglas deterministas sobre el último respaldo de cada equipo (sin tocar el router):
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/api/audit/summary          # riesgo por router
+curl -H "Authorization: Bearer $TOKEN" 'http://127.0.0.1:8000/api/audit/node?node=rb-lab-01'
+curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/api/audit/rules            # catálogo de reglas
+```
+
+En el panel están en la pestaña **Auditoría**. Detalles, reglas y criterios en
+[docs/PHASE4.md](docs/PHASE4.md).
+
+> Los respaldos incluyen las claves de los equipos para ser restaurables. La
+> auditoría censura esos valores en su evidencia, pero el repositorio
+> `backups.git` es material sensible: lea [docs/SECURITY.md](docs/SECURITY.md).
+
 Consulte diagnósticos con `docker compose logs --tail=100 <servicio>` y detenga el stack con `docker compose down`. No use `docker compose down -v` salvo que pretenda borrar todos los datos locales.
+
+## Respaldo de la plataforma
+
+Oxidized respalda los routers; esto respalda **la plataforma** (PostgreSQL, el
+volumen con `backups.git` y el `.env` del que depende el descifrado):
+
+```bash
+BACKUP_PASSPHRASE='...' ./scripts/backup-system.sh /root/backups
+```
+
+Para dejarlo diario hay units de systemd en `deploy/`. Procedimiento completo y
+restauración verificada en [docs/BACKUP_RESTORE.md](docs/BACKUP_RESTORE.md).
+
+## Monitoreo
+
+| URL | Qué vigila |
+| --- | --- |
+| `/health/live` | el backend responde |
+| `/health/ready` | PostgreSQL, Redis y Oxidized alcanzables |
+| `/health/backups` | 503 si algún equipo lleva sin respaldo más de 3× su intervalo |
+
+Los tres son públicos y aptos para Uptime Kuma; `/health/backups` devuelve solo
+recuentos, nunca nombres de equipos.
 
 ## Pruebas del backend
 
@@ -126,6 +174,9 @@ Las pruebas usan dobles para las dependencias; no necesitan contenedores ni rout
 - [Contexto del proyecto](docs/PROJECT_CONTEXT.md)
 - [Arquitectura](docs/ARCHITECTURE.md)
 - [Roadmap](docs/ROADMAP.md)
+- [Fase 4 — Auditoría](docs/PHASE4.md)
+- [Exposición con Nginx Proxy Manager](docs/PUBLIC_ACCESS.md)
+- [Respaldo y restauración](docs/BACKUP_RESTORE.md)
 - [Seguridad](docs/SECURITY.md)
 - [Detalles de la Fase 1](docs/PHASE1.md)
 - [Detalles de la Fase 2 (inventario)](docs/PHASE2.md)

@@ -22,6 +22,11 @@ class Settings(BaseSettings):
     admin_password: str = ""
     access_token_ttl_minutes: int = 480
     oxidized_backup_repo: str = "/oxidized-data/backups.git"
+    # HSTS solo cuando el dominio y su certificado estén confirmados en NPM.
+    app_enable_hsts: bool = False
+    # Si no se recibe ningún evento de respaldo en este múltiplo del
+    # intervalo configurado, /health/backups responde 503 (para Uptime Kuma).
+    backup_staleness_factor: float = 3.0
 
     model_config = SettingsConfigDict(
         env_file=".env",

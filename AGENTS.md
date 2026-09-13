@@ -2,13 +2,15 @@
 
 ## Project Structure & Module Organization
 
-This repository is currently a documentation-first starter. `README.md` explains the intended bootstrap workflow, while `docs/` contains product context, architecture, agent boundaries, roadmap, and security requirements. `.env.example` documents non-secret configuration defaults.
+The stack is running: `docker-compose.yml` (PostgreSQL, Redis, Oxidized, backend), a FastAPI service under `backend/app/`, its tests under `backend/tests/`, deployment helpers in `deploy/`, operational scripts in `scripts/`, and `docs/` with product context, architecture, agent boundaries, roadmap, security and per-phase notes. `.env.example` documents non-secret configuration defaults.
 
-Phase 1 should introduce `docker-compose.yml`, a FastAPI service under `backend/`, and configuration for PostgreSQL, Redis, and Oxidized. Keep future services in clearly named top-level directories such as `frontend/`, `mikrotik-collector/`, and `agent-worker/`. Do not implement later roadmap phases unless the change explicitly targets them.
+Phases 1 to 3 are implemented (inventory in PostgreSQL, `source: http` for Oxidized, Git backups with events and diffs) and Phase 4 is partially implemented (deterministic configuration auditing, see `docs/PHASE4.md`). Keep future services in clearly named top-level directories such as `mikrotik-collector/` and `agent-worker/`. Do not implement later roadmap phases unless the change explicitly targets them.
+
+The web panel is a single-file vanilla SPA served by the backend at `backend/app/static/index.html`; there is no Next.js frontend and none is planned while the panel stays this size.
 
 ## Build, Test, and Development Commands
 
-There is no executable stack yet. Phase 1 contributions must establish and document these standard commands:
+Standard commands:
 
 - `cp .env.example .env` — create local configuration; never commit `.env`.
 - `docker compose config` — validate the resolved Compose configuration.
@@ -20,7 +22,7 @@ Update `README.md` whenever these commands or prerequisites change.
 
 ## Coding Style & Naming Conventions
 
-Use four-space indentation and PEP 8 conventions for Python. Name modules and functions with `snake_case`, classes with `PascalCase`, and constants with `UPPER_SNAKE_CASE`. Add type hints to public FastAPI and service interfaces. Use lowercase, hyphenated Docker service names. Keep configuration in environment variables and centralize settings rather than reading variables throughout business logic. Frontend code should follow the formatter and linter introduced with Next.js.
+Use four-space indentation and PEP 8 conventions for Python. Comments and user-facing strings are written in Spanish; identifiers and docstring-free helpers follow the surrounding file. Name modules and functions with `snake_case`, classes with `PascalCase`, and constants with `UPPER_SNAKE_CASE`. Add type hints to public FastAPI and service interfaces. Use lowercase, hyphenated Docker service names. Keep configuration in environment variables and centralize settings rather than reading variables throughout business logic. Panel code stays dependency-free: no build step, no CDN, no external fonts (the Content-Security-Policy forbids them).
 
 ## Testing Guidelines
 
@@ -32,4 +34,4 @@ This folder has no Git history, so adopt Conventional Commits: `feat: add API he
 
 ## Security & Architecture Constraints
 
-Read all files in `docs/` before architectural changes. The deployment target is a Debian 13 x86_64 machine; prefer multi-arch images where practical. Keep Oxidized decoupled. Router access remains strictly read-only in early phases. AI output must never execute directly on routers. Do not commit credentials, backups, device exports, tokens, SNMP communities, or private keys.
+Read all files in `docs/` before architectural changes. The deployment target is a Debian 13 x86_64 machine; prefer multi-arch images where practical. The panel is exposed through an external Nginx Proxy Manager that is not part of this repository: security headers and login rate limiting must stay in the application, not in proxy configuration. Keep Oxidized decoupled. Router access remains strictly read-only in early phases. AI output must never execute directly on routers. Do not commit credentials, backups, device exports, tokens, SNMP communities, or private keys.

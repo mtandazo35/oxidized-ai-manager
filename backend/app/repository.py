@@ -143,18 +143,54 @@ SETTINGS_DEFAULTS = {
 }
 
 
+# Ajustes que se guardan cifrados: la URL del Git remoto puede llevar un token
+# embebido (`https://usuario:token@host/repo.git`) y un volcado de la base no
+# debe entregarlo en claro. Los consumidores siguen viendo el valor descifrado.
+ENCRYPTED_SETTINGS = frozenset({"git_remote_url"})
+
+
 class SettingsRepository:
     def __init__(self, pool: asyncpg.Pool) -> None:
         self._pool = pool
 
+    @property
+    def _key(self) -> str:
+        return get_settings().app_secret_key
+
+    async def encrypt_legacy_settings(self) -> int:
+        """Cifra los ajustes sensibles que quedaron en texto plano."""
+        migrated = 0
+        for key in ENCRYPTED_SETTINGS:
+            value = await self._pool.fetchval(
+                "SELECT value FROM settings WHERE key = $1", key
+            )
+            if not value or looks_encrypted(self._key, value):
+                continue
+            await self._pool.execute(
+                "UPDATE settings SET value = $2, updated_at = now() WHERE key = $1",
+                key,
+                encrypt_secret(self._key, value),
+            )
+            migrated += 1
+        return migrated
+
     async def get_all(self) -> dict[str, str]:
         rows = await self._pool.fetch("SELECT key, value FROM settings")
-        stored = {row["key"]: row["value"] for row in rows}
+        stored = {
+            row["key"]: (
+                decrypt_secret(self._key, row["value"])
+                if row["key"] in ENCRYPTED_SETTINGS
+                else row["value"]
+            )
+            for row in rows
+        }
         return {**SETTINGS_DEFAULTS, **stored}
 
     async def set_many(self, values: dict[str, str]) -> None:
         async with self._pool.acquire() as connection:
             for key, value in values.items():
+                if key in ENCRYPTED_SETTINGS:
+                    value = encrypt_secret(self._key, value)
                 await connection.execute(
                     "INSERT INTO settings (key, value) VALUES ($1, $2) "
                     "ON CONFLICT (key) DO UPDATE "

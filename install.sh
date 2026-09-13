@@ -3,9 +3,13 @@
 # Oxidized AI Manager — instalador rápido y portable.
 #
 # Uso (dentro del repositorio clonado):
-#     sudo ./install.sh                 # local (panel en 127.0.0.1:8000)
-#     sudo ./install.sh --public HOST   # publica con HTTPS tras Nginx (IP o dominio)
-#     sudo ./install.sh --cert          # además emite/renueva el certificado (con --public)
+#     sudo ./install.sh                 # local (panel solo en 127.0.0.1:8000)
+#     sudo ./install.sh --proxy RED     # detrás de un proxy externo (Nginx Proxy
+#                                       # Manager): conecta el backend a esa red
+#                                       # Docker y no publica el puerto en la LAN.
+#
+# El TLS, el certificado y las listas de acceso los gestiona el proxy externo,
+# que no forma parte de este repositorio. Ver docs/PUBLIC_ACCESS.md.
 #
 # Idempotente: si .env ya existe, conserva sus valores.
 
@@ -18,12 +22,10 @@ die()  { printf '%s[x]%s %s\n' "$RED" "$NC" "$1" >&2; exit 1; }
 
 cd "$(dirname "$0")"
 
-PUBLIC_HOST=""
-ISSUE_CERT=0
+PROXY_NETWORK=""
 while [ $# -gt 0 ]; do
     case "$1" in
-        --public) PUBLIC_HOST="${2:-}"; shift 2 ;;
-        --cert)   ISSUE_CERT=1; shift ;;
+        --proxy) PROXY_NETWORK="${2:-}"; shift 2 ;;
         -h|--help) grep '^#' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) die "Opción desconocida: $1" ;;
     esac
@@ -55,7 +57,6 @@ ensure_docker() {
 
 command -v curl >/dev/null 2>&1 || apt_install curl ca-certificates
 command -v openssl >/dev/null 2>&1 || apt_install openssl
-command -v envsubst >/dev/null 2>&1 || apt_install gettext-base
 ensure_docker
 
 if docker compose version >/dev/null 2>&1; then
@@ -106,38 +107,31 @@ else
     chmod 600 .env
 fi
 
-# --- Modo público: renderizar Nginx y (opcional) emitir certificado ---
-if [ -n "$PUBLIC_HOST" ]; then
-    set_kv PUBLIC_HOST "$PUBLIC_HOST"
-    info "Renderizando deploy/nginx.conf para host: $PUBLIC_HOST"
-    PUBLIC_HOST="$PUBLIC_HOST" envsubst '${PUBLIC_HOST}' \
-        < deploy/nginx.conf.template > deploy/nginx.conf
+# --- Modo proxy externo: unir el backend a la red del proxy ---
+if [ -n "$PROXY_NETWORK" ]; then
+    docker network inspect "$PROXY_NETWORK" >/dev/null 2>&1 || \
+        die "No existe la red Docker '$PROXY_NETWORK'. Véala con: docker network ls"
 
-    if [ "$ISSUE_CERT" -eq 1 ]; then
-        command -v certbot >/dev/null 2>&1 || apt_install certbot
-        [ -f "/etc/letsencrypt/live/${PUBLIC_HOST}/fullchain.pem" ] || {
-            info "Emitiendo certificado Let's Encrypt para $PUBLIC_HOST"
-            certbot certonly --standalone -d "$PUBLIC_HOST" --non-interactive --agree-tos --register-unsafely-without-email
-        }
-    elif [ ! -f "/etc/letsencrypt/live/${PUBLIC_HOST}/fullchain.pem" ]; then
-        warn "No hay certificado en /etc/letsencrypt/live/${PUBLIC_HOST}/."
-        warn "Emítalo (certbot) o vuelva a correr con --cert antes de exponer HTTPS."
-    fi
-    COMPOSE_FILES="-f docker-compose.yml -f deploy/docker-compose.public.yml"
+    # La subred de esa red es en quién confía uvicorn para leer X-Forwarded-For.
+    PROXY_SUBNET="$(docker network inspect "$PROXY_NETWORK" \
+        --format '{{range .IPAM.Config}}{{.Subnet}} {{end}}' 2>/dev/null | \
+        tr -s ' ' | sed 's/ $//; s/ /,/g')"
+    [ -n "$PROXY_SUBNET" ] || PROXY_SUBNET="127.0.0.1"
+
+    set_kv PROXY_NETWORK       "$PROXY_NETWORK"
+    set_kv FORWARDED_ALLOW_IPS "$PROXY_SUBNET"
+    # El puerto deja de publicarse hacia la LAN: el proxy entra por la red Docker.
+    set_kv API_BIND_ADDRESS    "127.0.0.1"
+
+    info "Backend conectado a la red '$PROXY_NETWORK' (confía en $PROXY_SUBNET)."
+    COMPOSE_FILES="-f docker-compose.yml -f deploy/docker-compose.proxy.yml"
 else
     COMPOSE_FILES="-f docker-compose.yml"
-    # Modo local: expone el panel en la IP del host (HTTP, sin TLS) para poder
-    # abrirlo desde el navegador. Para TLS use --public.
-    set_kv API_BIND_ADDRESS "0.0.0.0"
+    # Modo local: el panel queda solo en 127.0.0.1 del host. Para exponerlo use
+    # un proxy externo con --proxy (ver docs/PUBLIC_ACCESS.md).
+    set_kv API_BIND_ADDRESS    "127.0.0.1"
+    set_kv FORWARDED_ALLOW_IPS "127.0.0.1"
 fi
-
-detect_ip() {
-    local ip
-    ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
-    [ -n "$ip" ] || ip="$(ip route get 1.1.1.1 2>/dev/null | awk '{print $7; exit}')"
-    [ -n "$ip" ] || ip="$(curl -fsS --max-time 4 https://api.ipify.org 2>/dev/null)"
-    printf '%s' "${ip:-127.0.0.1}"
-}
 
 # --- Validar y levantar ---
 info "Validando la configuración de Compose."
@@ -150,13 +144,18 @@ info "Estado de los servicios:"
 $COMPOSE $COMPOSE_FILES ps
 
 echo
-if [ -n "$PUBLIC_HOST" ]; then
-    info "Listo. Panel público en https://${PUBLIC_HOST}/"
+API_PORT_VAL="$(grep '^API_PORT=' .env | cut -d= -f2)"; API_PORT_VAL="${API_PORT_VAL:-8000}"
+if [ -n "$PROXY_NETWORK" ]; then
+    info "Listo. Cree el proxy host en su Nginx Proxy Manager apuntando a:"
+    printf '      %sbackend%s   puerto %s8000%s   (esquema http)\n' \
+        "$YLW" "$NC" "$YLW" "$NC"
+    info "Active ahí SSL + Force SSL + HTTP/2; WebSockets no hace falta."
+    info "Suba client_max_body_size a 8m en Advanced (cargas .xlsx)."
+    warn "HSTS: APP_ENABLE_HSTS=true en .env solo con el dominio ya confirmado."
 else
-    SERVER_IP="$(detect_ip)"
-    API_PORT_VAL="$(grep '^API_PORT=' .env | cut -d= -f2)"; API_PORT_VAL="${API_PORT_VAL:-8000}"
-    printf '%s[*]%s Listo. Panel en: %shttp://%s:%s/%s\n' "$GRN" "$NC" "$YLW" "$SERVER_IP" "$API_PORT_VAL" "$NC"
-    warn "Acceso por IP en HTTP (sin cifrado). Para HTTPS: sudo ./install.sh --public $SERVER_IP --cert"
+    printf '%s[*]%s Listo. Panel en: %shttp://127.0.0.1:%s/%s\n' \
+        "$GRN" "$NC" "$YLW" "$API_PORT_VAL" "$NC"
+    info "Solo accesible desde el propio host. Para exponerlo: sudo ./install.sh --proxy <red>"
 fi
 info "Usuario: admin"
 if [ -n "$ADMIN_PASSWORD" ]; then

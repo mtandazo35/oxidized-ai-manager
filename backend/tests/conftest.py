@@ -164,6 +164,9 @@ class FakeSettingsRepository:
     async def set_many(self, values: dict[str, str]) -> None:
         self._values.update(values)
 
+    async def encrypt_legacy_settings(self) -> int:
+        return 0
+
 
 class FakeUserRepository:
     """In-memory stand-in matching UserRepository's public contract."""
@@ -196,6 +199,19 @@ class FakeUserRepository:
 @pytest.fixture
 def anyio_backend() -> str:
     return "asyncio"
+
+
+@pytest.fixture(autouse=True)
+def reset_login_throttles():
+    """Limpia los dos frenos de login (por IP y por cuenta) entre pruebas."""
+    from app.auth import _failed_logins
+    from app.middleware import reset_login_rate_limit
+
+    _failed_logins.clear()
+    reset_login_rate_limit()
+    yield
+    _failed_logins.clear()
+    reset_login_rate_limit()
 
 
 @pytest.fixture(autouse=True)

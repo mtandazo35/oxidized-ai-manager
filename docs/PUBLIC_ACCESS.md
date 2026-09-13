@@ -1,47 +1,124 @@
-# Acceso web público
+# Exposición del panel con Nginx Proxy Manager
 
-El despliegue publica el **panel de la plataforma** (y su API) mediante Nginx en
-`https://<PUBLIC_HOST>`, donde `PUBLIC_HOST` es la IP o dominio del host (se
-define en `.env` y el instalador renderiza `deploy/nginx.conf` desde
-`deploy/nginx.conf.template`). El login es el de la plataforma (usuario en
-PostgreSQL, clave cambiable desde el propio panel). PostgreSQL, Redis, el puerto
-directo de Oxidized y oxidized-web permanecen sin exposición pública.
+El stack corre en un VPS local y se publica con un **Nginx Proxy Manager
+externo**: NPM vive en su propio proyecto Docker y no se gestiona desde este
+repositorio. Aquí solo se documenta cómo conectarlo.
 
-## Puesta en marcha
+Se publica **únicamente el panel/API**. PostgreSQL, Redis, el 8888 de Oxidized
+y oxidized-web no se exponen ni en NPM ni en la LAN.
+
+## 1. Conectar el backend a la red de NPM
+
+La forma limpia es una red Docker compartida: NPM alcanza al backend por nombre
+y **no se publica ningún puerto** hacia la LAN.
 
 ```bash
-sudo ./install.sh --public tu-dominio-o-ip --cert
+docker network ls                  # localice la red de NPM, p. ej. npm_default
+cd /opt/oxidized-ai-manager
+sudo ./install.sh --proxy npm_default
 ```
 
-Esto fija `PUBLIC_HOST`, genera el `nginx.conf` para ese host, emite el
-certificado (Certbot, standalone) y levanta el stack con el overlay público.
-Sin `--cert`, coloque usted el certificado en
-`/etc/letsencrypt/live/<PUBLIC_HOST>/` antes de exponer HTTPS.
+El instalador:
 
-El `.htpasswd` de Nginx quedó retirado: la autenticación la aplica el backend
-con tokens JWT. La página de login y `/docs` son públicas; todos los endpoints
-de datos exigen token.
+- comprueba que la red exista,
+- escribe en `.env` `PROXY_NETWORK` y `FORWARDED_ALLOW_IPS` (la subred de esa
+  red, lo único en lo que uvicorn confiará para leer `X-Forwarded-For`),
+- deja `API_BIND_ADDRESS=127.0.0.1` (el puerto ya no sale a la LAN),
+- levanta el stack con `deploy/docker-compose.proxy.yml`.
 
-## Protecciones
+Manualmente es lo mismo:
 
-- Certificado de dirección IP emitido por Let's Encrypt.
-- TLS 1.2 o 1.3 y redirección de HTTP a HTTPS.
-- Rate limit en `/api/auth/login` (5 intentos/minuto por IP, ráfaga 5).
-- Proxy ejecutado con filesystem de solo lectura y `no-new-privileges`.
+```bash
+docker compose -f docker-compose.yml -f deploy/docker-compose.proxy.yml up -d
+```
 
-Los certificados para direcciones IP son de vigencia corta. El servidor
-utiliza `oxidized-cert-renew.timer` dos veces al día; Certbot detiene el proxy
-solo cuando debe renovar y vuelve a iniciarlo al finalizar.
+## 2. Crear el Proxy Host en NPM
 
-## Operación
+| Campo | Valor |
+| --- | --- |
+| Domain Names | `oxidized.sudominio.com` |
+| Scheme | `http` |
+| Forward Hostname / IP | `backend` ← el nombre del servicio, **no** una IP |
+| Forward Port | `8000` |
+| Cache Assets | off |
+| Block Common Exploits | on |
+| Websockets Support | off (el panel no los usa) |
+
+En la pestaña **SSL**: certificado, *Force SSL* y *HTTP/2*. Deje **HSTS
+apagado** hasta confirmar que el dominio y sus subdominios funcionan; cuando lo
+active, actívelo también en la aplicación (`APP_ENABLE_HSTS=true` en `.env`),
+que es la que lo emite de forma consistente.
+
+En **Advanced**, suba el límite de cuerpo o la carga masiva `.xlsx` fallará con
+413 (NPM arranca con el 1 MB por defecto de Nginx):
+
+```nginx
+client_max_body_size 8m;
+```
+
+## 3. Restringir quién llega
+
+Cree una **Access List** en NPM con sus IP de gestión, la VPN WireGuard y la
+red administrativa, y aplíquela al proxy host. NPM filtra el acceso de red; el
+login de la aplicación sigue activo e identifica al usuario: son dos capas
+distintas y ninguna reemplaza a la otra.
+
+Lo recomendable es no dejar el subdominio abierto a Internet aunque tenga
+HTTPS: publíquelo solo por WireGuard o Tailscale.
+
+## 4. Certificado sin dominio público
+
+Con un dominio interno o solo IP, Let's Encrypt por HTTP-01 no puede validar
+(no hay DNS público que resolver). Opciones:
+
+- **DNS-01** en NPM, si su proveedor de DNS está entre los soportados: funciona
+  con dominios internos mientras la zona sea suya.
+- **Certificado propio**, subido en NPM → *SSL Certificates* → *Add Custom*.
+  El navegador avisará salvo que instale la CA en los equipos de gestión.
+
+En ambos casos deje `APP_ENABLE_HSTS=false` mientras el certificado no sea de
+confianza para los navegadores: HSTS deja al navegador clavado en HTTPS para
+ese host y complica volver atrás.
+
+## 5. Qué aporta cada capa
+
+| Protección | Quién la pone |
+| --- | --- |
+| TLS, HTTP/2, redirección a HTTPS | NPM |
+| Lista de acceso por IP / VPN | NPM |
+| `client_max_body_size` | NPM |
+| Cabeceras de seguridad (CSP, X-Frame, nosniff, Referrer, Permissions) | **la aplicación** |
+| HSTS | la aplicación (`APP_ENABLE_HSTS`) |
+| Rate limit de login por IP (5/min) | **la aplicación** |
+| Bloqueo por cuenta (8 fallos/5 min) | la aplicación |
+| Sesión y permisos | la aplicación (JWT) |
+
+Las cabeceras y el rate limit viven en la aplicación a propósito: son lo
+primero que se pierde cuando alguien recrea un proxy host en NPM.
+
+## 6. Monitoreo desde Uptime Kuma
+
+| URL | Qué vigila |
+| --- | --- |
+| `https://oxidized.sudominio.com/health/live` | El backend responde. |
+| `https://oxidized.sudominio.com/health/ready` | PostgreSQL, Redis y Oxidized alcanzables. |
+| `https://oxidized.sudominio.com/health/backups` | **503 si algún equipo lleva sin respaldo** más de 3× su intervalo. |
+
+Los tres son públicos (sin token) y `/health/backups` devuelve solo recuentos,
+nunca nombres de equipos. El umbral se ajusta con `BACKUP_STALENESS_FACTOR`.
+
+Si aplica una Access List en NPM, agregue la IP de Uptime Kuma o publique un
+proxy host aparte solo para `/health/*`.
+
+## 7. Operación
 
 ```bash
 cd /opt/oxidized-ai-manager
-docker compose -f docker-compose.yml -f deploy/docker-compose.public.yml ps
-systemctl status oxidized-cert-renew.timer
+docker compose -f docker-compose.yml -f deploy/docker-compose.proxy.yml ps
+docker compose -f docker-compose.yml -f deploy/docker-compose.proxy.yml logs --tail=100 backend
 ```
 
-Para cambiar la clave del panel: sección "Cambiar clave" del propio panel, o
-`POST /api/auth/change-password`. Si se pierde la clave, borre el usuario en
-PostgreSQL (`DELETE FROM users;`) y reinicie el backend: se vuelve a sembrar
-desde `ADMIN_USERNAME`/`ADMIN_PASSWORD` del `.env`.
+Para cambiar la clave del panel: menú de usuario, o
+`POST /api/auth/change-password`. Si se pierde: `DELETE FROM users;` y reinicie
+el backend, que vuelve a sembrarla desde `ADMIN_USERNAME`/`ADMIN_PASSWORD`
+del `.env`.

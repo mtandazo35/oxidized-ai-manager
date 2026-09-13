@@ -127,3 +127,39 @@ class BackupStatusOut(BaseModel):
     last_event_at: datetime | None
     last_success_at: datetime | None
     last_commit: str | None
+
+
+class AuditEvidence(BaseModel):
+    detail: str
+    line: int = 0
+
+
+class AuditFinding(BaseModel):
+    rule_id: str
+    category: str
+    severity: str
+    title: str
+    recommendation: str
+    evidence: list[AuditEvidence]
+
+
+class AuditReport(BaseModel):
+    node: str
+    commit: str
+    ros_version: str = ""
+    rules_evaluated: int
+    counts: dict[str, int]
+    score: int
+    level: str
+    findings: list[AuditFinding]
+
+
+class AuditSummaryRow(BaseModel):
+    node: str
+    group_name: str = ""
+    identity: str = ""
+    ros_version: str = ""
+    counts: dict[str, int]
+    score: int
+    level: str
+    error: str = ""

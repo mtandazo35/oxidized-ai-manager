@@ -13,8 +13,9 @@ pid: /tmp/oxidized.pid
 crash:
   directory: /home/oxidized/.config/oxidized/crashes
   hostnames: false
-vars:
-  remove_secret: true
+# Sin `remove_secret`: los respaldos deben incluir las claves para ser
+# restaurables (`/export` completo, no `hide-sensitive`). Requiere que el
+# usuario de respaldo del MikroTik tenga la policy `sensitive`.
 extensions:
   oxidized-web:
     load: true
