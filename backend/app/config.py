@@ -27,6 +27,12 @@ class Settings(BaseSettings):
     # Si no se recibe ningún evento de respaldo en este múltiplo del
     # intervalo configurado, /health/backups responde 503 (para Uptime Kuma).
     backup_staleness_factor: float = 3.0
+    # Repositorio montado de solo lectura, para saber en qué commit corre.
+    repo_git_dir: str = "/repo/.git"
+    # Directorio compartido con el anfitrión: el backend deja ahí la petición
+    # de actualización y lee el estado que escribe la unidad de systemd.
+    update_channel_dir: str = "/update"
+    update_branch: str = "main"
 
     model_config = SettingsConfigDict(
         env_file=".env",

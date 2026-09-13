@@ -193,3 +193,31 @@ class UserOut(BaseModel):
     group_name: str = ""
     must_change_password: bool = False
     created_at: datetime | None = None
+
+
+class UpdateStatusOut(BaseModel):
+    state: str = "sin-datos"
+    detail: str = ""
+    at: str | None = None
+    # Commits entre los que se movió la última actualización aplicada.
+    from_commit: str = Field(default="", alias="from")
+    to_commit: str = Field(default="", alias="to")
+
+    model_config = {"populate_by_name": True}
+
+
+class VersionOut(BaseModel):
+    commit: str = ""
+    short: str = ""
+    date: datetime | None = None
+    subject: str = ""
+    remote_commit: str = ""
+    update_available: bool = False
+    updating: bool = False
+    error: str = ""
+    last_update: dict = {}
+
+
+class UpdateRequestResult(BaseModel):
+    status: str
+    detail: str

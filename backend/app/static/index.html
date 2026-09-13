@@ -5,92 +5,117 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Oxidized AI Manager</title>
 <style>
-  :root { color-scheme: dark; }
+  /* Paleta en un solo sitio: antes los colores estaban repetidos a mano por
+     toda la hoja, y cambiar uno obligaba a buscarlo en 40 lugares. */
+  :root {
+    color-scheme: light;
+    --bg: #f5f7fa;
+    --surface: #ffffff;
+    --surface-2: #eff3f8;
+    --border: #dfe4ec;
+    --border-strong: #cbd3e0;
+    --ink: #1f2937;
+    --ink-soft: #46536b;
+    --ink-muted: #5b6675;
+    --accent: #2563eb;
+    --accent-hover: #1d4ed8;
+    --accent-soft: #e8f0ff;
+    --ok-bg: #e6f5ec;      --ok-ink: #136c33;
+    --fail-bg: #fdeaea;    --fail-ink: #b42318;
+    --warn-bg: #fdf3d8;    --warn-ink: #8a5a00;
+    --off-bg: #eceff4;     --off-ink: #4b5563;
+    --shadow: 0 1px 2px rgba(16, 24, 40, .05), 0 10px 28px -20px rgba(16, 24, 40, .28);
+  }
   * { box-sizing: border-box; }
   [hidden] { display: none !important; }
-  body { margin: 0; font-family: system-ui, sans-serif; color: #e2e8f0;
-    background: #0b1120;
+  body { margin: 0; font-family: system-ui, sans-serif; color: var(--ink);
+    background: var(--bg);
     background-image:
-      radial-gradient(1100px 700px at 12% -8%, rgba(37,99,235,.28), transparent 60%),
-      radial-gradient(900px 600px at 108% 8%, rgba(14,165,233,.22), transparent 55%),
-      radial-gradient(800px 800px at 85% 110%, rgba(99,102,241,.20), transparent 60%),
-      linear-gradient(160deg, #0b1120 0%, #0d1526 50%, #0b1120 100%);
+      radial-gradient(1100px 700px at 12% -8%, rgba(37,99,235,.07), transparent 60%),
+      radial-gradient(900px 600px at 108% 8%, rgba(14,165,233,.06), transparent 55%),
+      radial-gradient(800px 800px at 85% 110%, rgba(99,102,241,.05), transparent 60%),
+      linear-gradient(160deg, #f5f7fa 0%, #edf1f7 50%, #f5f7fa 100%);
     background-attachment: fixed; }
   main { max-width: 1600px; margin: 0 auto; padding: 24px 24px 64px; }
   h1 { font-size: 1.3rem; margin: 0; }
-  h2 { font-size: 1.05rem; margin: 32px 0 12px; color: #93c5fd; }
+  h2 { font-size: 1.05rem; margin: 32px 0 12px; color: var(--accent-hover); }
   header.bar { display: flex; align-items: center; justify-content: space-between;
-    padding: 14px 20px; border-bottom: 1px solid rgba(51, 65, 85, .7);
-    background: linear-gradient(180deg, rgba(30,41,59,.92), rgba(20,29,48,.86));
+    padding: 14px 20px; border-bottom: 1px solid var(--border);
+    background: rgba(255, 255, 255, .88);
     backdrop-filter: blur(10px); position: sticky; top: 0; z-index: 10; }
   header.bar h1 { display: flex; align-items: center; gap: 10px; }
   .brand-badge { display: inline-grid; place-items: center;
     width: 30px; height: 30px; border-radius: 8px; font-size: 1rem;
     background: linear-gradient(135deg, #2563eb, #0ea5e9);
-    box-shadow: 0 4px 12px -3px rgba(37, 99, 235, .6); }
+    box-shadow: 0 4px 12px -3px rgba(37, 99, 235, .45); }
   .bar-right { display: flex; align-items: center; gap: 8px; }
   table { width: 100%; border-collapse: collapse; font-size: .9rem; }
-  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid #1e293b;
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border);
     white-space: nowrap; }
   td:last-child { width: 1%; }
-  th { color: #94a3b8; font-weight: 600; }
-  tr:hover td { background: #16233b; }
+  th { color: var(--ink-muted); font-weight: 600; }
+  tr:hover td { background: var(--surface-2); }
   .card { overflow-x: auto; }
   button.mini { padding: 5px 9px; font-size: .78rem; }
-  input, select { background: #1e293b; color: #e2e8f0; border: 1px solid #334155;
+  input, select { background: var(--surface); color: var(--ink);
+    border: 1px solid var(--border-strong);
     border-radius: 6px; padding: 8px 10px; font-size: .9rem; }
-  input:focus { outline: 1px solid #3b82f6; }
-  input[type=checkbox] { width: 16px; height: 16px; accent-color: #2563eb; }
-  button { background: #2563eb; color: #fff; border: 0; border-radius: 6px;
+  input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--accent); }
+  button { background: var(--accent); color: #fff; border: 0; border-radius: 6px;
     padding: 8px 14px; font-size: .9rem; cursor: pointer; }
-  button:hover { background: #1d4ed8; }
-  button.ghost { background: #334155; }
-  button.danger { background: #7f1d1d; }
+  button:hover { background: var(--accent-hover); }
+  button.ghost { background: var(--surface-2); color: var(--ink-soft);
+    border: 1px solid var(--border); }
+  button.ghost:hover { background: #e3e9f2; }
+  button.danger { background: #dc2626; color: #fff; border: 0; }
+  button.danger:hover { background: #b91c1c; }
   form.inline { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; align-items: center; }
-  .card { background: rgba(17, 28, 51, .82); border: 1px solid rgba(51, 65, 85, .55);
-    border-radius: 12px; padding: 16px; backdrop-filter: blur(8px);
-    box-shadow: 0 10px 30px -18px rgba(0, 0, 0, .6); }
+  .card { background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 16px; box-shadow: var(--shadow); }
   .msg { min-height: 1.2em; font-size: .85rem; margin: 8px 0; }
-  .msg.err { color: #f87171; } .msg.ok { color: #4ade80; }
-  .badge { padding: 2px 8px; border-radius: 999px; font-size: .75rem; }
-  .badge.ok { background: #14532d; color: #86efac; }
-  .badge.fail { background: #7f1d1d; color: #fca5a5; }
-  .badge.off { background: #374151; color: #d1d5db; }
-  .badge.run { background: #78350f; color: #fcd34d; animation: pulse 1.2s infinite; }
+  .msg.err { color: var(--fail-ink); } .msg.ok { color: var(--ok-ink); }
+  .badge { padding: 2px 8px; border-radius: 999px; font-size: .75rem; font-weight: 600; }
+  .badge.ok { background: var(--ok-bg); color: var(--ok-ink); }
+  .badge.fail { background: var(--fail-bg); color: var(--fail-ink); }
+  .badge.off { background: var(--off-bg); color: var(--off-ink); }
+  .badge.run { background: var(--warn-bg); color: var(--warn-ink); animation: pulse 1.2s infinite; }
   @keyframes pulse { 50% { opacity: .55; } }
   #login-view { display: grid; place-items: center; min-height: 100vh;
     position: relative; overflow: hidden; }
   #login-view::before, #login-view::after {
     content: ""; position: absolute; border-radius: 50%; filter: blur(70px);
-    opacity: .55; z-index: 0; pointer-events: none; }
+    opacity: .28; z-index: 0; pointer-events: none; }
   #login-view::before { width: 460px; height: 460px; top: -120px; left: -100px;
-    background: radial-gradient(circle, #2563eb, transparent 70%);
+    background: radial-gradient(circle, #60a5fa, transparent 70%);
     animation: float1 16s ease-in-out infinite; }
   #login-view::after { width: 520px; height: 520px; bottom: -160px; right: -120px;
-    background: radial-gradient(circle, #0ea5e9, transparent 70%);
+    background: radial-gradient(circle, #38bdf8, transparent 70%);
     animation: float2 20s ease-in-out infinite; }
   @keyframes float1 { 50% { transform: translate(60px, 40px) scale(1.1); } }
   @keyframes float2 { 50% { transform: translate(-50px, -30px) scale(1.08); } }
   #login-view .card { width: 340px; position: relative; z-index: 1;
-    background: rgba(17, 28, 51, .72); backdrop-filter: blur(14px);
-    border: 1px solid rgba(148, 163, 184, .18);
-    box-shadow: 0 24px 60px -20px rgba(0, 0, 0, .7);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    box-shadow: 0 24px 60px -24px rgba(16, 24, 40, .35);
     padding: 28px 26px; }
   #login-view .card h1 { display: flex; align-items: center; gap: 10px; }
   #login-view .brand-badge { display: inline-grid; place-items: center;
     width: 34px; height: 34px; border-radius: 9px; font-size: 1.1rem;
     background: linear-gradient(135deg, #2563eb, #0ea5e9);
-    box-shadow: 0 6px 16px -4px rgba(37, 99, 235, .6); }
+    box-shadow: 0 6px 16px -4px rgba(37, 99, 235, .45); }
   #login-view input { width: 100%; margin-bottom: 10px; }
   #login-view button { width: 100%; }
-  .muted { color: #64748b; font-size: .8rem; }
+  .muted { color: var(--ink-muted); font-size: .8rem; }
   .menu { position: relative; }
   .menu-list { position: absolute; right: 0; top: calc(100% + 6px); min-width: 170px;
-    background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 6px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+    padding: 6px; box-shadow: var(--shadow);
     z-index: 20; display: flex; flex-direction: column; gap: 4px; }
-  .menu-list button { background: transparent; text-align: left; width: 100%; }
-  .menu-list button:hover { background: #334155; }
-  .overlay { position: fixed; inset: 0; background: rgba(2, 6, 23, .7);
+  .menu-list button { background: transparent; color: var(--ink); text-align: left;
+    width: 100%; border: 0; }
+  .menu-list button:hover { background: var(--surface-2); }
+  .overlay { position: fixed; inset: 0; background: rgba(15, 23, 42, .45);
     display: grid; place-items: center; z-index: 30; }
   .overlay .card { width: 340px; }
   .overlay input { width: 100%; margin-bottom: 10px; }
@@ -98,49 +123,53 @@
   .version-list { display: flex; flex-direction: column; gap: 4px;
     max-height: 160px; overflow-y: auto; margin-bottom: 10px; }
   .version-list .vrow { display: flex; align-items: center; gap: 6px; }
-  .version-list .vrow > button:first-child { flex: 1; text-align: left; background: #1e293b; }
-  .version-list .vrow > button:first-child.sel { outline: 1px solid #3b82f6; }
+  .version-list .vrow > button:first-child { flex: 1; text-align: left;
+    background: var(--surface-2); color: var(--ink-soft); border: 1px solid var(--border); }
+  .version-list .vrow > button:first-child.sel { outline: 2px solid var(--accent);
+    background: var(--accent-soft); color: var(--accent-hover); }
   .version-list .mini { padding: 6px 8px; font-size: .75rem; }
-  pre.diff { background: #0b1220; border: 1px solid #1e293b; border-radius: 8px;
+  pre.diff { background: #fbfcfe; border: 1px solid var(--border); border-radius: 8px;
     padding: 12px 0; overflow: auto; max-height: 50vh; font-size: .8rem;
-    line-height: 1.4; margin: 0; white-space: pre; }
+    line-height: 1.4; margin: 0; white-space: pre; color: var(--ink); }
   pre.diff .dline { display: block; padding: 0 12px; min-height: 1.4em; }
-  .dadd { color: #bbf7d0; background: rgba(34, 197, 94, .16);
-    box-shadow: inset 3px 0 0 #22c55e; }
-  .ddel { color: #fecaca; background: rgba(239, 68, 68, .16);
-    box-shadow: inset 3px 0 0 #ef4444; }
-  .dhunk { color: #60a5fa; background: rgba(59, 130, 246, .10); }
-  .dmeta { color: #475569; }
+  .dadd { color: #14532d; background: rgba(34, 197, 94, .14);
+    box-shadow: inset 3px 0 0 #16a34a; }
+  .ddel { color: #7f1d1d; background: rgba(239, 68, 68, .12);
+    box-shadow: inset 3px 0 0 #dc2626; }
+  .dhunk { color: var(--accent-hover); background: rgba(59, 130, 246, .09); }
+  .dmeta { color: #9aa4b5; }
   .field { display: flex; align-items: center; gap: 8px; }
-  label { font-size: .9rem; color: #cbd5e1; }
+  label { font-size: .9rem; color: var(--ink-soft); }
   .sev { padding: 2px 8px; border-radius: 999px; font-size: .75rem; font-weight: 600; }
-  .sev.critical { background: #4c0519; color: #fda4af; }
-  .sev.high { background: #7c2d12; color: #fdba74; }
-  .sev.medium { background: #78350f; color: #fcd34d; }
-  .sev.low { background: #1e3a5f; color: #93c5fd; }
-  .sev.ok { background: #14532d; color: #86efac; }
-  .sev.unknown { background: #374151; color: #d1d5db; }
-  .scorebar { height: 6px; width: 90px; border-radius: 3px; background: #1e293b; overflow: hidden; }
+  .sev.critical { background: #fde7ec; color: #9f1239; }
+  .sev.high { background: #fdeee0; color: #9a3412; }
+  .sev.medium { background: var(--warn-bg); color: #854d0e; }
+  .sev.low { background: var(--accent-soft); color: #1e40af; }
+  .sev.ok { background: var(--ok-bg); color: var(--ok-ink); }
+  .sev.unknown { background: var(--off-bg); color: var(--off-ink); }
+  .scorebar { height: 6px; width: 90px; border-radius: 3px; background: #e4e9f0; overflow: hidden; }
   .scorebar > span { display: block; height: 100%; }
-  .finding { background: #0b1220; border: 1px solid #1e293b; border-left: 3px solid #475569;
+  .finding { background: #fbfcfe; border: 1px solid var(--border);
+    border-left: 3px solid var(--border-strong);
     border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; }
-  .finding.critical { border-left-color: #f43f5e; }
-  .finding.high { border-left-color: #f97316; }
-  .finding.medium { border-left-color: #f59e0b; }
-  .finding.low { border-left-color: #3b82f6; }
+  .finding.critical { border-left-color: #e11d48; }
+  .finding.high { border-left-color: #ea580c; }
+  .finding.medium { border-left-color: #d97706; }
+  .finding.low { border-left-color: var(--accent); }
   .finding h3 { display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
     font-size: .92rem; margin: 0 0 6px; }
   .finding .ev { display: block; font-family: ui-monospace, monospace; font-size: .78rem;
-    color: #cbd5e1; background: #111c33; border-radius: 4px; padding: 4px 8px;
+    color: #334155; background: var(--surface-2); border-radius: 4px; padding: 4px 8px;
     margin: 3px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
-  .finding .rec { font-size: .82rem; color: #94a3b8; margin: 6px 0 0; }
+  .finding .rec { font-size: .82rem; color: var(--ink-muted); margin: 6px 0 0; }
   #findings-view { max-height: 56vh; overflow-y: auto; }
-  nav.tabs { display: flex; gap: 4px; padding: 0 16px; background: #1e293b;
-    border-bottom: 1px solid #334155; }
-  nav.tabs button { background: transparent; color: #94a3b8; border-radius: 0;
-    padding: 10px 16px; border-bottom: 2px solid transparent; }
-  nav.tabs button:hover { color: #e2e8f0; background: transparent; }
-  nav.tabs button.active { color: #e2e8f0; border-bottom-color: #3b82f6; }
+  nav.tabs { display: flex; gap: 4px; padding: 0 16px; background: var(--surface);
+    border-bottom: 1px solid var(--border); }
+  nav.tabs button { background: transparent; color: var(--ink-muted); border-radius: 0;
+    padding: 10px 16px; border-bottom: 2px solid transparent; border-top: 0;
+    border-left: 0; border-right: 0; }
+  nav.tabs button:hover { color: var(--ink); background: transparent; }
+  nav.tabs button.active { color: var(--accent-hover); border-bottom-color: var(--accent); }
 </style>
 </head>
 <body>
@@ -222,7 +251,7 @@
       </div>
       <p class="muted" style="margin-bottom:6px"><strong>Paso 2.</strong> Suba el archivo (CSV, TXT o <strong>Excel .xlsx</strong> — la plantilla también se puede llenar y guardar en Excel) o pegue el contenido:</p>
       <input type="file" id="bulk-file" accept=".csv,.txt,.xlsx" style="border:0;padding:4px 0">
-      <textarea id="bulk-text" rows="8" style="width:100%;margin-top:8px;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:8px 10px;font-family:monospace;font-size:.85rem" placeholder="rb-core-01,192.0.2.10,2222,backup,MiClave&#10;rb-sucursal-02,192.0.2.20"></textarea>
+      <textarea id="bulk-text" rows="8" style="width:100%;margin-top:8px;background:var(--surface);color:var(--ink);border:1px solid var(--border-strong);border-radius:6px;padding:8px 10px;font-family:ui-monospace,monospace;font-size:.85rem" placeholder="rb-core-01,192.0.2.10,2222,backup,MiClave&#10;rb-sucursal-02,192.0.2.20"></textarea>
       <div style="display:flex;gap:12px;align-items:center;margin-top:10px">
         <button type="button" id="btn-upload">Subir routers</button>
         <span id="bulk-progress" class="muted"></span>
@@ -306,6 +335,33 @@
       <p class="msg" id="bulk-run-msg"></p>
     </div>
     </div>
+      <h2>Versión y actualizaciones</h2>
+      <div class="card">
+        <div style="display:flex;gap:16px;align-items:baseline;flex-wrap:wrap">
+          <div>
+            <div class="muted">Versión desplegada</div>
+            <div id="ver-commit" style="font-family:ui-monospace,monospace">—</div>
+          </div>
+          <div style="flex:1;min-width:200px">
+            <div class="muted">Último cambio</div>
+            <div id="ver-subject">—</div>
+          </div>
+          <span id="ver-badge" class="badge off">—</span>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:12px;flex-wrap:wrap">
+          <button type="button" class="ghost" id="btn-check-update">Buscar actualizaciones</button>
+          <button type="button" id="btn-do-update" hidden>Actualizar ahora</button>
+          <span id="ver-progress" class="muted"></span>
+        </div>
+        <p class="msg" id="ver-msg"></p>
+        <p class="muted" style="margin:0">
+          La actualización la aplica el servidor, no el navegador: respalda la
+          plataforma, baja los cambios del repositorio y reconstruye. <strong>No se
+          borra ningún dato</strong> — los volúmenes no se tocan. El panel se
+          reinicia solo y basta con recargar la página.
+        </p>
+      </div>
+
     <div id="tab-users" hidden>
     <h2>Cuentas de acceso</h2>
     <div class="card">
@@ -317,7 +373,7 @@
         <thead><tr><th>Usuario</th><th>Rol</th><th>Empresa</th><th>Clave</th><th></th></tr></thead>
         <tbody id="users-body"></tbody>
       </table>
-      <h3 style="font-size:.95rem;color:#93c5fd;margin:0 0 8px">Nueva cuenta</h3>
+      <h3 style="font-size:.95rem;color:var(--accent-hover);margin:0 0 8px">Nueva cuenta</h3>
       <form class="inline" id="user-form">
         <input id="u-name" placeholder="usuario" required
           pattern="[A-Za-z0-9][A-Za-z0-9._@-]+" style="width:150px">
@@ -1149,7 +1205,7 @@ function switchTab(tab) {
     $("tab-btn-" + name).classList.toggle("active", name === tab);
   });
   if (location.hash !== "#" + tab) history.replaceState(null, "", "#" + tab);
-  if (tab === "config") { loadSettings(); loadBulkRun(); }
+  if (tab === "config") { loadSettings(); loadBulkRun(); loadVersion(); }
   if (tab === "audit") loadAudit();
   if (tab === "users") loadUsers();
 }
@@ -1427,6 +1483,110 @@ $("u-role").addEventListener("change", () => {
   const esAdmin = $("u-role").value === "admin";
   $("u-group").disabled = esAdmin;
   $("u-group").placeholder = esAdmin ? "todas las empresas" : "empresa";
+});
+
+// --- Versión y actualización desde Git (solo administrador) --------------
+
+let updatePollTimer = null;
+
+function renderVersion(info) {
+  $("ver-commit").textContent = info.short || "—";
+  $("ver-subject").textContent = info.subject || "—";
+  const badge = $("ver-badge");
+  const boton = $("btn-do-update");
+
+  if (info.error) {
+    badge.className = "badge off";
+    badge.textContent = "sin comprobar";
+    boton.hidden = true;
+    setMsg("ver-msg", info.error, false);
+  } else if (info.update_available) {
+    badge.className = "badge run";
+    badge.textContent = "hay una versión nueva";
+    boton.hidden = false;
+    $("ver-msg").textContent = "";
+  } else {
+    badge.className = "badge ok";
+    badge.textContent = "al día";
+    boton.hidden = true;
+    $("ver-msg").textContent = "";
+  }
+
+  const estado = info.last_update || {};
+  const enCurso = info.updating || ["solicitada", "en-progreso"].includes(estado.state);
+  boton.disabled = enCurso;
+  $("btn-check-update").disabled = enCurso;
+  if (enCurso) {
+    $("ver-progress").textContent = "⏳ " + (estado.detail || "actualizando…");
+    startUpdatePoll();
+  } else if (estado.state === "ok" || estado.state === "al-dia") {
+    $("ver-progress").textContent = "✓ " + (estado.detail || "");
+  } else if (estado.state === "error") {
+    $("ver-progress").textContent = "";
+    setMsg("ver-msg", estado.detail || "La última actualización falló.", false);
+  } else {
+    $("ver-progress").textContent = "";
+  }
+}
+
+async function loadVersion() {
+  try {
+    renderVersion(await api("/api/system/version"));
+  } catch (error) {
+    setMsg("ver-msg", error.message, false);
+  }
+}
+
+function startUpdatePoll() {
+  if (updatePollTimer) return;
+  updatePollTimer = setInterval(async () => {
+    let estado;
+    try {
+      estado = await api("/api/system/update-status");
+    } catch (error) {
+      // Durante la reconstrucción el backend se reinicia y deja de responder:
+      // eso es parte del proceso, no un fallo. Se sigue consultando.
+      $("ver-progress").textContent = "⏳ reiniciando el servicio…";
+      return;
+    }
+    if (["solicitada", "en-progreso"].includes(estado.state)) {
+      $("ver-progress").textContent = "⏳ " + (estado.detail || "actualizando…");
+      return;
+    }
+    clearInterval(updatePollTimer);
+    updatePollTimer = null;
+    if (estado.state === "error") {
+      setMsg("ver-msg", estado.detail || "La actualización falló.", false);
+      $("ver-progress").textContent = "";
+    } else {
+      setMsg("ver-msg", estado.detail || "Actualización terminada.", true);
+    }
+    loadVersion();
+  }, 4000);
+}
+
+$("btn-check-update").addEventListener("click", () => {
+  $("ver-msg").textContent = "";
+  $("ver-progress").textContent = "consultando el repositorio…";
+  loadVersion();
+});
+
+$("btn-do-update").addEventListener("click", async () => {
+  if (!confirm(
+    "¿Actualizar la plataforma a la última versión?\n\n" +
+    "El servidor respaldará todo antes de empezar y no se borra ningún dato. " +
+    "El panel quedará unos segundos sin responder mientras se reinicia."
+  )) return;
+  $("ver-msg").textContent = "";
+  try {
+    const resultado = await api("/api/system/update", { method: "POST" });
+    $("ver-progress").textContent = "⏳ " + resultado.detail;
+    $("btn-do-update").disabled = true;
+    $("btn-check-update").disabled = true;
+    startUpdatePoll();
+  } catch (error) {
+    setMsg("ver-msg", error.message, false);
+  }
 });
 
 function initialTab() {

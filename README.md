@@ -151,6 +151,15 @@ curl -X POST http://127.0.0.1:8000/api/users \
 El filtrado se aplica en la API, endpoint por endpoint, no en el panel.
 Detalles y matriz de permisos en [docs/MULTITENANT.md](docs/MULTITENANT.md).
 
+## Actualizar desde el panel
+
+En **Configuración → Versión y actualizaciones** (solo administrador) se
+compara el commit desplegado con `origin/main` y se aplica la nueva versión con
+un botón. El contenedor **no** se reconstruye a sí mismo: deja una petición y
+la aplica una unidad de systemd del anfitrión, que respalda antes y nunca toca
+los volúmenes. Instalación de esa unidad y detalles en
+[docs/UPDATES.md](docs/UPDATES.md).
+
 ## Respaldo de la plataforma
 
 Oxidized respalda los routers; esto respalda **la plataforma** (PostgreSQL, el
@@ -193,6 +202,7 @@ Las pruebas usan dobles para las dependencias; no necesitan contenedores ni rout
 - [Multi-tenant y roles](docs/MULTITENANT.md)
 - [Exposición con Nginx Proxy Manager](docs/PUBLIC_ACCESS.md)
 - [Respaldo y restauración](docs/BACKUP_RESTORE.md)
+- [Actualizaciones desde el panel](docs/UPDATES.md)
 - [Seguridad](docs/SECURITY.md)
 - [Detalles de la Fase 1](docs/PHASE1.md)
 - [Detalles de la Fase 2 (inventario)](docs/PHASE2.md)

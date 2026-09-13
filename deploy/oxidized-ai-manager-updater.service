@@ -1,0 +1,14 @@
+[Unit]
+Description=Aplica la actualización de Oxidized AI Manager pedida desde el panel
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/root/oxidized-ai-manager
+Environment=PROJECT_DIR=/root/oxidized-ai-manager
+Environment=CHANNEL_DIR=/root/oxidized-ai-manager/.update-channel
+Environment=UPDATE_BRANCH=main
+# La frase de cifrado del respaldo previo, si la tiene configurada.
+EnvironmentFile=-/etc/oxidized-ai-manager-backup.env
+ExecStart=/root/oxidized-ai-manager/scripts/apply-update.sh

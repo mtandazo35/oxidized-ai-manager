@@ -27,6 +27,7 @@ from .repository import (
 from .scheduler import scheduler_loop
 from .security import hash_password
 from .settings_api import router as settings_router
+from .system_api import router as system_router
 from .users_api import router as users_router
 
 
@@ -86,6 +87,7 @@ app.include_router(backups_router)
 app.include_router(devices_router)
 app.include_router(oxidized_router)
 app.include_router(settings_router)
+app.include_router(system_router)
 app.include_router(users_router)
 
 

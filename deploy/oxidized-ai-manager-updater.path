@@ -1,0 +1,9 @@
+[Unit]
+Description=Vigila las peticiones de actualización que deja el panel
+
+[Path]
+# El panel escribe este archivo; systemd despierta al servicio.
+PathExists=/root/oxidized-ai-manager/.update-channel/update-request.json
+
+[Install]
+WantedBy=paths.target

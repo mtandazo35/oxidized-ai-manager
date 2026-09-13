@@ -72,6 +72,19 @@ recomendado del servidor. Lea también `docs/PUBLIC_ACCESS.md`.
 - Toda la evidencia pasa por `redact_secrets()` antes de salir por la API.
 - `/api/audit/*` exige token de sesión, igual que el resto de los datos.
 
+### Actualización desde el panel
+- El backend **no tiene el socket de Docker** y no puede reconstruir el stack:
+  montarlo equivaldría a darle root del anfitrión a la aplicación publicada.
+- `POST /api/system/update` (solo `admin`) únicamente **escribe una petición**
+  en un directorio compartido; la aplica una unidad de systemd del anfitrión.
+- La petición **no acepta URL, rama ni commit**: están fijados en el script del
+  anfitrión, que solo hace `git merge --ff-only origin/main`. Con la cuenta de
+  administrador comprometida, lo máximo que se logra es desplegar el último
+  commit legítimo del repositorio, no código arbitrario.
+- El script respalda antes de actualizar y aborta si el respaldo falla; nunca
+  usa `docker compose down` ni toca los volúmenes.
+- El repositorio se monta de solo lectura (`/repo/.git:ro`) para leer la versión.
+
 ### Superficie de la aplicación
 - `/docs` y `/openapi.json` deshabilitados salvo `APP_ENV=development`.
 - Parámetros de las consultas a Git (nombre de nodo, hash de commit) validados

@@ -26,3 +26,7 @@ backups/
 
 # Local databases
 *.sqlite3
+
+# Canal de actualización (peticiones y estado que intercambian el panel y el
+# anfitrión); se crea en tiempo de ejecución.
+.update-channel/

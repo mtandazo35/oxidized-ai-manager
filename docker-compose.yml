@@ -120,6 +120,14 @@ services:
       - /tmp:size=16m,mode=1777
     volumes:
       - oxidized_data:/oxidized-data:ro
+      # Solo lectura: sirve para saber en qué commit corre el stack y
+      # compararlo con el remoto. El backend nunca escribe en el repositorio.
+      - ./.git:/repo/.git:ro
+      # Canal con el anfitrión para el botón "Actualizar": el backend deja aquí
+      # la petición y lee el estado. Es el ÚNICO sitio donde puede escribir, y
+      # quien ejecuta la actualización es la unidad de systemd del anfitrión,
+      # no el contenedor (que no tiene el socket de Docker, a propósito).
+      - ${UPDATE_CHANNEL_DIR:-./.update-channel}:/update
     depends_on:
       postgres:
         condition: service_healthy

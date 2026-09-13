@@ -107,6 +107,16 @@ else
     chmod 600 .env
 fi
 
+# --- Canal de actualización (botón "Actualizar" del panel) ---
+# El backend corre como uid 10001 dentro del contenedor: el directorio debe
+# pertenecerle o no podrá dejar la petición.
+CHANNEL_DIR="$(pwd)/.update-channel"
+mkdir -p "$CHANNEL_DIR"
+chown -R 10001:10001 "$CHANNEL_DIR" 2>/dev/null || \
+    warn "No se pudo ajustar el dueño de $CHANNEL_DIR (¿sin root?): el botón de actualizar fallará."
+chmod 700 "$CHANNEL_DIR"
+set_kv UPDATE_CHANNEL_DIR "./.update-channel"
+
 # --- Modo proxy externo: unir el backend a la red del proxy ---
 if [ -n "$PROXY_NETWORK" ]; then
     docker network inspect "$PROXY_NETWORK" >/dev/null 2>&1 || \
@@ -156,6 +166,11 @@ else
     printf '%s[*]%s Listo. Panel en: %shttp://127.0.0.1:%s/%s\n' \
         "$GRN" "$NC" "$YLW" "$API_PORT_VAL" "$NC"
     info "Solo accesible desde el propio host. Para exponerlo: sudo ./install.sh --proxy <red>"
+fi
+if [ ! -f /etc/systemd/system/oxidized-ai-manager-updater.path ]; then
+    warn "El botón \"Actualizar\" del panel necesita las unidades del anfitrión:"
+    printf '      sudo cp deploy/oxidized-ai-manager-updater.{path,service} /etc/systemd/system/\n'
+    printf '      sudo systemctl daemon-reload && sudo systemctl enable --now oxidized-ai-manager-updater.path\n'
 fi
 info "Usuario: admin"
 if [ -n "$ADMIN_PASSWORD" ]; then
