@@ -27,6 +27,7 @@ from .repository import (
 from .scheduler import scheduler_loop
 from .security import hash_password
 from .settings_api import router as settings_router
+from .users_api import router as users_router
 
 
 settings = get_settings()
@@ -50,6 +51,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             settings.admin_username,
             hash_password(settings.admin_password),
             must_change_password=True,
+            role="admin",
         )
     scheduler_task = asyncio.create_task(scheduler_loop(app, settings))
     try:
@@ -84,6 +86,7 @@ app.include_router(backups_router)
 app.include_router(devices_router)
 app.include_router(oxidized_router)
 app.include_router(settings_router)
+app.include_router(users_router)
 
 
 PANEL_FILE = Path(__file__).parent / "static" / "index.html"

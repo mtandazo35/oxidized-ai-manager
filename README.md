@@ -136,6 +136,21 @@ En el panel están en la pestaña **Auditoría**. Detalles, reglas y criterios e
 
 Consulte diagnósticos con `docker compose logs --tail=100 <servicio>` y detenga el stack con `docker compose down`. No use `docker compose down -v` salvo que pretenda borrar todos los datos locales.
 
+## Acceso de clientes (multi-tenant)
+
+Cada cuenta pertenece a una empresa y **solo ve los equipos de esa empresa**,
+con cuatro roles (`admin`, `operador`, `auditor`, `lector`). Las cuentas se
+gestionan en la pestaña **Usuarios** del panel o por API:
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/users \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"username":"cliente-acme","password":"...","role":"lector","group_name":"ACME"}'
+```
+
+El filtrado se aplica en la API, endpoint por endpoint, no en el panel.
+Detalles y matriz de permisos en [docs/MULTITENANT.md](docs/MULTITENANT.md).
+
 ## Respaldo de la plataforma
 
 Oxidized respalda los routers; esto respalda **la plataforma** (PostgreSQL, el
@@ -175,6 +190,7 @@ Las pruebas usan dobles para las dependencias; no necesitan contenedores ni rout
 - [Arquitectura](docs/ARCHITECTURE.md)
 - [Roadmap](docs/ROADMAP.md)
 - [Fase 4 — Auditoría](docs/PHASE4.md)
+- [Multi-tenant y roles](docs/MULTITENANT.md)
 - [Exposición con Nginx Proxy Manager](docs/PUBLIC_ACCESS.md)
 - [Respaldo y restauración](docs/BACKUP_RESTORE.md)
 - [Seguridad](docs/SECURITY.md)

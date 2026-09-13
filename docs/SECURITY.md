@@ -19,9 +19,26 @@ recomendado del servidor. Lea también `docs/PUBLIC_ACCESS.md`.
 - Login propio con usuario en PostgreSQL y clave **bcrypt** (nunca en claro).
 - Tokens **JWT HS256** firmados con `APP_SECRET_KEY`, expiración 8 h.
 - **Bloqueo por cuenta**: 8 intentos fallidos en 5 min bloquean el usuario
-  temporalmente (complementa el rate-limit por IP de Nginx: 5/min en `/login`).
+  temporalmente. Lo complementa el **rate limit por IP** de la propia
+  aplicación (5/min en `/api/auth/login`): el primero frena la fuerza bruta
+  contra una cuenta, el segundo a un origen que rota nombres de usuario.
 - Todos los endpoints de datos exigen token; solo `/`, la página de login y los
   health checks son públicos.
+
+### Autorización y aislamiento entre clientes
+- Cada cuenta tiene un **rol** (`admin`, `operador`, `auditor`, `lector`) y una
+  **empresa**. El filtrado por empresa se aplica en la API, endpoint por
+  endpoint; el panel solo esconde lo que la cuenta no puede hacer.
+- Pedir un recurso de otra empresa responde **404, no 403**: un 403
+  confirmaría que existe y permitiría enumerar equipos ajenos.
+- El alcance **falla cerrado**: una cuenta no administradora sin empresa no ve
+  todo, no ve nada.
+- Rol y empresa se leen de la base en cada petición, no del token: revocar o
+  degradar una cuenta aplica al instante, sin esperar a que caduque el JWT.
+- No se puede borrar la propia cuenta ni degradar/eliminar al último
+  administrador.
+- 28 pruebas fijan el aislamiento (inventario, respaldos, diffs, auditoría,
+  respaldo masivo, ajustes y cuentas). Ver `docs/MULTITENANT.md`.
 
 ### Secretos y datos sensibles
 - Las **contraseñas de los routers se cifran en reposo** (Fernet, llave derivada

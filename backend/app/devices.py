@@ -7,7 +7,7 @@ from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font
 from pydantic import ValidationError
 
-from .auth import current_user
+from .auth import CurrentUser, current_user, require_write
 from .config import get_settings
 from .repository import DeviceRepository, DuplicateDeviceError
 from .scheduler import trigger_node_backup
@@ -20,26 +20,44 @@ from .schemas import (
 )
 
 
-router = APIRouter(
-    prefix="/api/devices",
-    tags=["devices"],
-    dependencies=[Depends(current_user)],
-)
+router = APIRouter(prefix="/api/devices", tags=["devices"])
 
 
 def _repository(request: Request) -> DeviceRepository:
     return request.app.state.devices
 
 
+def _check_group(user: CurrentUser, group: str) -> str:
+    """Empresa con la que se guarda un equipo.
+
+    Un no administrador solo puede crear o mover equipos dentro de su propia
+    empresa: si manda otra (o ninguna), se fuerza la suya.
+    """
+    if user.is_admin:
+        return group
+    if group and group != user.group_name:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Solo puede registrar equipos de su propia empresa.",
+        )
+    return user.group_name
+
+
 @router.get("", response_model=list[DeviceOut])
-async def list_devices(request: Request) -> list[dict]:
-    return await _repository(request).list_devices()
+async def list_devices(
+    request: Request, user: CurrentUser = Depends(current_user)
+) -> list[dict]:
+    return await _repository(request).list_devices(user.scope)
 
 
 @router.post("", response_model=DeviceOut, status_code=status.HTTP_201_CREATED)
-async def create_device(request: Request, payload: DeviceCreate) -> dict:
+async def create_device(
+    request: Request, payload: DeviceCreate, user: CurrentUser = Depends(require_write)
+) -> dict:
+    data = payload.model_dump()
+    data["group_name"] = _check_group(user, data.get("group_name", ""))
     try:
-        return await _repository(request).create_device(payload.model_dump())
+        return await _repository(request).create_device(data)
     except DuplicateDeviceError:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -53,7 +71,7 @@ XLSX_MEDIA_TYPE = (
 
 
 @router.get("/import-template")
-async def import_template() -> Response:
+async def import_template(user: CurrentUser = Depends(require_write)) -> Response:
     workbook = Workbook()
     sheet = workbook.active
     sheet.title = "Routers"
@@ -77,18 +95,29 @@ async def import_template() -> Response:
 
 
 @router.get("/{device_id}", response_model=DeviceOut)
-async def get_device(request: Request, device_id: int) -> dict:
-    device = await _repository(request).get_device(device_id)
+async def get_device(
+    request: Request, device_id: int, user: CurrentUser = Depends(current_user)
+) -> dict:
+    device = await _repository(request).get_device(device_id, user.scope)
     if device is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found.")
     return device
 
 
 @router.patch("/{device_id}", response_model=DeviceOut)
-async def update_device(request: Request, device_id: int, payload: DeviceUpdate) -> dict:
+async def update_device(
+    request: Request,
+    device_id: int,
+    payload: DeviceUpdate,
+    user: CurrentUser = Depends(require_write),
+) -> dict:
     data = payload.model_dump(exclude_unset=True)
+    if "group_name" in data:
+        data["group_name"] = _check_group(user, data["group_name"])
     try:
-        device = await _repository(request).update_device(device_id, data)
+        device = await _repository(request).update_device(
+            device_id, data, user.scope
+        )
     except DuplicateDeviceError:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -100,8 +129,10 @@ async def update_device(request: Request, device_id: int, payload: DeviceUpdate)
 
 
 @router.delete("/{device_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_device(request: Request, device_id: int) -> None:
-    deleted = await _repository(request).delete_device(device_id)
+async def delete_device(
+    request: Request, device_id: int, user: CurrentUser = Depends(require_write)
+) -> None:
+    deleted = await _repository(request).delete_device(device_id, user.scope)
     if not deleted:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found.")
 
@@ -131,7 +162,9 @@ def _parse_import_line(line: str) -> dict:
 
 @router.post("/import", response_model=DeviceImportResult)
 async def import_devices(
-    request: Request, payload: DeviceImportRequest
+    request: Request,
+    payload: DeviceImportRequest,
+    user: CurrentUser = Depends(require_write),
 ) -> dict:
     created = 0
     duplicates: list[str] = []
@@ -144,7 +177,9 @@ async def import_devices(
         if line_number == 1 and first_field in HEADER_WORDS:
             continue
         try:
-            device = DeviceCreate(**_parse_import_line(line))
+            parsed = _parse_import_line(line)
+            parsed["group_name"] = _check_group(user, parsed.get("group_name", ""))
+            device = DeviceCreate(**parsed)
         except (ValueError, ValidationError) as error:
             if isinstance(error, ValidationError):
                 field = error.errors()[0].get("loc", ["?"])[0]
@@ -174,7 +209,9 @@ def _cell_to_text(value) -> str:
 
 
 @router.post("/convert-xlsx")
-async def convert_xlsx(file: UploadFile = File(...)) -> dict:
+async def convert_xlsx(
+    file: UploadFile = File(...), user: CurrentUser = Depends(require_write)
+) -> dict:
     content = await file.read()
     if len(content) > MAX_XLSX_BYTES:
         raise HTTPException(
@@ -208,8 +245,10 @@ async def convert_xlsx(file: UploadFile = File(...)) -> dict:
 
 
 @router.post("/{device_id}/backup", status_code=status.HTTP_202_ACCEPTED)
-async def backup_now(request: Request, device_id: int) -> dict:
-    device = await _repository(request).get_device(device_id)
+async def backup_now(
+    request: Request, device_id: int, user: CurrentUser = Depends(require_write)
+) -> dict:
+    device = await _repository(request).get_device(device_id, user.scope)
     if device is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found.")
     try:

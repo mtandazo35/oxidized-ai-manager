@@ -15,6 +15,16 @@ CREATE TABLE IF NOT EXISTS users (
 
 ALTER TABLE users ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN NOT NULL DEFAULT FALSE;
 
+-- Multi-tenant. El DEFAULT 'admin' es deliberado SOLO para la migración: las
+-- cuentas que ya existían son administradores. Acto seguido el default pasa a
+-- 'lector', que es el rol inofensivo para cualquier alta futura sin rol.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'admin';
+ALTER TABLE users ALTER COLUMN role SET DEFAULT 'lector';
+-- Empresa a la que pertenece la cuenta; vacío = todas (solo para admin).
+ALTER TABLE users ADD COLUMN IF NOT EXISTS group_name TEXT NOT NULL DEFAULT '';
+
+CREATE INDEX IF NOT EXISTS devices_group_idx ON devices (group_name);
+
 CREATE TABLE IF NOT EXISTS devices (
     id SERIAL PRIMARY KEY,
     name TEXT NOT NULL UNIQUE,

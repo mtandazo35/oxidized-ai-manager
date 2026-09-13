@@ -2,15 +2,16 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
-from .auth import current_user
+from .auth import require_admin
 from .scheduler import mask_remote_url
 from .schemas import SettingsOut, SettingsUpdate
 
 
+# Los ajustes son globales (intervalo de respaldo, Git remoto): solo admin.
 router = APIRouter(
     prefix="/api/settings",
     tags=["settings"],
-    dependencies=[Depends(current_user)],
+    dependencies=[Depends(require_admin)],
 )
 
 ALLOWED_URL_PREFIXES = ("https://", "http://", "ssh://", "git@")

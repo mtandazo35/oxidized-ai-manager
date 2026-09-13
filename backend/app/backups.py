@@ -1,7 +1,7 @@
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
-from .auth import current_user
+from .auth import CurrentUser, current_user, require_write
 from .config import get_settings
 from .gitrepo import (
     GitRepoError,
@@ -20,15 +20,38 @@ from .schemas import (
 
 COMMIT_QUERY_PATTERN = r"^[0-9a-f]{6,40}$"
 
-router = APIRouter(
-    prefix="/api/backups",
-    tags=["backups"],
-    dependencies=[Depends(current_user)],
-)
+router = APIRouter(prefix="/api/backups", tags=["backups"])
+
+
+async def _allowed_nodes(request: Request, user: CurrentUser) -> list[str] | None:
+    """Nombres de nodo visibles, o `None` si el usuario ve todo."""
+    if user.scope is None:
+        return None
+    devices = await request.app.state.devices.list_devices(user.scope)
+    return [device["name"] for device in devices]
+
+
+async def _authorize_node(request: Request, user: CurrentUser, node: str) -> None:
+    """Rechaza con 404 un nodo que no pertenece a la empresa del usuario.
+
+    Se responde 404 y no 403 a propósito: un 403 confirmaría que ese equipo
+    existe en otra empresa.
+    """
+    if user.scope is None:
+        return
+    device = await request.app.state.devices.get_device_by_name(node, user.scope)
+    if device is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Equipo no encontrado."
+        )
 
 
 @router.post("/run", status_code=status.HTTP_202_ACCEPTED)
-async def run_bulk_backup(request: Request, payload: BulkBackupRequest) -> dict:
+async def run_bulk_backup(
+    request: Request,
+    payload: BulkBackupRequest,
+    user: CurrentUser = Depends(require_write),
+) -> dict:
     if payload.scope == "group" and not payload.group:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -39,7 +62,7 @@ async def run_bulk_backup(request: Request, payload: BulkBackupRequest) -> dict:
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Seleccione al menos un router.",
         )
-    devices = await request.app.state.devices.list_devices()
+    devices = await request.app.state.devices.list_devices(user.scope)
     targets = [device for device in devices if device["enabled"]]
     if payload.scope == "group":
         targets = [
@@ -62,7 +85,10 @@ async def run_bulk_backup(request: Request, payload: BulkBackupRequest) -> dict:
 
 
 @router.get("/oxidized-status")
-async def oxidized_status() -> list[dict]:
+async def oxidized_status(
+    request: Request, user: CurrentUser = Depends(current_user)
+) -> list[dict]:
+    allowed = await _allowed_nodes(request, user)
     settings = get_settings()
     try:
         async with httpx.AsyncClient(timeout=5) as client:
@@ -81,12 +107,16 @@ async def oxidized_status() -> list[dict]:
         }
         for node in nodes
         if node.get("name") != "phase1-placeholder"
+        and (allowed is None or node.get("name") in allowed)
     ]
 
 
 @router.get("/status", response_model=list[BackupStatusOut])
-async def backup_status(request: Request) -> list[dict]:
-    return await request.app.state.backup_events.status()
+async def backup_status(
+    request: Request, user: CurrentUser = Depends(current_user)
+) -> list[dict]:
+    allowed = await _allowed_nodes(request, user)
+    return await request.app.state.backup_events.status(allowed)
 
 
 @router.get("/events", response_model=list[BackupEventOut])
@@ -94,15 +124,22 @@ async def backup_events(
     request: Request,
     node: str | None = Query(default=None, max_length=128),
     limit: int = Query(default=50, ge=1, le=500),
+    user: CurrentUser = Depends(current_user),
 ) -> list[dict]:
-    return await request.app.state.backup_events.list_events(node, limit)
+    if node is not None:
+        await _authorize_node(request, user, node)
+    allowed = await _allowed_nodes(request, user)
+    return await request.app.state.backup_events.list_events(node, limit, allowed)
 
 
 @router.get("/versions")
 async def backup_versions(
+    request: Request,
     node: str = Query(pattern=DEVICE_NAME_PATTERN),
     limit: int = Query(default=20, ge=1, le=100),
+    user: CurrentUser = Depends(current_user),
 ) -> list[dict]:
+    await _authorize_node(request, user, node)
     settings = get_settings()
     try:
         return await list_versions(settings.oxidized_backup_repo, node, limit)
@@ -117,9 +154,12 @@ async def backup_versions(
 
 @router.get("/diff")
 async def backup_diff(
+    request: Request,
     node: str = Query(pattern=DEVICE_NAME_PATTERN),
     commit: str = Query(pattern=COMMIT_QUERY_PATTERN),
+    user: CurrentUser = Depends(current_user),
 ) -> dict:
+    await _authorize_node(request, user, node)
     settings = get_settings()
     try:
         diff = await show_diff(settings.oxidized_backup_repo, node, commit)
@@ -138,9 +178,12 @@ async def backup_diff(
 
 @router.get("/config")
 async def backup_config(
+    request: Request,
     node: str = Query(pattern=DEVICE_NAME_PATTERN),
     commit: str = Query(pattern=COMMIT_QUERY_PATTERN),
+    user: CurrentUser = Depends(current_user),
 ) -> dict:
+    await _authorize_node(request, user, node)
     settings = get_settings()
     try:
         content = await show_config(settings.oxidized_backup_repo, node, commit)

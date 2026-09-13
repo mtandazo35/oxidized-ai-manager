@@ -163,3 +163,33 @@ class AuditSummaryRow(BaseModel):
     score: int
     level: str
     error: str = ""
+
+
+ROLES = ("admin", "operador", "auditor", "lector")
+Role = Literal["admin", "operador", "auditor", "lector"]
+USERNAME_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._@-]{1,63}$"
+
+
+class UserCreate(BaseModel):
+    username: str = Field(pattern=USERNAME_PATTERN)
+    password: str = Field(min_length=8, max_length=72)
+    role: Role = "lector"
+    # Empresa de la cuenta. Obligatoria salvo para `admin`, que ve todas; la
+    # validación cruzada vive en la API porque depende del rol.
+    group_name: str = Field(default="", max_length=64)
+    must_change_password: bool = True
+
+
+class UserUpdate(BaseModel):
+    password: str | None = Field(default=None, min_length=8, max_length=72)
+    role: Role | None = None
+    group_name: str | None = Field(default=None, max_length=64)
+
+
+class UserOut(BaseModel):
+    id: int
+    username: str
+    role: str
+    group_name: str = ""
+    must_change_password: bool = False
+    created_at: datetime | None = None

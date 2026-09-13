@@ -162,6 +162,7 @@
     <div class="bar-right">
       <button class="ghost" id="btn-reload">Recargar Oxidized</button>
       <div class="menu">
+        <span class="badge off" id="user-role" hidden></span>
         <button class="ghost" id="btn-user">admin ▾</button>
         <div class="menu-list" id="user-menu" hidden>
           <button id="btn-open-pass">Cambiar clave</button>
@@ -175,6 +176,7 @@
     <button id="tab-btn-audit">Auditoría</button>
     <button id="tab-btn-import">Carga masiva</button>
     <button id="tab-btn-config">Configuración</button>
+    <button id="tab-btn-users">Usuarios</button>
   </nav>
   <main>
     <div id="tab-dashboard">
@@ -304,6 +306,42 @@
       <p class="msg" id="bulk-run-msg"></p>
     </div>
     </div>
+    <div id="tab-users" hidden>
+    <h2>Cuentas de acceso</h2>
+    <div class="card">
+      <p class="muted" style="margin-top:0">
+        Cada cuenta pertenece a una <strong>empresa</strong> y solo ve los equipos de
+        esa empresa. El filtrado se aplica en la API, no en esta pantalla.
+      </p>
+      <table style="margin-bottom:16px">
+        <thead><tr><th>Usuario</th><th>Rol</th><th>Empresa</th><th>Clave</th><th></th></tr></thead>
+        <tbody id="users-body"></tbody>
+      </table>
+      <h3 style="font-size:.95rem;color:#93c5fd;margin:0 0 8px">Nueva cuenta</h3>
+      <form class="inline" id="user-form">
+        <input id="u-name" placeholder="usuario" required
+          pattern="[A-Za-z0-9][A-Za-z0-9._@-]+" style="width:150px">
+        <input id="u-pass" type="password" placeholder="clave (mín. 8)"
+          required minlength="8" style="width:150px">
+        <select id="u-role">
+          <option value="lector">lector — solo ver</option>
+          <option value="auditor">auditor — ver + auditoría</option>
+          <option value="operador">operador — alta y respaldos</option>
+          <option value="admin">admin — todo</option>
+        </select>
+        <input id="u-group" placeholder="empresa" style="width:150px">
+        <button type="submit">Crear cuenta</button>
+      </form>
+      <p class="msg" id="users-msg"></p>
+      <p class="muted" style="margin:4px 0 0">
+        <strong>lector</strong> ve equipos y respaldos ·
+        <strong>auditor</strong> añade la auditoría ·
+        <strong>operador</strong> puede dar de alta y pedir respaldos ·
+        <strong>admin</strong> ve todas las empresas y gestiona ajustes y cuentas.
+      </p>
+    </div>
+    </div>
+
   </main>
 </div>
 
@@ -538,18 +576,18 @@ function renderDevices() {
     ? rows.map((d) => `<tr>
         <td>${esc(d.name)}</td>
         <td>${d.identity ? esc(d.identity) : '<span class="muted">—</span>'}</td>
-        <td style="cursor:pointer" title="Clic para editar" onclick="editGroup(${d.id}, '${esc(d.group_name || "")}')">${d.group_name ? esc(d.group_name) : '<span class="muted">— ✎</span>'}</td>
+        <td ${perms.can_write ? `style="cursor:pointer" title="Clic para editar" onclick="editGroup(${d.id}, '${esc(d.group_name || "")}')"` : ""}>${d.group_name ? esc(d.group_name) : `<span class="muted">—${perms.can_write ? " ✎" : ""}</span>`}</td>
         <td>${esc(d.address)}</td>
         <td>${esc(d.port)}</td>
         <td title="${esc(d.board)}">${d.ros_version ? esc(d.ros_version) : '<span class="muted">—</span>'}</td>
         <td>${esc(d.username)}</td>
         <td><span class="badge ${d.enabled ? "ok" : "off"}">${d.enabled ? "activo" : "pausado"}</span></td>
-        <td style="text-align:right">
+        <td style="text-align:right">${perms.can_write ? `
           <button class="ghost mini" onclick="backupNow(${d.id})">Respaldar</button>
           <button class="ghost mini" onclick="openEdit(${d.id})">Editar</button>
           <button class="ghost mini" onclick="toggleDevice(${d.id}, ${!d.enabled})">${d.enabled ? "Pausar" : "Activar"}</button>
           <button class="danger mini" onclick="deleteDevice(${d.id}, '${esc(d.name)}')">Eliminar</button>
-        </td>
+        ` : '<span class="muted">solo lectura</span>'}</td>
       </tr>`).join("")
     : '<tr><td colspan="9" class="muted">Sin routers que coincidan.</td></tr>';
 }
@@ -1068,9 +1106,44 @@ $("btn-upload").addEventListener("click", async () => {
   }
 });
 
-const TAB_NAMES = ["dashboard", "audit", "import", "config"];
+const TAB_NAMES = ["dashboard", "audit", "import", "config", "users"];
+
+// Permisos de la cuenta actual. La interfaz solo esconde lo que la API ya
+// rechaza: ocultar un botón no es un control de acceso.
+let perms = { can_write: false, can_audit: false, is_admin: false };
+
+const ROLE_LABEL = {
+  admin: "administrador", operador: "operador",
+  auditor: "auditor", lector: "solo lectura",
+};
+
+function applyPermissions(me) {
+  perms = {
+    can_write: !!me.can_write,
+    can_audit: !!me.can_audit,
+    is_admin: !!me.is_admin,
+  };
+  const role = $("user-role");
+  role.textContent = (ROLE_LABEL[me.role] || me.role) +
+    (me.group_name ? " · " + me.group_name : "");
+  role.hidden = false;
+  $("tab-btn-audit").hidden = !perms.can_audit;
+  $("tab-btn-import").hidden = !perms.can_write;
+  $("tab-btn-config").hidden = !perms.is_admin;
+  $("tab-btn-users").hidden = !perms.is_admin;
+  $("btn-reload").hidden = !perms.is_admin;
+  $("btn-open-add").hidden = !perms.can_write;
+}
+
+function allowedTab(tab) {
+  if (tab === "audit") return perms.can_audit;
+  if (tab === "import") return perms.can_write;
+  if (tab === "config" || tab === "users") return perms.is_admin;
+  return true;
+}
 
 function switchTab(tab) {
+  if (!allowedTab(tab)) tab = "dashboard";
   TAB_NAMES.forEach((name) => {
     $("tab-" + name).hidden = name !== tab;
     $("tab-btn-" + name).classList.toggle("active", name === tab);
@@ -1078,6 +1151,7 @@ function switchTab(tab) {
   if (location.hash !== "#" + tab) history.replaceState(null, "", "#" + tab);
   if (tab === "config") { loadSettings(); loadBulkRun(); }
   if (tab === "audit") loadAudit();
+  if (tab === "users") loadUsers();
 }
 
 async function loadBulkRun() {
@@ -1250,6 +1324,111 @@ $("btn-audit-rules").addEventListener("click", async () => {
   }
 });
 
+// --- Cuentas de acceso (solo administrador) ------------------------------
+
+async function loadUsers() {
+  $("users-msg").textContent = "";
+  $("users-body").innerHTML = '<tr><td colspan="5" class="muted">Cargando…</td></tr>';
+  try {
+    const users = await api("/api/users");
+    $("users-body").innerHTML = users.map((u) => `
+      <tr>
+        <td>${esc(u.username)}</td>
+        <td>
+          <select class="u-role-sel" data-user="${esc(u.username)}" style="font-size:.8rem">
+            ${["lector", "auditor", "operador", "admin"].map((r) =>
+              `<option value="${r}"${r === u.role ? " selected" : ""}>${ROLE_LABEL[r]}</option>`
+            ).join("")}
+          </select>
+        </td>
+        <td>${u.group_name ? esc(u.group_name) : '<span class="muted">todas</span>'}</td>
+        <td>${u.must_change_password
+          ? '<span class="badge run">debe cambiarla</span>'
+          : '<span class="badge ok">definida</span>'}</td>
+        <td style="text-align:right">
+          <button class="ghost mini" onclick="resetUserPass('${esc(u.username)}')">Nueva clave</button>
+          <button class="danger mini" onclick="deleteUser('${esc(u.username)}')">Eliminar</button>
+        </td>
+      </tr>`).join("");
+    document.querySelectorAll(".u-role-sel").forEach((select) => {
+      select.addEventListener("change", () =>
+        patchUser(select.dataset.user, { role: select.value }));
+    });
+  } catch (error) {
+    $("users-body").innerHTML = "";
+    setMsg("users-msg", error.message, false);
+  }
+}
+
+async function patchUser(username, body) {
+  try {
+    await api("/api/users/" + encodeURIComponent(username), {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    setMsg("users-msg", "Cuenta " + username + " actualizada.", true);
+  } catch (error) {
+    setMsg("users-msg", error.message, false);
+  }
+  loadUsers();
+}
+
+window.resetUserPass = (username) => {
+  const value = prompt("Nueva clave para " + username + " (mínimo 8 caracteres):");
+  if (!value) return;
+  if (value.length < 8) {
+    setMsg("users-msg", "La clave debe tener al menos 8 caracteres.", false);
+    return;
+  }
+  patchUser(username, { password: value });
+};
+
+window.deleteUser = async (username) => {
+  if (!confirm("¿Eliminar la cuenta " + username + "?")) return;
+  try {
+    await api("/api/users/" + encodeURIComponent(username), { method: "DELETE" });
+    setMsg("users-msg", "Cuenta " + username + " eliminada.", true);
+  } catch (error) {
+    setMsg("users-msg", error.message, false);
+  }
+  loadUsers();
+};
+
+$("user-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const role = $("u-role").value;
+  const group = $("u-group").value.trim();
+  if (role !== "admin" && !group) {
+    setMsg("users-msg", "Indique la empresa: sin ella la cuenta no vería ningún equipo.", false);
+    return;
+  }
+  try {
+    await api("/api/users", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: $("u-name").value.trim(),
+        password: $("u-pass").value,
+        role,
+        group_name: role === "admin" ? "" : group,
+      }),
+    });
+    setMsg("users-msg", "Cuenta creada.", true);
+    $("user-form").reset();
+    loadUsers();
+  } catch (error) {
+    setMsg("users-msg", error.message, false);
+  }
+});
+
+$("u-role").addEventListener("change", () => {
+  // Un admin ve todas las empresas: el campo deja de tener sentido.
+  const esAdmin = $("u-role").value === "admin";
+  $("u-group").disabled = esAdmin;
+  $("u-group").placeholder = esAdmin ? "todas las empresas" : "empresa";
+});
+
 function initialTab() {
   const fromHash = location.hash.slice(1);
   return TAB_NAMES.includes(fromHash) ? fromHash : "dashboard";
@@ -1257,12 +1436,14 @@ function initialTab() {
 $("tab-btn-dashboard").addEventListener("click", () => switchTab("dashboard"));
 $("tab-btn-audit").addEventListener("click", () => switchTab("audit"));
 $("tab-btn-import").addEventListener("click", () => switchTab("import"));
+$("tab-btn-users").addEventListener("click", () => switchTab("users"));
 $("tab-btn-config").addEventListener("click", () => switchTab("config"));
 
 async function enterApp() {
   try {
     const me = await api("/api/auth/me");
     $("btn-user").textContent = me.username + " ▾";
+    applyPermissions(me);
     show("app");
     switchTab(initialTab());
     refresh();
@@ -1273,9 +1454,11 @@ async function enterApp() {
 
 if (token) {
   // Sesión guardada: pinta el panel de inmediato y valida en segundo plano
-  // para evitar el destello de la pantalla de login en cada refresco.
+  // para evitar el destello de la pantalla de login en cada refresco. Hasta
+  // que /api/auth/me conteste no se conoce el rol, así que se parte sin
+  // permisos: enterApp() los aplica y recoloca la pestaña.
   show("app");
-  switchTab(initialTab());
+  switchTab("dashboard");
   enterApp();
 } else {
   show("login");

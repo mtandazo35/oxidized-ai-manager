@@ -3,7 +3,7 @@ import secrets
 import httpx
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 
-from .auth import current_user
+from .auth import require_admin
 from .config import get_settings
 from .gitrepo import GitRepoError, NotFoundInRepoError, show_config
 from .metadata import parse_routeros_metadata
@@ -83,7 +83,7 @@ async def oxidized_event(
 @router.post(
     "/reload",
     status_code=status.HTTP_202_ACCEPTED,
-    dependencies=[Depends(current_user)],
+    dependencies=[Depends(require_admin)],
 )
 async def reload_oxidized() -> dict:
     settings = get_settings()

@@ -10,7 +10,7 @@ import asyncio
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
 from .audit_rules import SEVERITY_ORDER, audit_config, rule_catalog
-from .auth import current_user
+from .auth import CurrentUser, require_audit
 from .config import get_settings
 from .gitrepo import GitRepoError, NotFoundInRepoError, show_config
 from .schemas import DEVICE_NAME_PATTERN, AuditReport, AuditSummaryRow
@@ -24,7 +24,7 @@ COMMIT_QUERY_PATTERN = r"^(?:[0-9a-f]{6,40}|HEAD)$"
 router = APIRouter(
     prefix="/api/audit",
     tags=["audit"],
-    dependencies=[Depends(current_user)],
+    dependencies=[Depends(require_audit)],
 )
 
 
@@ -42,9 +42,19 @@ async def _audit_node(repo_path: str, node: str, commit: str) -> dict:
 
 @router.get("/node", response_model=AuditReport)
 async def audit_node(
+    request: Request,
     node: str = Query(pattern=DEVICE_NAME_PATTERN),
     commit: str = Query(default="HEAD", pattern=COMMIT_QUERY_PATTERN),
+    user: CurrentUser = Depends(require_audit),
 ) -> dict:
+    if user.scope is not None:
+        device = await request.app.state.devices.get_device_by_name(node, user.scope)
+        if device is None:
+            # 404 y no 403: un 403 confirmaría que el equipo existe en otra
+            # empresa.
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Equipo no encontrado."
+            )
     settings = get_settings()
     try:
         return await _audit_node(settings.oxidized_backup_repo, node, commit)
@@ -61,10 +71,12 @@ async def audit_node(
 
 
 @router.get("/summary", response_model=list[AuditSummaryRow])
-async def audit_summary(request: Request) -> list[dict]:
-    """Audita el último respaldo de cada equipo del inventario."""
+async def audit_summary(
+    request: Request, user: CurrentUser = Depends(require_audit)
+) -> list[dict]:
+    """Audita el último respaldo de cada equipo visible para el usuario."""
     settings = get_settings()
-    devices = await request.app.state.devices.list_devices()
+    devices = await request.app.state.devices.list_devices(user.scope)
     semaphore = asyncio.Semaphore(CONCURRENCY)
 
     async def row(device: dict) -> dict:

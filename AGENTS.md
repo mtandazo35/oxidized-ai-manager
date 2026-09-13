@@ -26,7 +26,7 @@ Use four-space indentation and PEP 8 conventions for Python. Comments and user-f
 
 ## Testing Guidelines
 
-Place Python tests in `backend/tests/` and name files `test_<feature>.py`. Cover health endpoints, configuration validation, dependency failures, and read-only behavior. Tests must not require real MikroTik devices or production credentials; use fixtures and mocks. Every bug fix should include a regression test.
+Place Python tests in `backend/tests/` and name files `test_<feature>.py`. Any endpoint that returns devices, backups or audit data must be covered in `test_multitenant.py`: a missing tenant filter leaks one customer's backups to another. Cover health endpoints, configuration validation, dependency failures, and read-only behavior. Tests must not require real MikroTik devices or production credentials; use fixtures and mocks. Every bug fix should include a regression test.
 
 ## Commit & Pull Request Guidelines
 

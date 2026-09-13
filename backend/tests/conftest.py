@@ -18,7 +18,11 @@ os.environ.setdefault("OXIDIZED_URL", "http://localhost:8888")
 os.environ.setdefault("OXIDIZED_SOURCE_TOKEN", "test-oxidized-token")
 
 from app.config import get_settings  # noqa: E402
-from app.repository import SETTINGS_DEFAULTS, DuplicateDeviceError  # noqa: E402
+from app.repository import (  # noqa: E402
+    SETTINGS_DEFAULTS,
+    DuplicateDeviceError,
+    DuplicateUserError,
+)
 from app.security import create_access_token, hash_password  # noqa: E402
 
 
@@ -36,13 +40,33 @@ class FakeDeviceRepository:
     def _public(device: dict[str, Any]) -> dict[str, Any]:
         return {key: value for key, value in device.items() if key != "password"}
 
-    async def list_devices(self) -> list[dict[str, Any]]:
-        devices = sorted(self._devices.values(), key=lambda device: device["name"])
-        return [self._public(device) for device in devices]
+    @staticmethod
+    def _in_group(device: dict[str, Any], group: str | None) -> bool:
+        return group is None or device.get("group_name", "") == group
 
-    async def get_device(self, device_id: int) -> dict[str, Any] | None:
+    async def list_devices(self, group: str | None = None) -> list[dict[str, Any]]:
+        devices = sorted(self._devices.values(), key=lambda device: device["name"])
+        return [
+            self._public(device)
+            for device in devices
+            if self._in_group(device, group)
+        ]
+
+    async def get_device(
+        self, device_id: int, group: str | None = None
+    ) -> dict[str, Any] | None:
         device = self._devices.get(device_id)
-        return self._public(device) if device else None
+        if device is None or not self._in_group(device, group):
+            return None
+        return self._public(device)
+
+    async def get_device_by_name(
+        self, name: str, group: str | None = None
+    ) -> dict[str, Any] | None:
+        for device in self._devices.values():
+            if device["name"] == name and self._in_group(device, group):
+                return self._public(device)
+        return None
 
     async def create_device(self, data: dict[str, Any]) -> dict[str, Any]:
         if any(device["name"] == data["name"] for device in self._devices.values()):
@@ -62,10 +86,10 @@ class FakeDeviceRepository:
         return self._public(device)
 
     async def update_device(
-        self, device_id: int, data: dict[str, Any]
+        self, device_id: int, data: dict[str, Any], group: str | None = None
     ) -> dict[str, Any] | None:
         device = self._devices.get(device_id)
-        if device is None:
+        if device is None or not self._in_group(device, group):
             return None
         new_name = data.get("name")
         if new_name and any(
@@ -84,8 +108,12 @@ class FakeDeviceRepository:
                     if key in meta:
                         device[key] = meta[key]
 
-    async def delete_device(self, device_id: int) -> bool:
-        return self._devices.pop(device_id, None) is not None
+    async def delete_device(self, device_id: int, group: str | None = None) -> bool:
+        device = self._devices.get(device_id)
+        if device is None or not self._in_group(device, group):
+            return False
+        del self._devices[device_id]
+        return True
 
     async def list_oxidized_nodes(self) -> list[dict[str, Any]]:
         enabled = sorted(
@@ -124,9 +152,13 @@ class FakeBackupEventRepository:
         )
         self._next_id += 1
 
-    async def status(self) -> list[dict[str, Any]]:
+    async def status(self, nodes_filter: list[str] | None = None) -> list[dict[str, Any]]:
+        if nodes_filter is not None and not nodes_filter:
+            return []
         nodes: dict[str, list[dict[str, Any]]] = {}
         for event in self._events:
+            if nodes_filter is not None and event["node"] not in nodes_filter:
+                continue
             nodes.setdefault(event["node"], []).append(event)
         result = []
         for node in sorted(nodes):
@@ -146,9 +178,16 @@ class FakeBackupEventRepository:
         return result
 
     async def list_events(
-        self, node: str | None, limit: int
+        self, node: str | None, limit: int, nodes: list[str] | None = None
     ) -> list[dict[str, Any]]:
-        events = [e for e in self._events if node is None or e["node"] == node]
+        if nodes is not None and not nodes:
+            return []
+        events = [
+            e
+            for e in self._events
+            if (node is None or e["node"] == node)
+            and (nodes is None or e["node"] in nodes)
+        ]
         return list(reversed(events))[:limit]
 
 
@@ -171,25 +210,63 @@ class FakeSettingsRepository:
 class FakeUserRepository:
     """In-memory stand-in matching UserRepository's public contract."""
 
+    PUBLIC = ("id", "username", "role", "group_name", "must_change_password")
+
     def __init__(self) -> None:
         self._users: dict[str, dict[str, Any]] = {}
 
+    @classmethod
+    def _public(cls, user: dict[str, Any]) -> dict[str, Any]:
+        return {key: user.get(key) for key in cls.PUBLIC}
+
     async def count_users(self) -> int:
         return len(self._users)
+
+    async def count_admins(self) -> int:
+        return sum(1 for user in self._users.values() if user.get("role") == "admin")
 
     async def get_by_username(self, username: str) -> dict[str, Any] | None:
         user = self._users.get(username)
         return dict(user) if user else None
 
+    async def get_public(self, username: str) -> dict[str, Any] | None:
+        user = self._users.get(username)
+        return self._public(user) if user else None
+
+    async def list_users(self) -> list[dict[str, Any]]:
+        return [self._public(self._users[name]) for name in sorted(self._users)]
+
     async def create_user(
-        self, username: str, password_hash: str, must_change_password: bool = False
-    ) -> None:
+        self,
+        username: str,
+        password_hash: str,
+        must_change_password: bool = False,
+        role: str = "lector",
+        group_name: str = "",
+    ) -> dict[str, Any]:
+        if username in self._users:
+            raise DuplicateUserError(username)
         self._users[username] = {
             "id": len(self._users) + 1,
             "username": username,
             "password_hash": password_hash,
             "must_change_password": must_change_password,
+            "role": role,
+            "group_name": group_name,
         }
+        return self._public(self._users[username])
+
+    async def update_user(
+        self, username: str, data: dict[str, Any]
+    ) -> dict[str, Any] | None:
+        user = self._users.get(username)
+        if user is None:
+            return None
+        user.update(data)
+        return self._public(user)
+
+    async def delete_user(self, username: str) -> bool:
+        return self._users.pop(username, None) is not None
 
     async def update_password(self, username: str, password_hash: str) -> None:
         self._users[username]["password_hash"] = password_hash
@@ -251,6 +328,8 @@ def user_repository() -> FakeUserRepository:
         "username": "admin",
         "password_hash": hash_password(TEST_ADMIN_PASSWORD),
         "must_change_password": False,
+        "role": "admin",
+        "group_name": "",
     }
     main_module.app.state.users = repository
     return repository
@@ -261,3 +340,26 @@ def auth_headers() -> dict[str, str]:
     settings = get_settings()
     token = create_access_token("admin", settings.app_secret_key, 60)
     return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.fixture
+def make_user(user_repository):
+    """Crea una cuenta y devuelve su cabecera de autorización."""
+
+    def factory(
+        username: str, role: str = "lector", group_name: str = "", password: str = "x"
+    ) -> dict[str, str]:
+        user_repository._users[username] = {
+            "id": len(user_repository._users) + 1,
+            "username": username,
+            "password_hash": hash_password(password),
+            "must_change_password": False,
+            "role": role,
+            "group_name": group_name,
+        }
+        token = create_access_token(
+            username, get_settings().app_secret_key, 60
+        )
+        return {"Authorization": f"Bearer {token}"}
+
+    return factory

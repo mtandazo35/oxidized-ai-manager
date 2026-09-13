@@ -43,16 +43,51 @@ class DeviceRepository:
             migrated += 1
         return migrated
 
-    async def list_devices(self) -> list[dict[str, Any]]:
-        rows = await self._pool.fetch(
-            f"SELECT {PUBLIC_COLUMNS} FROM devices ORDER BY name"
-        )
+    async def list_devices(self, group: str | None = None) -> list[dict[str, Any]]:
+        """Equipos visibles. `group=None` es "todas las empresas" (admin)."""
+        if group is None:
+            rows = await self._pool.fetch(
+                f"SELECT {PUBLIC_COLUMNS} FROM devices ORDER BY name"
+            )
+        else:
+            rows = await self._pool.fetch(
+                f"SELECT {PUBLIC_COLUMNS} FROM devices WHERE group_name = $1 "
+                "ORDER BY name",
+                group,
+            )
         return [dict(row) for row in rows]
 
-    async def get_device(self, device_id: int) -> dict[str, Any] | None:
-        row = await self._pool.fetchrow(
-            f"SELECT {PUBLIC_COLUMNS} FROM devices WHERE id = $1", device_id
-        )
+    async def get_device(
+        self, device_id: int, group: str | None = None
+    ) -> dict[str, Any] | None:
+        if group is None:
+            row = await self._pool.fetchrow(
+                f"SELECT {PUBLIC_COLUMNS} FROM devices WHERE id = $1", device_id
+            )
+        else:
+            row = await self._pool.fetchrow(
+                f"SELECT {PUBLIC_COLUMNS} FROM devices "
+                "WHERE id = $1 AND group_name = $2",
+                device_id,
+                group,
+            )
+        return dict(row) if row else None
+
+    async def get_device_by_name(
+        self, name: str, group: str | None = None
+    ) -> dict[str, Any] | None:
+        """Usado para autorizar endpoints que reciben el nombre del nodo."""
+        if group is None:
+            row = await self._pool.fetchrow(
+                f"SELECT {PUBLIC_COLUMNS} FROM devices WHERE name = $1", name
+            )
+        else:
+            row = await self._pool.fetchrow(
+                f"SELECT {PUBLIC_COLUMNS} FROM devices "
+                "WHERE name = $1 AND group_name = $2",
+                name,
+                group,
+            )
         return dict(row) if row else None
 
     async def create_device(self, data: dict[str, Any]) -> dict[str, Any]:
@@ -78,10 +113,12 @@ class DeviceRepository:
         return dict(row)
 
     async def update_device(
-        self, device_id: int, data: dict[str, Any]
+        self, device_id: int, data: dict[str, Any], group: str | None = None
     ) -> dict[str, Any] | None:
+        if group is not None and await self.get_device(device_id, group) is None:
+            return None
         if not data:
-            return await self.get_device(device_id)
+            return await self.get_device(device_id, group)
         if "password" in data:
             data = {**data, "password": encrypt_secret(self._key, data["password"])}
         assignments = []
@@ -113,10 +150,17 @@ class DeviceRepository:
             *values.values(),
         )
 
-    async def delete_device(self, device_id: int) -> bool:
-        result = await self._pool.execute(
-            "DELETE FROM devices WHERE id = $1", device_id
-        )
+    async def delete_device(self, device_id: int, group: str | None = None) -> bool:
+        if group is None:
+            result = await self._pool.execute(
+                "DELETE FROM devices WHERE id = $1", device_id
+            )
+        else:
+            result = await self._pool.execute(
+                "DELETE FROM devices WHERE id = $1 AND group_name = $2",
+                device_id,
+                group,
+            )
         return result == "DELETE 1"
 
     async def list_oxidized_nodes(self) -> list[dict[str, Any]]:
@@ -212,7 +256,10 @@ class BackupEventRepository:
             commit_ref,
         )
 
-    async def status(self) -> list[dict[str, Any]]:
+    async def status(self, nodes: list[str] | None = None) -> list[dict[str, Any]]:
+        """`nodes=None` es "todos"; una lista vacía no devuelve nada."""
+        if nodes is not None and not nodes:
+            return []
         rows = await self._pool.fetch(
             """
             SELECT node,
@@ -225,23 +272,38 @@ class BackupEventRepository:
                    (array_agg(commit_ref ORDER BY created_at DESC)
                        FILTER (WHERE commit_ref <> ''))[1] AS last_commit
             FROM backup_events
+            WHERE ($1::text[] IS NULL OR node = ANY($1))
             GROUP BY node
             ORDER BY node
-            """
+            """,
+            nodes,
         )
         return [dict(row) for row in rows]
 
     async def list_events(
-        self, node: str | None, limit: int
+        self, node: str | None, limit: int, nodes: list[str] | None = None
     ) -> list[dict[str, Any]]:
+        if nodes is not None and not nodes:
+            return []
         rows = await self._pool.fetch(
             "SELECT id, node, event, commit_ref, created_at FROM backup_events "
             "WHERE ($1::text IS NULL OR node = $1) "
+            "AND ($3::text[] IS NULL OR node = ANY($3)) "
             "ORDER BY created_at DESC LIMIT $2",
             node,
             limit,
+            nodes,
         )
         return [dict(row) for row in rows]
+
+
+class DuplicateUserError(Exception):
+    """Raised when a username already exists."""
+
+
+USER_PUBLIC_COLUMNS = (
+    "id, username, role, group_name, must_change_password, created_at"
+)
 
 
 class UserRepository:
@@ -251,24 +313,77 @@ class UserRepository:
     async def count_users(self) -> int:
         return await self._pool.fetchval("SELECT count(*) FROM users")
 
+    async def count_admins(self) -> int:
+        return await self._pool.fetchval(
+            "SELECT count(*) FROM users WHERE role = 'admin'"
+        )
+
     async def get_by_username(self, username: str) -> dict[str, Any] | None:
         row = await self._pool.fetchrow(
-            "SELECT id, username, password_hash, must_change_password "
-            "FROM users WHERE username = $1",
+            "SELECT id, username, password_hash, must_change_password, "
+            "role, group_name FROM users WHERE username = $1",
             username,
         )
         return dict(row) if row else None
 
-    async def create_user(
-        self, username: str, password_hash: str, must_change_password: bool = False
-    ) -> None:
-        await self._pool.execute(
-            "INSERT INTO users (username, password_hash, must_change_password) "
-            "VALUES ($1, $2, $3)",
-            username,
-            password_hash,
-            must_change_password,
+    async def list_users(self) -> list[dict[str, Any]]:
+        rows = await self._pool.fetch(
+            f"SELECT {USER_PUBLIC_COLUMNS} FROM users ORDER BY username"
         )
+        return [dict(row) for row in rows]
+
+    async def create_user(
+        self,
+        username: str,
+        password_hash: str,
+        must_change_password: bool = False,
+        role: str = "lector",
+        group_name: str = "",
+    ) -> dict[str, Any]:
+        try:
+            row = await self._pool.fetchrow(
+                "INSERT INTO users "
+                "(username, password_hash, must_change_password, role, group_name) "
+                f"VALUES ($1, $2, $3, $4, $5) RETURNING {USER_PUBLIC_COLUMNS}",
+                username,
+                password_hash,
+                must_change_password,
+                role,
+                group_name,
+            )
+        except asyncpg.UniqueViolationError as exc:
+            raise DuplicateUserError(username) from exc
+        return dict(row)
+
+    async def update_user(
+        self, username: str, data: dict[str, Any]
+    ) -> dict[str, Any] | None:
+        if not data:
+            return await self.get_public(username)
+        assignments = []
+        values: list[Any] = []
+        for position, (column, value) in enumerate(data.items(), start=2):
+            assignments.append(f"{column} = ${position}")
+            values.append(value)
+        row = await self._pool.fetchrow(
+            f"UPDATE users SET {', '.join(assignments)}, updated_at = now() "
+            f"WHERE username = $1 RETURNING {USER_PUBLIC_COLUMNS}",
+            username,
+            *values,
+        )
+        return dict(row) if row else None
+
+    async def get_public(self, username: str) -> dict[str, Any] | None:
+        row = await self._pool.fetchrow(
+            f"SELECT {USER_PUBLIC_COLUMNS} FROM users WHERE username = $1", username
+        )
+        return dict(row) if row else None
+
+    async def delete_user(self, username: str) -> bool:
+        result = await self._pool.execute(
+            "DELETE FROM users WHERE username = $1", username
+        )
+        return result == "DELETE 1"
 
     async def update_password(self, username: str, password_hash: str) -> None:
         await self._pool.execute(
