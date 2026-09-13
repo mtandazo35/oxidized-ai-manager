@@ -206,6 +206,7 @@
     <button id="tab-btn-import">Carga masiva</button>
     <button id="tab-btn-config">Configuración</button>
     <button id="tab-btn-users">Usuarios</button>
+    <button id="tab-btn-system">Ajustes del sistema</button>
   </nav>
   <main>
     <div id="tab-dashboard">
@@ -335,33 +336,6 @@
       <p class="msg" id="bulk-run-msg"></p>
     </div>
     </div>
-      <h2>Versión y actualizaciones</h2>
-      <div class="card">
-        <div style="display:flex;gap:16px;align-items:baseline;flex-wrap:wrap">
-          <div>
-            <div class="muted">Versión desplegada</div>
-            <div id="ver-commit" style="font-family:ui-monospace,monospace">—</div>
-          </div>
-          <div style="flex:1;min-width:200px">
-            <div class="muted">Último cambio</div>
-            <div id="ver-subject">—</div>
-          </div>
-          <span id="ver-badge" class="badge off">—</span>
-        </div>
-        <div style="display:flex;gap:8px;align-items:center;margin-top:12px;flex-wrap:wrap">
-          <button type="button" class="ghost" id="btn-check-update">Buscar actualizaciones</button>
-          <button type="button" id="btn-do-update" hidden>Actualizar ahora</button>
-          <span id="ver-progress" class="muted"></span>
-        </div>
-        <p class="msg" id="ver-msg"></p>
-        <p class="muted" style="margin:0">
-          La actualización la aplica el servidor, no el navegador: respalda la
-          plataforma, baja los cambios del repositorio y reconstruye. <strong>No se
-          borra ningún dato</strong> — los volúmenes no se tocan. El panel se
-          reinicia solo y basta con recargar la página.
-        </p>
-      </div>
-
     <div id="tab-users" hidden>
     <h2>Cuentas de acceso</h2>
     <div class="card">
@@ -396,6 +370,35 @@
         <strong>admin</strong> ve todas las empresas y gestiona ajustes y cuentas.
       </p>
     </div>
+    </div>
+
+    <div id="tab-system" hidden>
+    <h2>Versión y actualizaciones</h2>
+      <div class="card">
+        <div style="display:flex;gap:16px;align-items:baseline;flex-wrap:wrap">
+          <div>
+            <div class="muted">Versión desplegada</div>
+            <div id="ver-commit" style="font-family:ui-monospace,monospace">—</div>
+          </div>
+          <div style="flex:1;min-width:200px">
+            <div class="muted">Último cambio</div>
+            <div id="ver-subject">—</div>
+          </div>
+          <span id="ver-badge" class="badge off">—</span>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:12px;flex-wrap:wrap">
+          <button type="button" class="ghost" id="btn-check-update">Buscar actualizaciones</button>
+          <button type="button" id="btn-do-update" hidden>Actualizar ahora</button>
+          <span id="ver-progress" class="muted"></span>
+        </div>
+        <p class="msg" id="ver-msg"></p>
+        <p class="muted" style="margin:0">
+          La actualización la aplica el servidor, no el navegador: respalda la
+          plataforma, baja los cambios del repositorio y reconstruye. <strong>No se
+          borra ningún dato</strong> — los volúmenes no se tocan. El panel se
+          reinicia solo y basta con recargar la página.
+        </p>
+      </div>
     </div>
 
   </main>
@@ -1162,7 +1165,7 @@ $("btn-upload").addEventListener("click", async () => {
   }
 });
 
-const TAB_NAMES = ["dashboard", "audit", "import", "config", "users"];
+const TAB_NAMES = ["dashboard", "audit", "import", "config", "users", "system"];
 
 // Permisos de la cuenta actual. La interfaz solo esconde lo que la API ya
 // rechaza: ocultar un botón no es un control de acceso.
@@ -1187,6 +1190,7 @@ function applyPermissions(me) {
   $("tab-btn-import").hidden = !perms.can_write;
   $("tab-btn-config").hidden = !perms.is_admin;
   $("tab-btn-users").hidden = !perms.is_admin;
+  $("tab-btn-system").hidden = !perms.is_admin;
   $("btn-reload").hidden = !perms.is_admin;
   $("btn-open-add").hidden = !perms.can_write;
 }
@@ -1194,7 +1198,8 @@ function applyPermissions(me) {
 function allowedTab(tab) {
   if (tab === "audit") return perms.can_audit;
   if (tab === "import") return perms.can_write;
-  if (tab === "config" || tab === "users") return perms.is_admin;
+  if (tab === "config" || tab === "users" || tab === "system")
+    return perms.is_admin;
   return true;
 }
 
@@ -1205,7 +1210,8 @@ function switchTab(tab) {
     $("tab-btn-" + name).classList.toggle("active", name === tab);
   });
   if (location.hash !== "#" + tab) history.replaceState(null, "", "#" + tab);
-  if (tab === "config") { loadSettings(); loadBulkRun(); loadVersion(); }
+  if (tab === "config") { loadSettings(); loadBulkRun(); }
+  if (tab === "system") loadVersion();
   if (tab === "audit") loadAudit();
   if (tab === "users") loadUsers();
 }
@@ -1597,6 +1603,7 @@ $("tab-btn-dashboard").addEventListener("click", () => switchTab("dashboard"));
 $("tab-btn-audit").addEventListener("click", () => switchTab("audit"));
 $("tab-btn-import").addEventListener("click", () => switchTab("import"));
 $("tab-btn-users").addEventListener("click", () => switchTab("users"));
+$("tab-btn-system").addEventListener("click", () => switchTab("system"));
 $("tab-btn-config").addEventListener("click", () => switchTab("config"));
 
 async function enterApp() {
