@@ -64,6 +64,10 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now oxidized-ai-manager-updater.path
 ```
 
+Los scripts deben quedar ejecutables (`chmod +x scripts/*.sh`). El repositorio
+ya guarda ese permiso, pero si clona desde Windows conviene comprobarlo: sin él
+systemd falla con `203/EXEC` y el panel muestra el error correspondiente.
+
 Si el `PROJECT_DIR` no es `/root/oxidized-ai-manager`, ajústelo en el
 `.service` y la ruta vigilada en el `.path`.
 
@@ -77,6 +81,7 @@ systemd hay que copiarlas a mano porque el instalador no toca `/etc/systemd`.
 | «El canal de actualización no está montado» | falta el directorio o el volumen en compose |
 | La petición se queda en «solicitada» | la unidad `.path` no está activa: `systemctl status oxidized-ai-manager-updater.path` |
 | «no se pudo escribir la petición» | el directorio no pertenece a uid 10001 |
+| «El servicio del anfitrión no pudo ejecutarse» | `scripts/apply-update.sh` sin permiso de ejecución (`chmod +x`) |
 | «sin comprobar» en la insignia | el backend no puede leer `/repo/.git` o no hay salida a internet |
 | «El repositorio local tiene cambios propios» | hay ediciones a mano en el servidor: `git status` y resolverlas |
 

@@ -2,6 +2,10 @@
 Description=Aplica la actualización de Oxidized AI Manager pedida desde el panel
 After=docker.service
 Requires=docker.service
+# Si el servicio falla, la unidad .path puede volver a dispararse mientras el
+# archivo de petición exista: este freno evita un bucle de arranques.
+StartLimitIntervalSec=120
+StartLimitBurst=3
 
 [Service]
 Type=oneshot
@@ -12,3 +16,6 @@ Environment=UPDATE_BRANCH=main
 # La frase de cifrado del respaldo previo, si la tiene configurada.
 EnvironmentFile=-/etc/oxidized-ai-manager-backup.env
 ExecStart=/root/oxidized-ai-manager/scripts/apply-update.sh
+# Deja el fallo por escrito y consume la petición, para que el panel no se
+# quede colgado en "actualizando…" ni la unidad .path entre en bucle.
+ExecStopPost=/root/oxidized-ai-manager/scripts/update-failed.sh

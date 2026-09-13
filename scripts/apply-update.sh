@@ -31,6 +31,9 @@ set_state() {
         "$state" "$(printf '%s' "$detail" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')" \
         "$(now)" "$from" "$to" > "$tmp"
     mv -f "$tmp" "$STATUS"
+    # El contenedor (uid 10001) debe poder sobreescribir el estado la próxima
+    # vez: `mv` como root deja el archivo con dueño root.
+    chown 10001:10001 "$STATUS" 2>/dev/null || true
 }
 
 fail() {
