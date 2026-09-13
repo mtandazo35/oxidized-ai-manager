@@ -1,16 +1,54 @@
+import re
+import unicodedata
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
+# Patrón del nombre **ya normalizado**. Sigue siendo estricto porque ese
+# nombre es el del archivo dentro de `backups.git` y viaja en las URLs de
+# Oxidized (`/node/next/<nombre>`) y en los parámetros de consulta.
 DEVICE_NAME_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+
+
+def normalize_node_name(value: str) -> str:
+    """Convierte lo que escriba una persona en un nombre de nodo válido.
+
+    «Core El Rosario» -> «Core-El-Rosario»; «Ñuñoa Principal» -> «Nunoa-Principal».
+    Se normaliza en el servidor en vez de rechazar la entrada: el operador
+    escribe el nombre como lo tiene en la cabeza y la plataforma se encarga.
+    """
+    sin_acentos = "".join(
+        caracter
+        for caracter in unicodedata.normalize("NFD", value.strip())
+        if unicodedata.category(caracter) != "Mn"
+    )
+    # Cualquier tramo de caracteres no utilizables (espacios, barras,
+    # paréntesis...) se convierte en UN guion, no en uno por carácter.
+    con_guiones = re.sub(r"[^A-Za-z0-9._-]+", "-", sin_acentos)
+    limpio = re.sub(r"-{2,}", "-", con_guiones)
+    limpio = re.sub(r"^[^A-Za-z0-9]+|[^A-Za-z0-9]+$", "", limpio)
+    return limpio[:128]
+
+
+def _validate_node_name(value: str | None) -> str | None:
+    if value is None:
+        return None
+    normalizado = normalize_node_name(value)
+    if not re.match(DEVICE_NAME_PATTERN, normalizado):
+        raise ValueError(
+            "debe empezar por una letra o un número y contener al menos un "
+            "carácter utilizable"
+        )
+    return normalizado
 ADDRESS_PATTERN = r"^\S{1,255}$"
 MODEL_PATTERN = r"^[a-z0-9_-]{1,64}$"
 
 
 class DeviceCreate(BaseModel):
-    name: str = Field(pattern=DEVICE_NAME_PATTERN)
+    # Se acepta el nombre tal como lo escriba el operador y se normaliza aquí.
+    name: str = Field(min_length=1, max_length=200)
     address: str = Field(pattern=ADDRESS_PATTERN)
     port: int = Field(default=22, ge=1, le=65535)
     model: str = Field(default="routeros", pattern=MODEL_PATTERN)
@@ -20,9 +58,11 @@ class DeviceCreate(BaseModel):
     group_name: str = Field(default="", max_length=64)
     backup_interval_minutes: int = Field(default=0, ge=0, le=10080)
 
+    _normaliza_nombre = field_validator("name")(_validate_node_name)
+
 
 class DeviceUpdate(BaseModel):
-    name: str | None = Field(default=None, pattern=DEVICE_NAME_PATTERN)
+    name: str | None = Field(default=None, min_length=1, max_length=200)
     address: str | None = Field(default=None, pattern=ADDRESS_PATTERN)
     port: int | None = Field(default=None, ge=1, le=65535)
     model: str | None = Field(default=None, pattern=MODEL_PATTERN)
@@ -31,6 +71,8 @@ class DeviceUpdate(BaseModel):
     enabled: bool | None = None
     group_name: str | None = Field(default=None, max_length=64)
     backup_interval_minutes: int | None = Field(default=None, ge=0, le=10080)
+
+    _normaliza_nombre = field_validator("name")(_validate_node_name)
 
 
 class DeviceOut(BaseModel):

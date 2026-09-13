@@ -75,13 +75,21 @@ async def import_template(user: CurrentUser = Depends(require_write)) -> Respons
     workbook = Workbook()
     sheet = workbook.active
     sheet.title = "Routers"
-    sheet.append(["nombre", "ip", "puerto", "usuario", "clave", "grupo"])
+    sheet.append(
+        ["nombre", "ip", "puerto", "usuario", "clave", "grupo", "plataforma"]
+    )
     for cell in sheet[1]:
         cell.font = Font(bold=True)
     sheet.append(["# Borre las filas de ejemplo que empiezan con #"])
-    sheet.append(["#rb-core-01", "192.0.2.10", 2222, "backup", "ClaveSegura", "EmpresaA"])
-    sheet.append(["#rb-sucursal-02", "192.0.2.20", 22, "backup", "ClaveSegura", "EmpresaB"])
-    for column, width in zip("ABCDEF", (22, 18, 10, 16, 18, 18)):
+    sheet.append(
+        ["#rb-core-01", "192.0.2.10", 2222, "backup", "ClaveSegura", "EmpresaA",
+         "routeros"]
+    )
+    sheet.append(
+        ["#rb-sucursal-02", "192.0.2.20", 22, "backup", "ClaveSegura", "EmpresaB",
+         ""]
+    )
+    for column, width in zip("ABCDEFG", (22, 18, 10, 16, 18, 18, 16)):
         sheet.column_dimensions[column].width = width
     buffer = io.BytesIO()
     workbook.save(buffer)
@@ -157,6 +165,9 @@ def _parse_import_line(line: str) -> dict:
         data["password"] = parts[4]
     if len(parts) > 5:
         data["group_name"] = parts[5]
+    if len(parts) > 6 and parts[6]:
+        # Plataforma (modelo de Oxidized). Sin ella se asume MikroTik.
+        data["model"] = parts[6].strip().lower()
     return data
 
 

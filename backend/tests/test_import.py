@@ -46,16 +46,21 @@ async def test_import_mixed_lines(auth_headers) -> None:
 
     assert response.status_code == 200
     body = response.json()
-    assert body["created"] == 3
+    # "../etc" ya no se rechaza: se normaliza a "etc". Sigue siendo seguro
+    # porque el nombre resultante nunca puede llevar barras ni empezar por
+    # punto, que es lo que protege al repositorio de respaldos.
+    assert body["created"] == 4
     assert body["duplicates"] == []
-    assert len(body["errors"]) == 3
-    assert [e["line"] for e in body["errors"]] == [7, 8, 9]
+    assert len(body["errors"]) == 2
+    assert [e["line"] for e in body["errors"]] == [7, 8]
 
     devices = {d["name"]: d for d in listed.json()}
     assert devices["rb-core-01"]["port"] == 2222
     assert devices["rb-core-01"]["username"] == "backup"
     assert devices["rb-core-02"]["port"] == 22
     assert devices["rb-core-03"]["port"] == 9922
+    assert "etc" in devices
+    assert all("/" not in nombre and ".." not in nombre for nombre in devices)
 
 
 async def test_import_with_group_column(auth_headers) -> None:
@@ -83,3 +88,38 @@ async def test_import_passwords_not_leaked(auth_headers) -> None:
         listed = await api.get("/api/devices")
 
     assert "S3cret" not in listed.text
+
+
+async def test_import_accepts_the_platform_column(
+    auth_headers, device_repository
+) -> None:
+    async with client(auth_headers) as api:
+        response = await api.post(
+            "/api/devices/import",
+            headers=auth_headers,
+            json={
+                "text": (
+                    "olt-norte,192.0.2.40,22,admin,Clave,EmpresaA,smartax\n"
+                    "rb-sur,192.0.2.41,22,backup,Clave,EmpresaA,"
+                )
+            },
+        )
+        listed = await api.get("/api/devices", headers=auth_headers)
+
+    assert response.json()["created"] == 2
+    modelos = {d["name"]: d["model"] for d in listed.json()}
+    assert modelos["olt-norte"] == "smartax"
+    # Columna vacía: se queda con el valor por defecto, MikroTik.
+    assert modelos["rb-sur"] == "routeros"
+
+
+async def test_import_rejects_an_unusable_platform(auth_headers) -> None:
+    async with client(auth_headers) as api:
+        response = await api.post(
+            "/api/devices/import",
+            headers=auth_headers,
+            json={"text": "rb-malo,192.0.2.42,22,u,c,EmpresaA,Modelo Raro!"},
+        )
+
+    assert response.json()["created"] == 0
+    assert response.json()["errors"][0]["message"].startswith("Valor inválido")

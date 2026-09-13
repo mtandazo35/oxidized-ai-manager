@@ -134,8 +134,16 @@ de este repositorio. El reparto de responsabilidades es deliberado:
    reutilizar `APP_SECRET_KEY`: de ella dependen los tokens y el cifrado de
    credenciales. Cambiarla invalida sesiones y obliga a recifrar/recargar claves.
 2. **Cambiar la clave de `admin`** en el primer ingreso (menú de usuario).
-3. **Cuentas RouterOS de solo lectura** para los respaldos (grupo con `read,ssh`
-   únicamente). No usar cuentas con permisos de escritura.
+3. **Cuenta RouterOS de solo lectura** para los respaldos:
+
+   ```
+   /user group add name=respaldo policy=ssh,read,sensitive
+   /user add name=respaldo group=respaldo address=<IP del servidor>/32 password=...
+   ```
+
+   `sensitive` es **obligatoria**: sin ella `/export show-sensitive` no devuelve
+   los secretos y el respaldo no sirve para restaurar. Nunca dar `write`, `api`
+   ni `policy` a esta cuenta, y limitar el origen con `address=`.
 4. **Respaldo antes de cambios** en configuración de producción (`tar.gz` +
    `pg_dump`).
 5. **Mantener el host actualizado** (unattended-upgrades) y las imágenes al día.

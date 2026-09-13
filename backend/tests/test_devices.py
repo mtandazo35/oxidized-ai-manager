@@ -99,13 +99,21 @@ async def test_duplicate_name_returns_409(auth_headers) -> None:
     assert second.status_code == 409
 
 
-async def test_invalid_name_is_rejected(auth_headers) -> None:
+async def test_a_path_like_name_cannot_escape_the_repository(auth_headers) -> None:
+    """Se normaliza en vez de rechazarse, pero nunca puede salir del repositorio.
+
+    Lo que protege a `backups.git` no es rechazar la entrada, sino que el
+    nombre guardado jamás contenga barras ni empiece por punto.
+    """
     async with client(auth_headers) as api:
         response = await api.post(
             "/api/devices", json={**DEVICE, "name": "../etc/passwd"}
         )
 
-    assert response.status_code == 422
+    assert response.status_code == 201
+    guardado = response.json()["name"]
+    assert guardado == "etc-passwd"
+    assert "/" not in guardado and not guardado.startswith(".")
 
 
 async def test_list_and_get_devices(auth_headers) -> None:
@@ -163,3 +171,55 @@ async def test_delete_device(auth_headers) -> None:
 
     assert deleted.status_code == 204
     assert missing.status_code == 404
+
+
+# --- Nombre del equipo: lo ajusta el servidor -----------------------------
+
+
+async def test_name_with_spaces_is_normalized(auth_headers) -> None:
+    """El operador escribe el nombre como lo tiene en la cabeza."""
+    async with client(auth_headers) as api:
+        response = await api.post(
+            "/api/devices",
+            headers=auth_headers,
+            json={"name": "Core El Rosario", "address": "200.24.130.153", "port": 2232},
+        )
+
+    assert response.status_code == 201
+    assert response.json()["name"] == "Core-El-Rosario"
+
+
+async def test_accents_and_separators_are_cleaned(auth_headers) -> None:
+    async with client(auth_headers) as api:
+        response = await api.post(
+            "/api/devices",
+            headers=auth_headers,
+            json={"name": "AMG - Ñuñoa (Quito)", "address": "192.0.2.1"},
+        )
+
+    assert response.json()["name"] == "AMG-Nunoa-Quito"
+
+
+async def test_a_name_with_nothing_usable_is_rejected(auth_headers) -> None:
+    async with client(auth_headers) as api:
+        response = await api.post(
+            "/api/devices", headers=auth_headers, json={"name": "###", "address": "1.2.3.4"}
+        )
+
+    assert response.status_code == 422
+
+
+async def test_rename_is_normalized_too(auth_headers) -> None:
+    async with client(auth_headers) as api:
+        creado = await api.post(
+            "/api/devices",
+            headers=auth_headers,
+            json={"name": "rb-uno", "address": "192.0.2.1"},
+        )
+        response = await api.patch(
+            f"/api/devices/{creado.json()['id']}",
+            headers=auth_headers,
+            json={"name": "Router Dos"},
+        )
+
+    assert response.json()["name"] == "Router-Dos"

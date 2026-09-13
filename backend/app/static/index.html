@@ -211,7 +211,7 @@
   <main>
     <div id="tab-dashboard">
     <div style="display:flex;gap:8px;margin-top:24px;flex-wrap:wrap;justify-content:flex-end">
-      <input id="filter-text" type="search" placeholder="🔍 Buscar…" title="Filtra por nombre, identity, IP, puerto, versión, usuario o grupo" style="width:200px;padding:6px 10px;font-size:.85rem">
+      <input id="filter-text" type="search" placeholder="🔍 Buscar…" title="Filtra por nombre, identity, IP, puerto, plataforma, versión, usuario o grupo" style="width:200px;padding:6px 10px;font-size:.85rem">
       <select id="filter-group" style="font-size:.85rem"><option value="">Todas las empresas</option></select>
     </div>
     <h2>Estado de respaldos</h2>
@@ -229,7 +229,7 @@
       </div>
       <p class="msg" id="device-msg"></p>
       <table>
-        <thead><tr><th>Nombre</th><th>Identity</th><th>Grupo</th><th>Dirección</th><th>Puerto</th><th>Versión</th><th>Usuario</th><th>Estado</th><th></th></tr></thead>
+        <thead><tr><th>Nombre</th><th>Identity</th><th>Grupo</th><th>Dirección</th><th>Puerto</th><th>Plataforma</th><th>Versión</th><th>Usuario</th><th>Estado</th><th></th></tr></thead>
         <tbody id="devices-body"></tbody>
       </table>
     </div>
@@ -240,8 +240,9 @@
     <div class="card">
       <p class="muted" style="margin-top:0">
         <strong>Paso 1.</strong> Descargue la plantilla, llénela con un router por línea
-        (<code>nombre,ip,puerto,usuario,clave,grupo</code> — puerto, usuario, clave y
-        grupo/empresa opcionales; puerto 22 por defecto). Acepta coma, punto y coma o tabulador.
+        (<code>nombre,ip,puerto,usuario,clave,grupo,plataforma</code> — todo menos
+        nombre e IP es opcional; puerto 22 y plataforma <code>routeros</code> por
+        defecto). Acepta coma, punto y coma o tabulador.
       </p>
       <div class="menu" style="display:inline-block;margin-bottom:10px">
         <button type="button" class="ghost" id="btn-template-menu">⬇ Descargar plantilla ▾</button>
@@ -484,11 +485,36 @@
   </div>
 </div>
 
+<datalist id="plataformas">
+  <option value="routeros" label="MikroTik RouterOS (6 y 7)"></option>
+  <option value="swos" label="MikroTik SwOS (switches)"></option>
+  <option value="vrp" label="Huawei VRP (routers y switches)"></option>
+  <option value="smartax" label="Huawei OLT SmartAX (MA5600/MA5800)"></option>
+  <option value="zteolt" label="ZTE OLT (C300/C320)"></option>
+  <option value="bdcom" label="BDCOM (base de varias OLT, probar para VSOL)"></option>
+  <option value="uplinkolt" label="UPLINK OLT"></option>
+  <option value="zhoneolt" label="Zhone OLT"></option>
+  <option value="ios" label="Cisco IOS"></option>
+  <option value="iosxe" label="Cisco IOS-XE"></option>
+  <option value="nxos" label="Cisco NX-OS"></option>
+  <option value="edgeos" label="Ubiquiti EdgeOS"></option>
+  <option value="airos" label="Ubiquiti AirOS"></option>
+  <option value="fortios" label="Fortinet FortiOS"></option>
+  <option value="pfsense" label="pfSense"></option>
+  <option value="opnsense" label="OPNsense"></option>
+  <option value="linuxgeneric" label="Linux genérico"></option>
+</datalist>
+
 <div class="overlay" id="add-overlay" hidden>
   <form class="card" id="add-form">
     <h1 style="margin-bottom:16px;font-size:1.1rem">Agregar router</h1>
     <label for="a-name">Nombre</label>
-    <input id="a-name" placeholder="rb-core-01" required pattern="[A-Za-z0-9][A-Za-z0-9._-]*" style="margin:4px 0 10px">
+    <input id="a-name" placeholder="Core El Rosario" required style="margin:4px 0 4px">
+    <p class="muted" style="margin:0 0 10px">
+      Escríbalo como quiera: los espacios y acentos se ajustan solos, porque
+      este nombre es el del archivo en el repositorio de respaldos.
+      «Core El Rosario» se guarda como «Core-El-Rosario».
+    </p>
     <label for="a-address">Dirección (IP o host)</label>
     <input id="a-address" required style="margin:4px 0 10px">
     <label for="a-port">Puerto SSH</label>
@@ -499,6 +525,13 @@
     <input id="a-password" type="password" autocomplete="new-password" style="margin:4px 0 10px">
     <label for="a-group">Grupo / Empresa</label>
     <input id="a-group" style="margin:4px 0 10px">
+    <label for="a-model">Plataforma</label>
+    <input id="a-model" list="plataformas" value="routeros" required
+      pattern="[a-z0-9_-]+" placeholder="routeros" style="margin:4px 0 4px">
+    <p class="muted" style="margin:0 0 10px">
+      MikroTik RouterOS por defecto (sirve para la 6 y la 7). Escriba otra si el
+      equipo no es MikroTik.
+    </p>
     <label for="a-interval">Respaldar cada (minutos; 0 = usar el global)</label>
     <input id="a-interval" type="number" min="0" max="10080" value="0" style="margin:4px 0 12px">
     <div style="display:flex;gap:8px">
@@ -522,6 +555,13 @@
     <input id="e-password" type="password" placeholder="(dejar vacío para no cambiarla)" style="margin:4px 0 10px">
     <label for="e-group">Grupo / Empresa</label>
     <input id="e-group" style="margin:4px 0 10px">
+    <label for="e-model">Plataforma</label>
+    <input id="e-model" list="plataformas" value="routeros" required
+      pattern="[a-z0-9_-]+" placeholder="routeros" style="margin:4px 0 4px">
+    <p class="muted" style="margin:0 0 10px">
+      Cambiarla hace que Oxidized use otro conjunto de comandos en el próximo
+      respaldo.
+    </p>
     <label for="e-interval">Respaldar cada (minutos; 0 = usar el global de Configuración)</label>
     <input id="e-interval" type="number" min="0" max="10080" style="margin:4px 0 12px">
     <div style="display:flex;gap:8px">
@@ -584,11 +624,58 @@ async function api(path, options = {}) {
     let detail = "HTTP " + response.status;
     try {
       const body = await response.json();
-      detail = typeof body.detail === "string" ? body.detail : detail;
+      if (typeof body.detail === "string") {
+        detail = body.detail;
+      } else if (Array.isArray(body.detail)) {
+        // Las validaciones de la API llegan como lista de errores por campo.
+        // Antes se descartaban y solo se veía "HTTP 422", que no dice nada.
+        detail = body.detail.map(describeFieldError).join(" · ");
+      }
     } catch (e) {}
     throw new Error(detail);
   }
   return response.status === 204 ? null : response.json();
+}
+
+// Nombres de campo y motivos en castellano: la API responde en inglés y con
+// la ruta interna del campo, que no le dice nada a quien usa el panel.
+const FIELD_LABEL = {
+  name: "Nombre", address: "Dirección", port: "Puerto SSH",
+  username: "Usuario SSH", password: "Clave SSH", group_name: "Grupo / Empresa",
+  model: "Plataforma", backup_interval_minutes: "Intervalo de respaldo",
+  new_password: "Clave nueva", current_password: "Clave actual",
+  allowlist: "Lista de IPs", text: "Contenido",
+};
+
+const FIELD_HINT = {
+  name: "solo letras, números, punto, guion y guion bajo; sin espacios ni acentos",
+  address: "una IP o un host, sin espacios",
+  model: "solo minúsculas, números y guiones (por ejemplo routeros)",
+};
+
+function describeFieldError(err) {
+  const campo = Array.isArray(err.loc) ? err.loc[err.loc.length - 1] : "";
+  const etiqueta = FIELD_LABEL[campo] || campo || "Dato";
+  if (FIELD_HINT[campo]) return `${etiqueta}: ${FIELD_HINT[campo]}`;
+  const msg = (err.msg || "").toLowerCase();
+  if (msg.includes("at least")) return `${etiqueta}: demasiado corto`;
+  if (msg.includes("at most")) return `${etiqueta}: demasiado largo`;
+  if (msg.includes("required")) return `${etiqueta}: obligatorio`;
+  if (msg.includes("greater")) return `${etiqueta}: valor demasiado bajo`;
+  if (msg.includes("less")) return `${etiqueta}: valor demasiado alto`;
+  return `${etiqueta}: ${err.msg || "valor no válido"}`;
+}
+
+// El nombre acaba siendo el archivo del equipo dentro del repositorio Git y
+// viaja en las URLs, así que no admite espacios. En vez de rechazarlo, se
+// corrige mientras se escribe: "Core El Rosario" -> "Core-El-Rosario".
+function sanitizeNodeName(value) {
+  return value
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")   // quita acentos
+    .replace(/[^A-Za-z0-9._-]+/g, "-")                 // separadores -> un guion
+    .replace(/-{2,}/g, "-")
+    .replace(/^[^A-Za-z0-9]+/, "")
+    .slice(0, 128);
 }
 
 function esc(value) {
@@ -618,7 +705,7 @@ function deviceMatchesFilter(device) {
   if (!query) return true;
   return [
     device.name, device.identity, device.address, String(device.port),
-    device.ros_version, device.username, device.group_name,
+    device.ros_version, device.username, device.group_name, device.model,
   ].some((value) => (value || "").toLowerCase().includes(query));
 }
 
@@ -695,6 +782,7 @@ function renderDevices() {
         <td ${perms.can_write ? `style="cursor:pointer" title="Clic para editar" onclick="editGroup(${d.id}, '${esc(d.group_name || "")}')"` : ""}>${d.group_name ? esc(d.group_name) : `<span class="muted">—${perms.can_write ? " ✎" : ""}</span>`}</td>
         <td>${esc(d.address)}</td>
         <td>${esc(d.port)}</td>
+        <td class="muted">${esc(d.model || "routeros")}</td>
         <td title="${esc(d.board)}">${d.ros_version ? esc(d.ros_version) : '<span class="muted">—</span>'}</td>
         <td>${esc(d.username)}</td>
         <td><span class="badge ${d.enabled ? "ok" : "off"}">${d.enabled ? "activo" : "pausado"}</span></td>
@@ -705,7 +793,7 @@ function renderDevices() {
           <button class="danger mini" onclick="deleteDevice(${d.id}, '${esc(d.name)}')">Eliminar</button>
         ` : '<span class="muted">solo lectura</span>'}</td>
       </tr>`).join("")
-    : '<tr><td colspan="9" class="muted">Sin routers que coincidan.</td></tr>';
+    : '<tr><td colspan="10" class="muted">Sin routers que coincidan.</td></tr>';
 }
 
 let editDeviceId = null;
@@ -720,6 +808,7 @@ window.openEdit = (id) => {
   $("e-username").value = device.username;
   $("e-password").value = "";
   $("e-group").value = device.group_name || "";
+  $("e-model").value = device.model || "routeros";
   $("e-interval").value = device.backup_interval_minutes || 0;
   $("edit-msg").textContent = "";
   $("edit-overlay").hidden = false;
@@ -736,6 +825,7 @@ $("edit-form").addEventListener("submit", async (event) => {
     port: Number($("e-port").value) || 22,
     username: $("e-username").value,
     group_name: $("e-group").value.trim(),
+    model: $("e-model").value.trim().toLowerCase() || "routeros",
     backup_interval_minutes: Number($("e-interval").value) || 0,
   };
   if ($("e-password").value) body.password = $("e-password").value;
@@ -978,6 +1068,7 @@ $("add-form").addEventListener("submit", async (event) => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         name: $("a-name").value.trim(),
+        model: $("a-model").value.trim().toLowerCase() || "routeros",
         address: $("a-address").value.trim(),
         port: Number($("a-port").value) || 22,
         username: $("a-username").value,
@@ -1056,11 +1147,13 @@ $("btn-logout").addEventListener("click", logout);
 $("btn-reload").addEventListener("click", () => reloadOxidized(false));
 
 const CSV_TEMPLATE = [
-  "nombre,ip,puerto,usuario,clave,grupo",
-  "# Un router por linea. Puerto, usuario, clave y grupo/empresa son opcionales (puerto 22 por defecto).",
+  "nombre,ip,puerto,usuario,clave,grupo,plataforma",
+  "# Un equipo por linea. Todo menos nombre e IP es opcional (puerto 22 por defecto).",
+  "# plataforma: routeros para MikroTik, sirve para la 6 y la 7. Vacia = routeros.",
+  "# Otras: vrp (Huawei), smartax (OLT Huawei), zteolt, bdcom, ios, edgeos...",
   "# Borre estas lineas de ejemplo antes de subir:",
-  "rb-core-01,192.0.2.10,2222,backup,ClaveSegura,EmpresaA",
-  "rb-sucursal-02,192.0.2.20,22,backup,ClaveSegura,EmpresaB",
+  "rb-core-01,192.0.2.10,2222,backup,ClaveSegura,EmpresaA,routeros",
+  "rb-sucursal-02,192.0.2.20,22,backup,ClaveSegura,EmpresaB,",
   "",
 ].join("\n");
 
@@ -1131,6 +1224,7 @@ function parseBulkLine(raw) {
   if (parts.length > 3) device.username = parts[3];
   if (parts.length > 4) device.password = parts[4];
   if (parts.length > 5) device.group_name = parts[5];
+  if (parts.length > 6 && parts[6]) device.model = parts[6].toLowerCase();
   return device;
 }
 
@@ -1802,6 +1896,20 @@ $("btn-log-refresh").addEventListener("click", loadActivity);
   $(id).addEventListener("change", loadActivity));
 ["log-user", "log-ip"].forEach((id) =>
   $(id).addEventListener("change", loadActivity));
+
+// Corrige el nombre mientras se escribe, en lugar de rechazarlo al enviar.
+["a-name", "e-name"].forEach((id) => {
+  const campo = $(id);
+  if (!campo) return;
+  campo.addEventListener("input", () => {
+    const limpio = sanitizeNodeName(campo.value);
+    if (limpio !== campo.value) {
+      const pos = campo.selectionStart;
+      campo.value = limpio;
+      campo.setSelectionRange(pos, pos);
+    }
+  });
+});
 
 function initialTab() {
   const fromHash = location.hash.slice(1);

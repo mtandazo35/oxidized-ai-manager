@@ -151,6 +151,21 @@ curl -X POST http://127.0.0.1:8000/api/users \
 El filtrado se aplica en la API, endpoint por endpoint, no en el panel.
 Detalles y matriz de permisos en [docs/MULTITENANT.md](docs/MULTITENANT.md).
 
+## Equipos soportados
+
+Por defecto **MikroTik RouterOS**, que cubre la 6 y la 7 con el mismo modelo
+(Oxidized detecta la versión). Al dar de alta un equipo se elige la plataforma;
+el desplegable trae las más habituales —Huawei VRP y OLT SmartAX, ZTE OLT,
+BDCOM, Cisco IOS, EdgeOS…— y admite escribir cualquier otro de los ~200 modelos
+de Oxidized.
+
+La cuenta de respaldo del MikroTik necesita `policy=ssh,read,sensitive`; sin
+`sensitive` el `/export` sale censurado y el respaldo no sirve para restaurar.
+
+El nombre del equipo se ajusta solo: «Core El Rosario» se guarda como
+«Core-El-Rosario», porque ese nombre es el del archivo dentro del repositorio
+de respaldos.
+
 ## Bitácora y control de acceso
 
 En **Ajustes del sistema** (solo administrador): quién hizo qué, cuándo y desde

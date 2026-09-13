@@ -67,7 +67,9 @@ async def test_template_download_is_valid_xlsx(auth_headers) -> None:
     assert response.headers["content-type"].startswith("application/vnd.openxml")
     workbook = load_workbook(io.BytesIO(response.content))
     header = [cell.value for cell in workbook.active[1]]
-    assert header == ["nombre", "ip", "puerto", "usuario", "clave", "grupo"]
+    assert header == [
+        "nombre", "ip", "puerto", "usuario", "clave", "grupo", "plataforma",
+    ]
 
 
 async def test_template_requires_login() -> None:
