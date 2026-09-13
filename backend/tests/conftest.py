@@ -1,5 +1,5 @@
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import pytest
@@ -273,6 +273,161 @@ class FakeUserRepository:
         self._users[username]["must_change_password"] = False
 
 
+class FakeActivityRepository:
+    """In-memory stand-in matching ActivityRepository's public contract."""
+
+    def __init__(self) -> None:
+        self.entries: list[dict[str, Any]] = []
+        self._next_id = 1
+
+    async def record(
+        self,
+        action: str,
+        username: str = "",
+        ip: str = "",
+        target: str = "",
+        detail: str = "",
+        ok: bool = True,
+    ) -> None:
+        self.entries.append(
+            {
+                "id": self._next_id,
+                "at": datetime.now(timezone.utc),
+                "action": action,
+                "username": username,
+                "ip": ip,
+                "target": target,
+                "detail": detail,
+                "ok": ok,
+            }
+        )
+        self._next_id += 1
+
+    async def list_entries(
+        self,
+        limit: int = 100,
+        action: str | None = None,
+        username: str | None = None,
+        ip: str | None = None,
+        only_failures: bool = False,
+    ) -> list[dict[str, Any]]:
+        rows = [
+            entry
+            for entry in reversed(self.entries)
+            if (action is None or entry["action"].startswith(action))
+            and (username is None or entry["username"] == username)
+            and (ip is None or entry["ip"] == ip)
+            and (not only_failures or not entry["ok"])
+        ]
+        return rows[:limit]
+
+    async def recent_logins(self, limit: int = 20) -> list[dict[str, Any]]:
+        vistos = {}
+        for entry in self.entries:
+            if entry["action"] == "login.ok":
+                vistos[(entry["username"], entry["ip"])] = entry
+        return list(vistos.values())[:limit]
+
+    async def purge(self, days: int) -> int:
+        return 0
+
+    def actions(self) -> list[str]:
+        """Atajo para las pruebas."""
+        return [entry["action"] for entry in self.entries]
+
+
+class FakeAccessRepository:
+    """In-memory stand-in matching AccessRepository's public contract."""
+
+    def __init__(self) -> None:
+        self.ips: dict[str, dict[str, Any]] = {}
+        self.accounts: dict[str, dict[str, Any]] = {}
+
+    @staticmethod
+    def _vigente(registro: dict[str, Any] | None, campo: str) -> bool:
+        return bool(registro) and registro[campo] > datetime.now(timezone.utc)
+
+    async def ip_block(self, ip: str) -> dict[str, Any] | None:
+        registro = self.ips.get(ip)
+        return registro if self._vigente(registro, "blocked_until") else None
+
+    async def list_ip_blocks(self) -> list[dict[str, Any]]:
+        return [r for r in self.ips.values() if self._vigente(r, "blocked_until")]
+
+    async def register_ip_failure(
+        self, ip: str, window_minutes: int, threshold: int, block_minutes: int
+    ) -> bool:
+        registro = self.ips.setdefault(
+            ip,
+            {
+                "ip": ip,
+                "failures": 0,
+                "blocked_until": datetime.now(timezone.utc),
+                "reason": "",
+            },
+        )
+        registro["failures"] += 1
+        if registro["failures"] < threshold:
+            return False
+        registro["blocked_until"] = datetime.now(timezone.utc) + timedelta(
+            minutes=block_minutes
+        )
+        registro["reason"] = f"{registro['failures']} intentos fallidos"
+        return True
+
+    async def clear_ip(self, ip: str) -> bool:
+        return self.ips.pop(ip, None) is not None
+
+    async def account_lock(self, username: str) -> dict[str, Any] | None:
+        registro = self.accounts.get(username)
+        return registro if self._vigente(registro, "locked_until") else None
+
+    async def list_account_locks(self) -> list[dict[str, Any]]:
+        return [
+            r for r in self.accounts.values() if self._vigente(r, "locked_until")
+        ]
+
+    async def register_account_failure(
+        self, username: str, window_minutes: int, threshold: int, lock_minutes: int
+    ) -> bool:
+        registro = self.accounts.setdefault(
+            username,
+            {
+                "username": username,
+                "failures": 0,
+                "locked_until": datetime.now(timezone.utc),
+            },
+        )
+        registro["failures"] += 1
+        if registro["failures"] < threshold:
+            return False
+        registro["locked_until"] = datetime.now(timezone.utc) + timedelta(
+            minutes=lock_minutes
+        )
+        return True
+
+    async def clear_account(self, username: str) -> bool:
+        return self.accounts.pop(username, None) is not None
+
+
+@pytest.fixture(autouse=True)
+def activity_repository() -> FakeActivityRepository:
+    from app import main as main_module
+
+    repository = FakeActivityRepository()
+    main_module.app.state.activity = repository
+    return repository
+
+
+@pytest.fixture(autouse=True)
+def access_repository() -> FakeAccessRepository:
+    from app import main as main_module
+
+    repository = FakeAccessRepository()
+    main_module.app.state.access = repository
+    return repository
+
+
 @pytest.fixture
 def anyio_backend() -> str:
     return "asyncio"
@@ -280,14 +435,16 @@ def anyio_backend() -> str:
 
 @pytest.fixture(autouse=True)
 def reset_login_throttles():
-    """Limpia los dos frenos de login (por IP y por cuenta) entre pruebas."""
-    from app.auth import _failed_logins
+    """Limpia el freno de peticiones por IP entre pruebas.
+
+    Los bloqueos por cuenta y por IP viven ahora en la base (su doble se crea
+    nuevo en cada prueba), así que solo queda por reiniciar el contador en
+    memoria del middleware.
+    """
     from app.middleware import reset_login_rate_limit
 
-    _failed_logins.clear()
     reset_login_rate_limit()
     yield
-    _failed_logins.clear()
     reset_login_rate_limit()
 
 

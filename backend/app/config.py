@@ -33,6 +33,14 @@ class Settings(BaseSettings):
     # de actualización y lee el estado que escribe la unidad de systemd.
     update_channel_dir: str = "/update"
     update_branch: str = "main"
+    # Bloqueos de acceso (persistentes en PostgreSQL).
+    login_failure_window_minutes: int = 15
+    account_lock_threshold: int = 8
+    account_lock_minutes: int = 15
+    ip_block_threshold: int = 20
+    ip_block_minutes: int = 30
+    # Cuánto se guarda la bitácora antes de purgarse sola.
+    activity_retention_days: int = 90
 
     model_config = SettingsConfigDict(
         env_file=".env",

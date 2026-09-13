@@ -83,9 +83,8 @@ rol explícito cae en el rol inofensivo.
 
 ## Lo que todavía no hay
 
-- **Bitácora de acciones** (quién dio de alta, modificó o borró un equipo,
-  pidió un respaldo o cambió el Git remoto). Es lo siguiente de esta fase: hoy
-  los permisos existen pero no queda rastro de quién hizo qué.
+La bitácora de quién hizo qué ya existe: ver `docs/ACTIVITY_LOG.md`.
+
 - Un cliente ve los **nombres de empresa** de sus propios equipos, nunca los de
   otras; pero el campo sigue siendo texto libre, sin una tabla de empresas.
 - Autoservicio: el cliente no puede crear sus propias subcuentas.

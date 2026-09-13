@@ -221,3 +221,32 @@ class VersionOut(BaseModel):
 class UpdateRequestResult(BaseModel):
     status: str
     detail: str
+
+
+class ActivityEntry(BaseModel):
+    id: int
+    at: datetime
+    username: str = ""
+    ip: str = ""
+    action: str
+    target: str = ""
+    detail: str = ""
+    ok: bool = True
+
+
+class IpBlockOut(BaseModel):
+    ip: str
+    blocked_until: datetime
+    failures: int = 0
+    reason: str = ""
+
+
+class AccountLockOut(BaseModel):
+    username: str
+    locked_until: datetime
+    failures: int = 0
+
+
+class AccessPolicy(BaseModel):
+    allowlist_enabled: bool = False
+    allowlist: str = Field(default="", max_length=4000)

@@ -399,6 +399,57 @@
           reinicia solo y basta con recargar la página.
         </p>
       </div>
+    <h2>Seguridad de acceso</h2>
+    <div class="card">
+      <div class="field" style="margin-bottom:8px">
+        <input type="checkbox" id="acl-enabled">
+        <label for="acl-enabled">Permitir el inicio de sesión solo desde estas redes</label>
+      </div>
+      <textarea id="acl-list" rows="3"
+        style="width:100%;background:var(--surface);color:var(--ink);border:1px solid var(--border-strong);border-radius:6px;padding:8px 10px;font-family:ui-monospace,monospace;font-size:.85rem"
+        placeholder="10.99.99.0/24, 190.0.0.5&#10;Una IP o red por línea, o separadas por comas"></textarea>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:8px">
+        <button type="button" id="btn-save-acl">Guardar</button>
+        <span class="muted">Si la lista está vacía no se filtra nada.</span>
+      </div>
+      <p class="msg" id="acl-msg"></p>
+
+      <h3 style="font-size:.95rem;color:var(--accent-hover);margin:18px 0 6px">Bloqueos activos</h3>
+      <table>
+        <thead><tr><th>Origen</th><th>Motivo</th><th>Hasta</th><th></th></tr></thead>
+        <tbody id="blocks-body"></tbody>
+      </table>
+    </div>
+
+    <h2>Actividad</h2>
+    <div class="card">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+        <select id="log-action" style="font-size:.85rem">
+          <option value="">Todo</option>
+          <option value="login">Accesos</option>
+          <option value="equipo">Equipos</option>
+          <option value="respaldo">Respaldos</option>
+          <option value="cuenta">Cuentas</option>
+          <option value="ajustes">Ajustes</option>
+          <option value="sistema">Sistema</option>
+          <option value="acceso">Desbloqueos</option>
+        </select>
+        <input id="log-user" type="search" placeholder="usuario" style="width:130px;padding:6px 10px;font-size:.85rem">
+        <input id="log-ip" type="search" placeholder="IP" style="width:130px;padding:6px 10px;font-size:.85rem">
+        <label class="field" style="font-size:.85rem">
+          <input type="checkbox" id="log-failures"> Solo fallos
+        </label>
+        <button type="button" class="ghost" id="btn-log-refresh">Actualizar</button>
+      </div>
+      <p class="msg" id="log-msg"></p>
+      <div style="max-height:420px;overflow-y:auto">
+        <table>
+          <thead><tr><th>Cuándo</th><th>Acción</th><th>Usuario</th><th>Origen</th><th>Detalle</th></tr></thead>
+          <tbody id="log-body"></tbody>
+        </table>
+      </div>
+    </div>
+
     </div>
 
   </main>
@@ -1211,7 +1262,7 @@ function switchTab(tab) {
   });
   if (location.hash !== "#" + tab) history.replaceState(null, "", "#" + tab);
   if (tab === "config") { loadSettings(); loadBulkRun(); }
-  if (tab === "system") loadVersion();
+  if (tab === "system") { loadVersion(); loadPolicy(); loadBlocks(); loadActivity(); }
   if (tab === "audit") loadAudit();
   if (tab === "users") loadUsers();
 }
@@ -1594,6 +1645,130 @@ $("btn-do-update").addEventListener("click", async () => {
     setMsg("ver-msg", error.message, false);
   }
 });
+
+// --- Seguridad de acceso y bitácora (solo administrador) ----------------
+
+const ACTION_LABEL = {
+  "login.ok": "acceso concedido",
+  "login.fail": "acceso fallido",
+  "login.denied": "IP no autorizada",
+  "login.blocked": "IP bloqueada",
+  "login.locked": "cuenta bloqueada",
+  "password.change": "cambio de clave",
+  "equipo.alta": "alta de equipo",
+  "equipo.edicion": "edición de equipo",
+  "equipo.baja": "baja de equipo",
+  "equipo.carga-masiva": "carga masiva",
+  "respaldo.manual": "respaldo manual",
+  "respaldo.masivo": "respaldo masivo",
+  "ajustes.cambio": "cambio de ajustes",
+  "cuenta.alta": "alta de cuenta",
+  "cuenta.edicion": "edición de cuenta",
+  "cuenta.baja": "baja de cuenta",
+  "oxidized.recarga": "recarga de Oxidized",
+  "sistema.actualizacion": "actualización",
+  "acceso.desbloqueo-ip": "desbloqueo de IP",
+  "acceso.desbloqueo-cuenta": "desbloqueo de cuenta",
+};
+
+async function loadPolicy() {
+  try {
+    const policy = await api("/api/access/policy");
+    $("acl-enabled").checked = policy.allowlist_enabled;
+    $("acl-list").value = policy.allowlist;
+  } catch (error) { setMsg("acl-msg", error.message, false); }
+}
+
+$("btn-save-acl").addEventListener("click", async () => {
+  try {
+    await api("/api/access/policy", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        allowlist_enabled: $("acl-enabled").checked,
+        allowlist: $("acl-list").value,
+      }),
+    });
+    setMsg("acl-msg", "Guardado.", true);
+  } catch (error) { setMsg("acl-msg", error.message, false); }
+});
+
+async function loadBlocks() {
+  try {
+    const data = await api("/api/access/blocks");
+    const filas = [
+      ...data.ips.map((b) => `
+        <tr>
+          <td>IP ${esc(b.ip)}</td>
+          <td class="muted">${esc(b.reason || "—")}</td>
+          <td>${fmtDate(b.blocked_until)}</td>
+          <td style="text-align:right"><button class="ghost mini"
+            onclick="unblockIp('${esc(b.ip)}')">Desbloquear</button></td>
+        </tr>`),
+      ...data.accounts.map((a) => `
+        <tr>
+          <td>cuenta ${esc(a.username)}</td>
+          <td class="muted">${a.failures} intentos fallidos</td>
+          <td>${fmtDate(a.locked_until)}</td>
+          <td style="text-align:right"><button class="ghost mini"
+            onclick="unlockAccount('${esc(a.username)}')">Desbloquear</button></td>
+        </tr>`),
+    ];
+    $("blocks-body").innerHTML = filas.length
+      ? filas.join("")
+      : '<tr><td colspan="4" class="muted">Sin bloqueos activos.</td></tr>';
+  } catch (error) { setMsg("acl-msg", error.message, false); }
+}
+
+window.unblockIp = async (ip) => {
+  try {
+    await api("/api/access/unblock-ip?ip=" + encodeURIComponent(ip), { method: "POST" });
+    setMsg("acl-msg", "IP " + ip + " desbloqueada.", true);
+  } catch (error) { setMsg("acl-msg", error.message, false); }
+  loadBlocks();
+};
+
+window.unlockAccount = async (username) => {
+  try {
+    await api("/api/access/unlock-account?username=" + encodeURIComponent(username),
+      { method: "POST" });
+    setMsg("acl-msg", "Cuenta " + username + " desbloqueada.", true);
+  } catch (error) { setMsg("acl-msg", error.message, false); }
+  loadBlocks();
+};
+
+async function loadActivity() {
+  const params = new URLSearchParams({ limit: "200" });
+  if ($("log-action").value) params.set("action", $("log-action").value);
+  if ($("log-user").value.trim()) params.set("username", $("log-user").value.trim());
+  if ($("log-ip").value.trim()) params.set("ip", $("log-ip").value.trim());
+  if ($("log-failures").checked) params.set("only_failures", "true");
+  $("log-body").innerHTML = '<tr><td colspan="5" class="muted">Cargando…</td></tr>';
+  try {
+    const filas = await api("/api/access/activity?" + params.toString());
+    $("log-body").innerHTML = filas.length
+      ? filas.map((f) => `
+        <tr>
+          <td class="muted">${fmtDate(f.at)}</td>
+          <td>${f.ok ? "" : '<span class="badge fail" style="margin-right:6px">fallo</span>'}${
+            esc(ACTION_LABEL[f.action] || f.action)}</td>
+          <td>${esc(f.username || "—")}</td>
+          <td style="font-family:ui-monospace,monospace">${esc(f.ip || "—")}</td>
+          <td class="muted" style="white-space:normal">${esc(f.detail || "")}</td>
+        </tr>`).join("")
+      : '<tr><td colspan="5" class="muted">Sin actividad que coincida.</td></tr>';
+    $("log-msg").textContent = "";
+  } catch (error) {
+    $("log-body").innerHTML = "";
+    setMsg("log-msg", error.message, false);
+  }
+}
+
+$("btn-log-refresh").addEventListener("click", loadActivity);
+["log-action", "log-failures"].forEach((id) =>
+  $(id).addEventListener("change", loadActivity));
+["log-user", "log-ip"].forEach((id) =>
+  $(id).addEventListener("change", loadActivity));
 
 function initialTab() {
   const fromHash = location.hash.slice(1);

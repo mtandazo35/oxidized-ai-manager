@@ -44,34 +44,34 @@ async def login(api, username, password):
     )
 
 
-async def test_bruteforce_lockout(user_repository, monkeypatch) -> None:
-    from app.auth import _failed_logins
+async def test_bruteforce_lockout(
+    user_repository, access_repository, monkeypatch
+) -> None:
     # Este caso mide el bloqueo *por cuenta*: relajamos el límite por IP para
     # que no sea él el que responda 429 y la prueba siga midiendo lo que dice.
     monkeypatch.setattr("app.middleware.LOGIN_RATE_LIMIT", 100)
-    _failed_logins.clear()
     async with client() as api:
         for _ in range(8):
             await login(api, "admin", "wrong")
         locked = await login(api, "admin", "wrong")
-        # incluso con la clave correcta queda bloqueada mientras dura el lockout
+        # incluso con la clave correcta queda bloqueada mientras dura el bloqueo
         blocked_ok = await login(api, "admin", "admin-test-password")
 
     assert locked.status_code == 429
     assert blocked_ok.status_code == 429
-    _failed_logins.clear()
+    assert access_repository.accounts["admin"]["failures"] >= 8
 
 
-async def test_successful_login_resets_counter(user_repository) -> None:
-    from app.auth import _failed_logins
-    _failed_logins.clear()
+async def test_successful_login_clears_the_lock(
+    user_repository, access_repository
+) -> None:
     async with client() as api:
         for _ in range(3):
             await login(api, "admin", "wrong")
         good = await login(api, "admin", "admin-test-password")
 
     assert good.status_code == 200
-    assert "admin" not in _failed_logins
+    assert "admin" not in access_repository.accounts
 
 
 async def test_oxidized_nodes_receive_decrypted_password(

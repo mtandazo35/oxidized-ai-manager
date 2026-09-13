@@ -107,10 +107,20 @@ async def push_now(app, settings: Settings, remote_url: str) -> None:
         log.warning("git push al remoto falló: %s", detail)
 
 
+async def purge_activity(app, settings: Settings) -> int:
+    """Recorta la bitácora. Sin esto la tabla crece sin límite."""
+    try:
+        return await app.state.activity.purge(settings.activity_retention_days)
+    except Exception:
+        log.warning("No se pudo purgar la bitácora", exc_info=True)
+        return 0
+
+
 async def scheduler_loop(app, settings: Settings) -> None:
     last_run: dict[str, float] = {}
     loop = asyncio.get_running_loop()
     last_push = loop.time()
+    last_purge = loop.time() - 24 * 3600  # que purgue en el primer ciclo
     while True:
         try:
             await asyncio.sleep(60)
@@ -125,6 +135,11 @@ async def scheduler_loop(app, settings: Settings) -> None:
                 if is_due(now - last_push, push_minutes):
                     last_push = now
                     await push_now(app, settings, values["git_remote_url"])
+            if loop.time() - last_purge >= 24 * 3600:
+                last_purge = loop.time()
+                borradas = await purge_activity(app, settings)
+                if borradas:
+                    log.info("Bitácora: %s entradas purgadas", borradas)
         except asyncio.CancelledError:
             raise
         except Exception:

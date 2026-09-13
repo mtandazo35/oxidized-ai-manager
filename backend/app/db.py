@@ -56,6 +56,40 @@ CREATE TABLE IF NOT EXISTS backup_events (
 CREATE INDEX IF NOT EXISTS backup_events_node_idx
     ON backup_events (node, created_at DESC);
 
+-- Bitácora: qué pasó, cuándo, quién y desde dónde.
+CREATE TABLE IF NOT EXISTS activity_log (
+    id BIGSERIAL PRIMARY KEY,
+    at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    username TEXT NOT NULL DEFAULT '',
+    ip TEXT NOT NULL DEFAULT '',
+    action TEXT NOT NULL,
+    target TEXT NOT NULL DEFAULT '',
+    detail TEXT NOT NULL DEFAULT '',
+    ok BOOLEAN NOT NULL DEFAULT TRUE
+);
+
+CREATE INDEX IF NOT EXISTS activity_log_at_idx ON activity_log (at DESC);
+CREATE INDEX IF NOT EXISTS activity_log_action_idx ON activity_log (action, at DESC);
+CREATE INDEX IF NOT EXISTS activity_log_user_idx ON activity_log (username, at DESC);
+
+-- Bloqueos por IP y por cuenta. En base y no en memoria: los de memoria se
+-- borraban en cada reinicio del backend, que es justo lo que provoca un
+-- ataque sostenido.
+CREATE TABLE IF NOT EXISTS ip_blocks (
+    ip TEXT PRIMARY KEY,
+    blocked_until TIMESTAMPTZ NOT NULL,
+    failures INTEGER NOT NULL DEFAULT 0,
+    reason TEXT NOT NULL DEFAULT '',
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS account_locks (
+    username TEXT PRIMARY KEY,
+    locked_until TIMESTAMPTZ NOT NULL,
+    failures INTEGER NOT NULL DEFAULT 0,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL,

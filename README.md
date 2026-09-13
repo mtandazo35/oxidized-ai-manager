@@ -151,6 +151,14 @@ curl -X POST http://127.0.0.1:8000/api/users \
 El filtrado se aplica en la API, endpoint por endpoint, no en el panel.
 Detalles y matriz de permisos en [docs/MULTITENANT.md](docs/MULTITENANT.md).
 
+## Bitácora y control de acceso
+
+En **Ajustes del sistema** (solo administrador): quién hizo qué, cuándo y desde
+qué IP; la lista de redes autorizadas para iniciar sesión; y los bloqueos
+activos por IP y por cuenta, con su botón para levantarlos. Todo persiste en
+PostgreSQL y se purga solo a los 90 días. Detalles en
+[docs/ACTIVITY_LOG.md](docs/ACTIVITY_LOG.md).
+
 ## Actualizar desde el panel
 
 En **Configuración → Versión y actualizaciones** (solo administrador) se
@@ -200,6 +208,7 @@ Las pruebas usan dobles para las dependencias; no necesitan contenedores ni rout
 - [Roadmap](docs/ROADMAP.md)
 - [Fase 4 — Auditoría](docs/PHASE4.md)
 - [Multi-tenant y roles](docs/MULTITENANT.md)
+- [Bitácora y control de acceso](docs/ACTIVITY_LOG.md)
 - [Exposición con Nginx Proxy Manager](docs/PUBLIC_ACCESS.md)
 - [Respaldo y restauración](docs/BACKUP_RESTORE.md)
 - [Actualizaciones desde el panel](docs/UPDATES.md)

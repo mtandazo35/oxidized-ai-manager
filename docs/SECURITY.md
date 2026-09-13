@@ -18,10 +18,20 @@ recomendado del servidor. Lea también `docs/PUBLIC_ACCESS.md`.
 ### Autenticación y sesión
 - Login propio con usuario en PostgreSQL y clave **bcrypt** (nunca en claro).
 - Tokens **JWT HS256** firmados con `APP_SECRET_KEY`, expiración 8 h.
-- **Bloqueo por cuenta**: 8 intentos fallidos en 5 min bloquean el usuario
-  temporalmente. Lo complementa el **rate limit por IP** de la propia
-  aplicación (5/min en `/api/auth/login`): el primero frena la fuerza bruta
-  contra una cuenta, el segundo a un origen que rota nombres de usuario.
+- Tres controles antes de comprobar siquiera la contraseña, en este orden:
+  **lista de IPs permitidas** (desactivada por defecto), **bloqueo de IP** por
+  fallos acumulados y **bloqueo de cuenta** (8 fallos → 15 min). Los dos
+  bloqueos viven en PostgreSQL, no en memoria: los de memoria se borraban en
+  cada reinicio, que es justo lo que provoca un ataque sostenido.
+- Las IPs de confianza (`127.0.0.1` y las de la lista) **nunca se
+  autobloquean**: si no, atacar desde la red de gestión dejaría fuera al
+  operador. Y la API **impide activar la lista sin incluirse uno mismo**.
+- Lo complementa el **rate limit por IP** (5/min en `/api/auth/login`), este sí
+  en memoria porque frena el ritmo de peticiones, no los fallos de credenciales.
+- **Bitácora** de toda petición que cambia algo, con cuenta, IP, acción y
+  resultado; la escribe un middleware para que nada se quede sin anotar por
+  olvido. Las contraseñas nunca se registran, ni en los intentos fallidos.
+  Solo el administrador puede consultarla. Ver `docs/ACTIVITY_LOG.md`.
 - Todos los endpoints de datos exigen token; solo `/`, la página de login y los
   health checks son públicos.
 

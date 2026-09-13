@@ -7,6 +7,7 @@ from fastapi import FastAPI, status
 from fastapi.responses import FileResponse, JSONResponse
 
 from .audit import router as audit_router
+from .access_api import router as access_router
 from .auth import router as auth_router
 from .backups import router as backups_router
 from .config import get_settings
@@ -14,11 +15,14 @@ from .db import create_pool, init_schema
 from .devices import router as devices_router
 from .health import backup_freshness, check_dependencies
 from .middleware import (
+    ActivityLogMiddleware,
     LoginRateLimitMiddleware,
     SecurityHeadersMiddleware,
 )
 from .oxidized_source import router as oxidized_router
 from .repository import (
+    AccessRepository,
+    ActivityRepository,
     BackupEventRepository,
     DeviceRepository,
     SettingsRepository,
@@ -41,6 +45,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     devices = DeviceRepository(pool)
     app.state.devices = devices
     app.state.backup_events = BackupEventRepository(pool)
+    app.state.activity = ActivityRepository(pool)
+    app.state.access = AccessRepository(pool)
     app_settings = SettingsRepository(pool)
     app.state.settings = app_settings
     users = UserRepository(pool)
@@ -78,9 +84,13 @@ app = FastAPI(
 
 # El orden importa: las cabeceras se añaden a *toda* respuesta, incluida la
 # que devuelve el limitador con 429.
+# El orden de registro es inverso al de ejecución: la bitácora se añade
+# primero para que envuelva a las demás y vea el código de estado final.
+app.add_middleware(ActivityLogMiddleware)
 app.add_middleware(LoginRateLimitMiddleware)
 app.add_middleware(SecurityHeadersMiddleware, enable_hsts=settings.app_enable_hsts)
 
+app.include_router(access_router)
 app.include_router(audit_router)
 app.include_router(auth_router)
 app.include_router(backups_router)

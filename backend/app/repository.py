@@ -176,6 +176,189 @@ class DeviceRepository:
         return nodes
 
 
+class ActivityRepository:
+    """Bitácora. Escribir aquí nunca debe tumbar la petición que la origina."""
+
+    def __init__(self, pool: asyncpg.Pool) -> None:
+        self._pool = pool
+
+    async def record(
+        self,
+        action: str,
+        username: str = "",
+        ip: str = "",
+        target: str = "",
+        detail: str = "",
+        ok: bool = True,
+    ) -> None:
+        await self._pool.execute(
+            "INSERT INTO activity_log (action, username, ip, target, detail, ok) "
+            "VALUES ($1, $2, $3, $4, $5, $6)",
+            action[:80],
+            username[:128],
+            ip[:64],
+            target[:190],
+            detail[:500],
+            ok,
+        )
+
+    async def list_entries(
+        self,
+        limit: int = 100,
+        action: str | None = None,
+        username: str | None = None,
+        ip: str | None = None,
+        only_failures: bool = False,
+    ) -> list[dict[str, Any]]:
+        rows = await self._pool.fetch(
+            "SELECT id, at, username, ip, action, target, detail, ok "
+            "FROM activity_log "
+            "WHERE ($2::text IS NULL OR action LIKE $2 || '%') "
+            "AND ($3::text IS NULL OR username = $3) "
+            "AND ($4::text IS NULL OR ip = $4) "
+            "AND ($5 = FALSE OR ok = FALSE) "
+            "ORDER BY at DESC, id DESC LIMIT $1",
+            limit,
+            action,
+            username,
+            ip,
+            only_failures,
+        )
+        return [dict(row) for row in rows]
+
+    async def recent_logins(self, limit: int = 20) -> list[dict[str, Any]]:
+        """Últimos accesos concedidos, uno por cuenta e IP."""
+        rows = await self._pool.fetch(
+            "SELECT DISTINCT ON (username, ip) username, ip, at "
+            "FROM activity_log WHERE action = 'login.ok' "
+            "ORDER BY username, ip, at DESC LIMIT $1",
+            limit,
+        )
+        return [dict(row) for row in rows]
+
+    async def purge(self, days: int) -> int:
+        """Borra lo más viejo que `days`; devuelve cuántas filas se fueron."""
+        result = await self._pool.execute(
+            "DELETE FROM activity_log WHERE at < now() - ($1 || ' days')::interval",
+            str(max(days, 1)),
+        )
+        try:
+            return int(result.split()[-1])
+        except (ValueError, IndexError):
+            return 0
+
+
+class AccessRepository:
+    """Bloqueos por IP y por cuenta, persistentes."""
+
+    def __init__(self, pool: asyncpg.Pool) -> None:
+        self._pool = pool
+
+    # --- IP ---------------------------------------------------------------
+    async def ip_block(self, ip: str) -> dict[str, Any] | None:
+        row = await self._pool.fetchrow(
+            "SELECT ip, blocked_until, failures, reason FROM ip_blocks "
+            "WHERE ip = $1 AND blocked_until > now()",
+            ip,
+        )
+        return dict(row) if row else None
+
+    async def list_ip_blocks(self) -> list[dict[str, Any]]:
+        rows = await self._pool.fetch(
+            "SELECT ip, blocked_until, failures, reason FROM ip_blocks "
+            "WHERE blocked_until > now() ORDER BY blocked_until DESC"
+        )
+        return [dict(row) for row in rows]
+
+    async def register_ip_failure(
+        self, ip: str, window_minutes: int, threshold: int, block_minutes: int
+    ) -> bool:
+        """Suma un fallo y bloquea si se pasa del umbral. Devuelve si bloqueó.
+
+        El contador se reinicia solo cuando pasa la ventana sin fallos: así un
+        goteo lento no acumula durante días hasta bloquear a un despistado.
+        """
+        row = await self._pool.fetchrow(
+            """
+            INSERT INTO ip_blocks (ip, blocked_until, failures, reason)
+            VALUES ($1, now(), 1, 'intentos fallidos')
+            ON CONFLICT (ip) DO UPDATE SET
+                failures = CASE
+                    WHEN ip_blocks.updated_at < now() - ($2 || ' minutes')::interval
+                    THEN 1 ELSE ip_blocks.failures + 1 END,
+                updated_at = now()
+            RETURNING failures
+            """,
+            ip,
+            str(max(window_minutes, 1)),
+        )
+        failures = row["failures"] if row else 1
+        if failures < threshold:
+            return False
+        await self._pool.execute(
+            "UPDATE ip_blocks SET blocked_until = now() + ($2 || ' minutes')::interval, "
+            "reason = $3 WHERE ip = $1",
+            ip,
+            str(max(block_minutes, 1)),
+            f"{failures} intentos fallidos",
+        )
+        return True
+
+    async def clear_ip(self, ip: str) -> bool:
+        result = await self._pool.execute("DELETE FROM ip_blocks WHERE ip = $1", ip)
+        return result == "DELETE 1"
+
+    # --- Cuenta -----------------------------------------------------------
+    async def account_lock(self, username: str) -> dict[str, Any] | None:
+        row = await self._pool.fetchrow(
+            "SELECT username, locked_until, failures FROM account_locks "
+            "WHERE username = $1 AND locked_until > now()",
+            username,
+        )
+        return dict(row) if row else None
+
+    async def list_account_locks(self) -> list[dict[str, Any]]:
+        rows = await self._pool.fetch(
+            "SELECT username, locked_until, failures FROM account_locks "
+            "WHERE locked_until > now() ORDER BY locked_until DESC"
+        )
+        return [dict(row) for row in rows]
+
+    async def register_account_failure(
+        self, username: str, window_minutes: int, threshold: int, lock_minutes: int
+    ) -> bool:
+        row = await self._pool.fetchrow(
+            """
+            INSERT INTO account_locks (username, locked_until, failures)
+            VALUES ($1, now(), 1)
+            ON CONFLICT (username) DO UPDATE SET
+                failures = CASE
+                    WHEN account_locks.updated_at < now() - ($2 || ' minutes')::interval
+                    THEN 1 ELSE account_locks.failures + 1 END,
+                updated_at = now()
+            RETURNING failures
+            """,
+            username,
+            str(max(window_minutes, 1)),
+        )
+        failures = row["failures"] if row else 1
+        if failures < threshold:
+            return False
+        await self._pool.execute(
+            "UPDATE account_locks SET locked_until = now() + ($2 || ' minutes')::interval "
+            "WHERE username = $1",
+            username,
+            str(max(lock_minutes, 1)),
+        )
+        return True
+
+    async def clear_account(self, username: str) -> bool:
+        result = await self._pool.execute(
+            "DELETE FROM account_locks WHERE username = $1", username
+        )
+        return result == "DELETE 1"
+
+
 SETTINGS_DEFAULTS = {
     "backup_interval_minutes": "60",
     "git_remote_enabled": "false",
@@ -184,6 +367,10 @@ SETTINGS_DEFAULTS = {
     "last_push_ok": "",
     "last_push_at": "",
     "last_push_detail": "",
+    # Control de acceso por IP. La lista vacía equivale a "no filtrar": ver
+    # `access.is_allowed`.
+    "login_allowlist_enabled": "false",
+    "login_allowlist": "",
 }
 
 

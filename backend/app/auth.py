@@ -1,9 +1,9 @@
-import time
 from dataclasses import dataclass
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 
+from .access import is_allowed, is_never_blocked
 from .config import get_settings
 from .schemas import ChangePasswordRequest, TokenResponse
 from .security import (
@@ -18,25 +18,14 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
-# Bloqueo de fuerza bruta por cuenta (complementa el rate-limit por IP de nginx).
-LOCKOUT_THRESHOLD = 8
-LOCKOUT_SECONDS = 300
-_failed_logins: dict[str, list[float]] = {}
 
+def client_ip(request: Request) -> str:
+    """IP de origen ya resuelta por uvicorn a partir de X-Forwarded-For.
 
-def _is_locked(username: str) -> bool:
-    attempts = _failed_logins.get(username, [])
-    recent = [t for t in attempts if time.monotonic() - t < LOCKOUT_SECONDS]
-    _failed_logins[username] = recent
-    return len(recent) >= LOCKOUT_THRESHOLD
-
-
-def _record_failure(username: str) -> None:
-    _failed_logins.setdefault(username, []).append(time.monotonic())
-
-
-def _reset_failures(username: str) -> None:
-    _failed_logins.pop(username, None)
+    Solo se fía de esa cabecera si el par TCP está en FORWARDED_ALLOW_IPS, así
+    que aquí no hay que volver a decidir en quién confiar.
+    """
+    return request.client.host if request.client else ""
 
 
 @dataclass(frozen=True)
@@ -121,21 +110,75 @@ async def require_admin(user: CurrentUser = Depends(current_user)) -> CurrentUse
 async def login(
     request: Request, form: OAuth2PasswordRequestForm = Depends()
 ) -> dict:
+    """Tres filtros antes de mirar siquiera la contraseña: la IP debe estar
+    permitida, no puede estar bloqueada, y la cuenta tampoco."""
     settings = get_settings()
-    if _is_locked(form.username):
+    state = request.app.state
+    ip = client_ip(request)
+    values = await state.settings.get_all()
+    allowlist = values.get("login_allowlist", "")
+
+    async def anotar(action: str, detail: str = "", ok: bool = False) -> None:
+        await state.activity.record(
+            action=action, username=form.username, ip=ip, detail=detail, ok=ok
+        )
+
+    # 1. Lista de IPs permitidas.
+    if not is_allowed(allowlist, values.get("login_allowlist_enabled") == "true", ip):
+        await anotar("login.denied", "IP fuera de la lista de permitidas")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Su dirección no está autorizada para acceder a este panel.",
+        )
+
+    # 2. IP bloqueada por acumular fallos.
+    if await state.access.ip_block(ip):
+        await anotar("login.blocked", "IP bloqueada por intentos fallidos")
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Su dirección está bloqueada temporalmente por intentos fallidos.",
+        )
+
+    # 3. Cuenta bloqueada.
+    if await state.access.account_lock(form.username):
+        await anotar("login.locked", "cuenta bloqueada por intentos fallidos")
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Cuenta bloqueada temporalmente por intentos fallidos. Espere unos minutos.",
         )
-    user = await request.app.state.users.get_by_username(form.username)
+
+    user = await state.users.get_by_username(form.username)
     if user is None or not verify_password(form.password, user["password_hash"]):
-        _record_failure(form.username)
+        cuenta_bloqueada = await state.access.register_account_failure(
+            form.username,
+            settings.login_failure_window_minutes,
+            settings.account_lock_threshold,
+            settings.account_lock_minutes,
+        )
+        ip_bloqueada = False
+        # Una IP de confianza nunca se autobloquea: si no, cualquiera podría
+        # dejar fuera al operador atacando desde su propia red de gestión.
+        if ip and not is_never_blocked(ip, allowlist):
+            ip_bloqueada = await state.access.register_ip_failure(
+                ip,
+                settings.login_failure_window_minutes,
+                settings.ip_block_threshold,
+                settings.ip_block_minutes,
+            )
+        detalle = "usuario o clave incorrectos"
+        if cuenta_bloqueada:
+            detalle += "; cuenta bloqueada"
+        if ip_bloqueada:
+            detalle += "; IP bloqueada"
+        await anotar("login.fail", detalle)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password.",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    _reset_failures(form.username)
+
+    await state.access.clear_account(form.username)
+    await anotar("login.ok", f"rol {user.get('role', '?')}", ok=True)
     token = create_access_token(
         user["username"],
         settings.app_secret_key,
@@ -174,4 +217,10 @@ async def change_password(
         )
     await request.app.state.users.update_password(
         user.username, hash_password(payload.new_password)
+    )
+    await request.app.state.activity.record(
+        action="password.change",
+        username=user.username,
+        ip=client_ip(request),
+        ok=True,
     )

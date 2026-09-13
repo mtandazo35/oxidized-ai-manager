@@ -60,14 +60,14 @@ read-only y sin LLM. Ver `docs/PHASE4.md`.
 - agentes
 - alertas
 
-## Fase 5.5 — Multi-tenant (parcial)
+## Fase 5.5 — Multi-tenant ✅
 - roles: administrador, operador, auditor, lector ✅
 - cada cliente ve únicamente los equipos de su empresa (`group_name`) ✅
 - aislamiento verificado por pruebas ✅ (28 casos: inventario, respaldos,
   diffs, auditoría, respaldo masivo, ajustes y cuentas)
 - gestión de cuentas en el panel ✅
-- bitácora inmutable: quién dio de alta, modificó o borró un equipo, pidió un
-  respaldo o cambió el Git remoto — **pendiente**
+- bitácora: quién dio de alta, modificó o borró un equipo, pidió un respaldo o
+  cambió el Git remoto ✅ (más accesos con IP y bloqueos; `docs/ACTIVITY_LOG.md`)
 
 Criterio: un usuario de cliente entra al panel y solo ve sus propios respaldos,
 sin poder enumerar los de nadie más. **Cumplido**; ver `docs/MULTITENANT.md`.
