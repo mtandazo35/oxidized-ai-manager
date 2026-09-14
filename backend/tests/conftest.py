@@ -434,6 +434,24 @@ def anyio_backend() -> str:
 
 
 @pytest.fixture(autouse=True)
+def no_network_backups(monkeypatch):
+    """Evita que el primer respaldo salga a la red durante las pruebas.
+
+    Al dar de alta un equipo, la API encola su primer respaldo en segundo
+    plano. Sin este doble, cada alta intentaba contactar con Oxidized de
+    verdad y se comía el tiempo de espera: la batería pasó de 55 s a 226 s.
+    Devuelve la lista de nodos encolados para poder comprobarlo.
+    """
+    encolados: list[str] = []
+
+    async def fake_backup_new_nodes(oxidized_url: str, names: list[str]) -> None:
+        encolados.extend(names)
+
+    monkeypatch.setattr("app.devices.backup_new_nodes", fake_backup_new_nodes)
+    return encolados
+
+
+@pytest.fixture(autouse=True)
 def reset_login_throttles():
     """Limpia el freno de peticiones por IP entre pruebas.
 

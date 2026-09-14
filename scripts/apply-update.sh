@@ -90,7 +90,9 @@ $COMPOSE up -d --build </dev/null >/dev/null 2>&1 \
 
 # La configuración de Oxidized vive en su volumen: si cambió en el repositorio,
 # oxidized-init la re-siembra pero el proceso ya arrancado sigue con la vieja.
-$COMPOSE restart oxidized </dev/null >/dev/null 2>&1 || true
+# Se RECREA en lugar de reiniciarse: un `restart` conserva el /tmp del
+# contenedor, y con él el PID viejo que hace que Oxidized se niegue a arrancar.
+$COMPOSE up -d --force-recreate oxidized </dev/null >/dev/null 2>&1 || true
 
 # 4. Comprobar que quedó vivo.
 for _ in $(seq 1 30); do

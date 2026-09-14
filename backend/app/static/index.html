@@ -163,6 +163,40 @@
     margin: 3px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
   .finding .rec { font-size: .82rem; color: var(--ink-muted); margin: 6px 0 0; }
   #findings-view { max-height: 56vh; overflow-y: auto; }
+  .user-btn { display: flex; align-items: center; gap: 8px; background: transparent;
+    color: var(--ink); border: 1px solid transparent; border-radius: 999px;
+    padding: 4px 10px 4px 4px; font-weight: 600; }
+  .user-btn:hover { background: var(--surface-2); border-color: var(--border); }
+  .avatar { display: inline-grid; place-items: center; width: 30px; height: 30px;
+    border-radius: 50%; font-size: .78rem; font-weight: 700; color: #fff;
+    background: linear-gradient(135deg, #2563eb, #0ea5e9); letter-spacing: .5px; }
+  .user-btn .caret { color: var(--ink-muted); font-size: .7rem; }
+  .menu-list.user { min-width: 210px; padding: 6px; }
+  .menu-list.user button { display: flex; align-items: center; gap: 10px;
+    padding: 9px 10px; border-radius: 6px; font-size: .88rem; }
+  .menu-list.user button svg { width: 16px; height: 16px; flex: none;
+    stroke: var(--ink-muted); fill: none; stroke-width: 1.8;
+    stroke-linecap: round; stroke-linejoin: round; }
+  .menu-list.user button:hover svg { stroke: var(--accent-hover); }
+  .menu-foot { border-top: 1px solid var(--border); margin-top: 6px;
+    padding: 8px 10px 2px; font-size: .78rem; }
+  .account-row { display: flex; justify-content: space-between; gap: 16px;
+    padding: 8px 0; border-bottom: 1px solid var(--border); font-size: .9rem; }
+  .account-row:last-child { border-bottom: 0; }
+  .account-row span:first-child { color: var(--ink-muted); }
+  .hub { display: flex; flex-wrap: wrap; gap: 18px; padding: 8px 0 4px; }
+  .hub-item { display: flex; flex-direction: column; align-items: center; gap: 8px;
+    width: 116px; background: transparent; border: 0; padding: 6px; color: var(--ink);
+    font-size: .8rem; line-height: 1.25; text-align: center; cursor: pointer; }
+  .hub-item .disc { display: grid; place-items: center; width: 84px; height: 84px;
+    border-radius: 50%; background: linear-gradient(135deg, #2563eb, #0ea5e9);
+    box-shadow: 0 6px 18px -8px rgba(37, 99, 235, .65); transition: transform .12s; }
+  .hub-item:hover { background: transparent; }
+  .hub-item:hover .disc { transform: translateY(-2px) scale(1.04); }
+  .hub-item svg { width: 34px; height: 34px; stroke: #fff; fill: none;
+    stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+  .hub-item .badge { margin-top: 2px; }
+  .hub-back { display: inline-flex; align-items: center; gap: 6px; margin-bottom: 4px; }
   nav.tabs { display: flex; gap: 4px; padding: 0 16px; background: var(--surface);
     border-bottom: 1px solid var(--border); }
   nav.tabs button { background: transparent; color: var(--ink-muted); border-radius: 0;
@@ -191,11 +225,25 @@
     <div class="bar-right">
       <button class="ghost" id="btn-reload">Recargar Oxidized</button>
       <div class="menu">
-        <span class="badge off" id="user-role" hidden></span>
-        <button class="ghost" id="btn-user">admin ▾</button>
-        <div class="menu-list" id="user-menu" hidden>
-          <button id="btn-open-pass">Cambiar clave</button>
-          <button id="btn-logout">Salir</button>
+        <button class="user-btn" id="btn-user" title="Su cuenta">
+          <span class="avatar" id="user-avatar">·</span>
+          <span id="user-name">—</span>
+          <span class="caret">▾</span>
+        </button>
+        <div class="menu-list user" id="user-menu" hidden>
+          <button id="btn-account">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6 8-6s8 2 8 6"/></svg>
+            Mi cuenta
+          </button>
+          <button id="btn-open-pass">
+            <svg viewBox="0 0 24 24"><circle cx="8" cy="12" r="3.2"/><path d="M11 12h10M17 12v3M20 12v2"/></svg>
+            Cambiar contraseña
+          </button>
+          <button id="btn-logout">
+            <svg viewBox="0 0 24 24"><path d="M12 3v9"/><path d="M6.5 6.5a8 8 0 1 0 11 0"/></svg>
+            Cerrar sesión
+          </button>
+          <div class="menu-foot muted" id="session-left"></div>
         </div>
       </div>
     </div>
@@ -380,6 +428,34 @@
     </div>
 
     <div id="tab-system" hidden>
+    <div id="hub-home">
+      <h2>Ajustes del sistema</h2>
+      <div class="hub">
+        <button type="button" class="hub-item" data-seccion="version">
+          <span class="disc"><svg viewBox="0 0 24 24"><path d="M12 3v10"/><path d="m8 9 4 4 4-4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg></span>
+          Versión y<br>actualizaciones
+        </button>
+        <button type="button" class="hub-item" data-seccion="seguridad">
+          <span class="disc"><svg viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.4-3 8.3-7 10-4-1.7-7-5.6-7-10V6z"/><path d="M9.5 12l1.8 1.8 3.4-3.6"/></svg></span>
+          Seguridad<br>de acceso
+        </button>
+        <button type="button" class="hub-item" data-seccion="actividad">
+          <span class="disc"><svg viewBox="0 0 24 24"><path d="M5 5h14"/><path d="M5 10h14"/><path d="M5 15h9"/><path d="M5 20h9"/></svg></span>
+          Actividad
+        </button>
+        <button type="button" class="hub-item" data-ir="config">
+          <span class="disc"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9 17 7M7 17l-2.1 2.1"/></svg></span>
+          Respaldos<br>programados
+        </button>
+        <button type="button" class="hub-item" data-ir="users">
+          <span class="disc"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M2.5 20c0-3.6 3-5.6 6.5-5.6s6.5 2 6.5 5.6"/><path d="M17 11.5a2.6 2.6 0 1 0 0-5.2"/><path d="M18.5 20c0-2.2-.7-3.8-2-4.8"/></svg></span>
+          Cuentas<br>de acceso
+        </button>
+      </div>
+    </div>
+
+    <div class="hub-seccion" id="sec-version" hidden>
+      <button type="button" class="ghost hub-back" data-volver="1">← Ajustes del sistema</button>
     <h2>Versión y actualizaciones</h2>
       <div class="card">
         <div style="display:flex;gap:16px;align-items:baseline;flex-wrap:wrap">
@@ -406,6 +482,10 @@
           reinicia solo y basta con recargar la página.
         </p>
       </div>
+    </div>
+
+    <div class="hub-seccion" id="sec-seguridad" hidden>
+      <button type="button" class="ghost hub-back" data-volver="1">← Ajustes del sistema</button>
     <h2>Seguridad de acceso</h2>
     <div class="card">
       <div class="field" style="margin-bottom:8px">
@@ -428,6 +508,10 @@
       </table>
     </div>
 
+    </div>
+
+    <div class="hub-seccion" id="sec-actividad" hidden>
+      <button type="button" class="ghost hub-back" data-volver="1">← Ajustes del sistema</button>
     <h2>Actividad</h2>
     <div class="card">
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
@@ -456,7 +540,7 @@
         </table>
       </div>
     </div>
-
+    </div>
     </div>
 
   </main>
@@ -471,33 +555,6 @@
     <div class="version-list" id="version-list"></div>
     <p class="msg" id="changes-msg"></p>
     <pre class="diff" id="changes-view"></pre>
-  </div>
-</div>
-
-<div class="overlay" id="pppoe-overlay" hidden>
-  <div class="card wide">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-      <h1 style="font-size:1.1rem" id="pppoe-title">Usuarios PPPoE</h1>
-      <div style="display:flex;gap:8px">
-        <button type="button" class="ghost" id="btn-pppoe-csv">⬇ CSV</button>
-        <button type="button" class="ghost" id="btn-close-pppoe">Cerrar</button>
-      </div>
-    </div>
-    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
-      <input id="pppoe-filter" type="search" placeholder="🔍 Buscar usuario…"
-        style="width:220px;padding:6px 10px;font-size:.85rem">
-      <label class="field" style="font-size:.85rem">
-        <input type="checkbox" id="pppoe-show"> Mostrar claves
-      </label>
-      <span id="pppoe-count" class="muted"></span>
-    </div>
-    <p class="msg" id="pppoe-msg"></p>
-    <div style="max-height:52vh;overflow-y:auto">
-      <table>
-        <thead><tr><th>Usuario</th><th>Clave</th><th>Perfil</th><th>IP</th><th>Comentario</th><th>Estado</th></tr></thead>
-        <tbody id="pppoe-body"></tbody>
-      </table>
-    </div>
   </div>
 </div>
 
@@ -597,6 +654,23 @@
     </div>
     <p class="msg" id="edit-msg"></p>
   </form>
+</div>
+
+<div class="overlay" id="account-overlay" hidden>
+  <div class="card">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
+      <span class="avatar" id="account-avatar" style="width:44px;height:44px;font-size:1rem">·</span>
+      <div>
+        <h1 style="font-size:1.05rem" id="account-name">—</h1>
+        <span class="muted" id="account-role">—</span>
+      </div>
+    </div>
+    <div class="account-row"><span>Empresa</span><span id="account-group">—</span></div>
+    <div class="account-row"><span>Puede modificar</span><span id="account-write">—</span></div>
+    <div class="account-row"><span>Ve la auditoría</span><span id="account-audit">—</span></div>
+    <div class="account-row"><span>La sesión caduca</span><span id="account-expiry">—</span></div>
+    <button type="button" id="btn-close-account" style="width:100%;margin-top:14px">Cerrar</button>
+  </div>
 </div>
 
 <div class="overlay" id="pass-overlay" hidden>
@@ -814,7 +888,6 @@ function renderDevices() {
         <td>${esc(d.username)}</td>
         <td><span class="badge ${d.enabled ? "ok" : "off"}">${d.enabled ? "activo" : "pausado"}</span></td>
         <td style="text-align:right">${perms.can_write ? `
-          <button class="ghost mini" onclick="showPppoe('${esc(d.name)}')" title="Usuarios PPPoE del último respaldo">PPPoE</button>
           <button class="ghost mini" onclick="backupNow(${d.id})">Respaldar</button>
           <button class="ghost mini" onclick="openEdit(${d.id})">Editar</button>
           <button class="ghost mini" onclick="toggleDevice(${d.id}, ${!d.enabled})">${d.enabled ? "Pausar" : "Activar"}</button>
@@ -1361,10 +1434,11 @@ function applyPermissions(me) {
     can_audit: !!me.can_audit,
     is_admin: !!me.is_admin,
   };
-  const role = $("user-role");
-  role.textContent = (ROLE_LABEL[me.role] || me.role) +
+  currentUser = me;
+  $("user-name").textContent = me.username;
+  $("user-avatar").textContent = initials(me.username);
+  $("btn-user").title = (ROLE_LABEL[me.role] || me.role) +
     (me.group_name ? " · " + me.group_name : "");
-  role.hidden = false;
   $("tab-btn-audit").hidden = !perms.can_audit;
   $("tab-btn-import").hidden = !perms.can_write;
   $("tab-btn-config").hidden = !perms.is_admin;
@@ -1390,7 +1464,7 @@ function switchTab(tab) {
   });
   if (location.hash !== "#" + tab) history.replaceState(null, "", "#" + tab);
   if (tab === "config") { loadSettings(); loadBulkRun(); }
-  if (tab === "system") { loadVersion(); loadPolicy(); loadBlocks(); loadActivity(); }
+  if (tab === "system") hubMostrar(null);
   if (tab === "audit") loadAudit();
   if (tab === "users") { loadUsers(); loadRoleMatrix(); }
 }
@@ -1939,87 +2013,92 @@ $("btn-log-refresh").addEventListener("click", loadActivity);
   });
 });
 
-// --- Credenciales PPPoE del último respaldo ------------------------------
+// --- Identidad de la sesión ----------------------------------------------
 
-let pppoeData = null;
-let pppoeNode = "";
+let currentUser = null;
 
-function renderPppoe() {
-  if (!pppoeData) return;
-  const query = $("pppoe-filter").value.trim().toLowerCase();
-  const verClaves = $("pppoe-show").checked;
-  const filas = pppoeData.secrets.filter((s) =>
-    !query || [s.user, s.comment, s.profile, s.remote_address]
-      .some((v) => (v || "").toLowerCase().includes(query)));
-  $("pppoe-body").innerHTML = filas.length
-    ? filas.map((s) => `
-      <tr>
-        <td style="font-family:ui-monospace,monospace">${esc(s.user)}</td>
-        <td style="font-family:ui-monospace,monospace">${
-          s.password
-            ? (verClaves ? esc(s.password) : "••••••••")
-            : '<span class="muted">(sin clave en el respaldo)</span>'}</td>
-        <td class="muted">${esc(s.profile || "—")}</td>
-        <td class="muted">${esc(s.remote_address || "—")}</td>
-        <td class="muted" style="white-space:normal">${esc(s.comment || "")}</td>
-        <td><span class="badge ${s.enabled ? "ok" : "off"}">${
-          s.enabled ? "activo" : "deshabilitado"}</span></td>
-      </tr>`).join("")
-    : '<tr><td colspan="6" class="muted">Sin usuarios que coincidan.</td></tr>';
-  $("pppoe-count").textContent =
-    `${filas.length} de ${pppoeData.total} usuarios` +
-    (pppoeData.clients.length ? ` · ${pppoeData.clients.length} conexión(es) pppoe-client` : "");
+function initials(nombre) {
+  const partes = (nombre || "").split(/[\s._@-]+/).filter(Boolean);
+  if (!partes.length) return "·";
+  const dos = partes.length > 1
+    ? partes[0][0] + partes[1][0]
+    : partes[0].slice(0, 2);
+  return dos.toUpperCase();
 }
 
-window.showPppoe = async (node) => {
-  pppoeNode = node;
-  pppoeData = null;
-  $("pppoe-title").textContent = "Usuarios PPPoE de " + node;
-  $("pppoe-body").innerHTML = '<tr><td colspan="6" class="muted">Cargando…</td></tr>';
-  $("pppoe-msg").textContent = "";
-  $("pppoe-filter").value = "";
-  $("pppoe-show").checked = false;
-  $("pppoe-count").textContent = "";
-  $("pppoe-overlay").hidden = false;
+// La caducidad se lee del propio token: es un JWT y lleva su `exp`. No hace
+// falta preguntarle al servidor.
+function sessionExpiry() {
+  if (!token) return null;
   try {
-    pppoeData = await api(`/api/backups/pppoe?node=${encodeURIComponent(node)}`);
-    if (pppoeData.censored) {
-      setMsg("pppoe-msg",
-        "El respaldo trae los usuarios pero sin claves: a la cuenta de respaldo del " +
-        "MikroTik le falta la policy 'sensitive'. Añádala y vuelva a respaldar.", false);
-    } else if (!pppoeData.total) {
-      setMsg("pppoe-msg", "Este equipo no tiene usuarios PPPoE configurados.", true);
-    }
-    renderPppoe();
-  } catch (error) {
-    $("pppoe-body").innerHTML = "";
-    setMsg("pppoe-msg", error.message, false);
-  }
-};
+    const base = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+    const carga = JSON.parse(atob(base + "===".slice((base.length + 3) % 4)));
+    return carga.exp ? new Date(carga.exp * 1000) : null;
+  } catch (e) { return null; }
+}
 
-$("pppoe-filter").addEventListener("input", renderPppoe);
-$("pppoe-show").addEventListener("change", renderPppoe);
-$("btn-close-pppoe").addEventListener("click", () => {
-  $("pppoe-overlay").hidden = true;
-  pppoeData = null;   // no dejar las claves en memoria más de lo necesario
+function renderSessionLeft() {
+  const fin = sessionExpiry();
+  const destino = $("session-left");
+  if (!fin) { destino.textContent = ""; return; }
+  const restan = Math.floor((fin - Date.now()) / 1000);
+  if (restan <= 0) { logout(); return; }
+  const h = Math.floor(restan / 3600);
+  const m = Math.floor((restan % 3600) / 60);
+  const s = restan % 60;
+  const reloj = h
+    ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`
+    : `${m}:${String(s).padStart(2, "0")}`;
+  destino.textContent = "La sesión se cierra en " + reloj;
+}
+
+setInterval(renderSessionLeft, 1000);
+
+$("btn-account").addEventListener("click", () => {
+  $("user-menu").hidden = true;
+  const me = currentUser || {};
+  $("account-name").textContent = me.username || "—";
+  $("account-avatar").textContent = initials(me.username);
+  $("account-role").textContent = ROLE_LABEL[me.role] || me.role || "—";
+  $("account-group").textContent = me.group_name || "todas las empresas";
+  $("account-write").textContent = me.can_write ? "Sí" : "No";
+  $("account-audit").textContent = me.can_audit ? "Sí" : "No";
+  const fin = sessionExpiry();
+  $("account-expiry").textContent = fin ? fin.toLocaleString() : "—";
+  $("account-overlay").hidden = false;
 });
 
-$("btn-pppoe-csv").addEventListener("click", () => {
-  if (!pppoeData || !pppoeData.secrets.length) return;
-  const escapaCsv = (v) => `"${String(v || "").replace(/"/g, '""')}"`;
-  const csv = [
-    "usuario,clave,perfil,ip,comentario,estado",
-    ...pppoeData.secrets.map((s) => [
-      s.user, s.password, s.profile, s.remote_address, s.comment,
-      s.enabled ? "activo" : "deshabilitado",
-    ].map(escapaCsv).join(",")),
-  ].join("\n");
-  const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" });
-  const link = document.createElement("a");
-  link.href = URL.createObjectURL(blob);
-  link.download = "pppoe-" + pppoeNode + ".csv";
-  link.click();
-  URL.revokeObjectURL(link.href);
+$("btn-close-account").addEventListener("click", () => {
+  $("account-overlay").hidden = true;
+});
+
+// --- Portada de Ajustes del sistema --------------------------------------
+
+// Cada círculo abre su apartado y esconde los demás; así la pestaña no es un
+// muro de tarjetas y cada cosa se consulta cuando hace falta.
+const HUB_CARGA = {
+  version: () => loadVersion(),
+  seguridad: () => { loadPolicy(); loadBlocks(); },
+  actividad: () => loadActivity(),
+};
+
+function hubMostrar(seccion) {
+  $("hub-home").hidden = !!seccion;
+  document.querySelectorAll(".hub-seccion").forEach((bloque) => {
+    bloque.hidden = bloque.id !== "sec-" + seccion;
+  });
+  if (seccion && HUB_CARGA[seccion]) HUB_CARGA[seccion]();
+}
+
+document.querySelectorAll(".hub-item").forEach((boton) => {
+  boton.addEventListener("click", () => {
+    if (boton.dataset.ir) { switchTab(boton.dataset.ir); return; }
+    hubMostrar(boton.dataset.seccion);
+  });
+});
+
+document.querySelectorAll("[data-volver]").forEach((boton) => {
+  boton.addEventListener("click", () => hubMostrar(null));
 });
 
 function initialTab() {
@@ -2036,8 +2115,8 @@ $("tab-btn-config").addEventListener("click", () => switchTab("config"));
 async function enterApp() {
   try {
     const me = await api("/api/auth/me");
-    $("btn-user").textContent = me.username + " ▾";
     applyPermissions(me);
+    renderSessionLeft();
     show("app");
     switchTab(initialTab());
     refresh();

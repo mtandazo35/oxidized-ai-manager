@@ -29,6 +29,39 @@ async def trigger_node_backup(oxidized_url: str, node: str) -> None:
 
 
 
+async def reload_nodes(oxidized_url: str) -> None:
+    """Hace que Oxidized relea el inventario del backend."""
+    async with httpx.AsyncClient(timeout=10) as client:
+        response = await client.get(f"{oxidized_url.rstrip('/')}/reload")
+        response.raise_for_status()
+
+
+async def backup_new_nodes(oxidized_url: str, names: list[str]) -> None:
+    """Encola el primer respaldo de equipos recién dados de alta.
+
+    Oxidized tiene su `interval` anulado (lo programa el backend), así que sin
+    esto un equipo nuevo esperaría un ciclo entero —hasta una hora— antes de
+    respaldarse por primera vez.
+
+    Primero hay que recargar el inventario: Oxidized lee los nodos por HTTP y
+    hasta que no lo hace, `/node/next/<nombre>` no conoce el equipo. Todo es
+    "mejor esfuerzo": si Oxidized no responde, el alta no debe fallar y el
+    ciclo programado acabará recogiéndolo igual.
+    """
+    if not names:
+        return
+    try:
+        await reload_nodes(oxidized_url)
+    except httpx.HTTPError as error:
+        log.warning("No se pudo recargar el inventario en Oxidized: %s", error)
+        return
+    for name in names:
+        try:
+            await trigger_node_backup(oxidized_url, name)
+        except httpx.HTTPError as error:
+            log.warning("No se pudo encolar el primer respaldo de %s: %s", name, error)
+
+
 async def push_backups(repo_path: str, remote_url: str) -> tuple[bool, str]:
     process = await asyncio.create_subprocess_exec(
         "git",

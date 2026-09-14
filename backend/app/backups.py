@@ -1,9 +1,8 @@
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
-from .auth import CurrentUser, client_ip, current_user, require_write
+from .auth import CurrentUser, current_user, require_write
 from .config import get_settings
-from .credentials import extract_pppoe
 from .gitrepo import (
     GitRepoError,
     NotFoundInRepoError,
@@ -175,46 +174,6 @@ async def backup_diff(
             detail=f"No se pudo leer el repositorio de respaldos: {error}",
         )
     return {"node": node, "commit": commit, "diff": diff}
-
-
-@router.get("/pppoe")
-async def backup_pppoe(
-    request: Request,
-    node: str = Query(pattern=DEVICE_NAME_PATTERN),
-    commit: str = Query(default="HEAD", pattern=r"^(?:[0-9a-f]{6,40}|HEAD)$"),
-    user: CurrentUser = Depends(require_write),
-) -> dict:
-    """Usuarios y claves PPPoE del respaldo de ese equipo.
-
-    Se limita a los roles que pueden operar (`admin` y `operador`): son
-    credenciales de clientes finales, no información de consulta general. Cada
-    consulta queda anotada en la bitácora, porque leer contraseñas de clientes
-    es exactamente el tipo de acción que hay que poder auditar después.
-    """
-    await _authorize_node(request, user, node)
-    settings = get_settings()
-    try:
-        config_text = await show_config(settings.oxidized_backup_repo, node, commit)
-    except NotFoundInRepoError:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Todavía no hay respaldo de ese equipo.",
-        )
-    except GitRepoError as error:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"No se pudo leer el repositorio de respaldos: {error}",
-        )
-    resultado = extract_pppoe(config_text)
-    await request.app.state.activity.record(
-        action="credenciales.pppoe",
-        username=user.username,
-        ip=client_ip(request),
-        target=node,
-        detail=f"{resultado['total']} usuarios consultados",
-        ok=True,
-    )
-    return {"node": node, "commit": commit, **resultado}
 
 
 @router.get("/config")

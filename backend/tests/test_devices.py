@@ -223,3 +223,56 @@ async def test_rename_is_normalized_too(auth_headers) -> None:
         )
 
     assert response.json()["name"] == "Router-Dos"
+
+
+# --- Primer respaldo al dar de alta ---------------------------------------
+
+
+async def test_a_new_device_is_backed_up_right_away(
+    auth_headers, no_network_backups
+) -> None:
+    """No tiene sentido esperar al ciclo programado para el primer respaldo."""
+    async with client(auth_headers) as api:
+        await api.post(
+            "/api/devices", json={"name": "rb-nuevo", "address": "192.0.2.50"}
+        )
+
+    assert no_network_backups == ["rb-nuevo"]
+
+
+async def test_a_paused_device_is_not_backed_up(
+    auth_headers, no_network_backups
+) -> None:
+    async with client(auth_headers) as api:
+        await api.post(
+            "/api/devices",
+            json={"name": "rb-pausado", "address": "192.0.2.51", "enabled": False},
+        )
+
+    assert no_network_backups == []
+
+
+async def test_a_duplicate_does_not_trigger_a_backup(
+    auth_headers, no_network_backups
+) -> None:
+    async with client(auth_headers) as api:
+        await api.post(
+            "/api/devices", json={"name": "rb-uno", "address": "192.0.2.52"}
+        )
+        await api.post(
+            "/api/devices", json={"name": "rb-uno", "address": "192.0.2.53"}
+        )
+
+    assert no_network_backups == ["rb-uno"]
+
+
+async def test_bulk_import_backs_up_everything_it_created(
+    auth_headers, no_network_backups
+) -> None:
+    async with client(auth_headers) as api:
+        await api.post(
+            "/api/devices/import",
+            json={"text": "rb-a,192.0.2.60\nrb-b,192.0.2.61\nlinea mala"},
+        )
+
+    assert no_network_backups == ["rb-a", "rb-b"]

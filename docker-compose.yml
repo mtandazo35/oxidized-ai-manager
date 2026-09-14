@@ -76,6 +76,11 @@ services:
       - "${OXIDIZED_BIND_ADDRESS:-127.0.0.1}:${OXIDIZED_PORT:-8888}:8888"
     volumes:
       - oxidized_data:/home/oxidized/.config/oxidized
+    # /tmp en memoria: Oxidized deja ahí su archivo PID y, si sobrevive a un
+    # reinicio del contenedor, se niega a arrancar con "A server is already
+    # running" y entra en bucle. Con tmpfs cada arranque parte limpio.
+    tmpfs:
+      - /tmp:size=8m,mode=1777
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8888/nodes.json"]
       interval: 15s

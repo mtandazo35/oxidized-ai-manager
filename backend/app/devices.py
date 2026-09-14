@@ -1,7 +1,16 @@
 import io
 
 import httpx
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    HTTPException,
+    Request,
+    UploadFile,
+    status,
+)
 from fastapi.responses import Response
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font
@@ -10,7 +19,7 @@ from pydantic import ValidationError
 from .auth import CurrentUser, current_user, require_write
 from .config import get_settings
 from .repository import DeviceRepository, DuplicateDeviceError
-from .scheduler import trigger_node_backup
+from .scheduler import backup_new_nodes, trigger_node_backup
 from .schemas import (
     DeviceCreate,
     DeviceImportRequest,
@@ -52,17 +61,27 @@ async def list_devices(
 
 @router.post("", response_model=DeviceOut, status_code=status.HTTP_201_CREATED)
 async def create_device(
-    request: Request, payload: DeviceCreate, user: CurrentUser = Depends(require_write)
+    request: Request,
+    payload: DeviceCreate,
+    background: BackgroundTasks,
+    user: CurrentUser = Depends(require_write),
 ) -> dict:
     data = payload.model_dump()
     data["group_name"] = _check_group(user, data.get("group_name", ""))
     try:
-        return await _repository(request).create_device(data)
+        device = await _repository(request).create_device(data)
     except DuplicateDeviceError:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="A device with this name already exists.",
         )
+    # El primer respaldo se encola en segundo plano: la respuesta no debe
+    # esperar a que Oxidized recargue el inventario y contacte al equipo.
+    if device["enabled"]:
+        background.add_task(
+            backup_new_nodes, get_settings().oxidized_url, [device["name"]]
+        )
+    return device
 
 
 XLSX_MEDIA_TYPE = (
@@ -175,8 +194,10 @@ def _parse_import_line(line: str) -> dict:
 async def import_devices(
     request: Request,
     payload: DeviceImportRequest,
+    background: BackgroundTasks,
     user: CurrentUser = Depends(require_write),
 ) -> dict:
+    nuevos: list[str] = []
     created = 0
     duplicates: list[str] = []
     errors: list[dict] = []
@@ -200,10 +221,15 @@ async def import_devices(
             errors.append({"line": line_number, "message": message})
             continue
         try:
-            await _repository(request).create_device(device.model_dump())
+            creado = await _repository(request).create_device(device.model_dump())
             created += 1
+            if creado["enabled"]:
+                nuevos.append(creado["name"])
         except DuplicateDeviceError:
             duplicates.append(device.name)
+    # Un solo recargado para toda la carga, y luego el primer respaldo de cada
+    # equipo nuevo.
+    background.add_task(backup_new_nodes, get_settings().oxidized_url, nuevos)
     return {"created": created, "duplicates": duplicates, "errors": errors}
 
 
