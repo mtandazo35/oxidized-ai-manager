@@ -288,16 +288,17 @@
     </div>
   </header>
   <nav class="tabs">
-    <button id="tab-btn-dashboard" class="active">Respaldos</button>
+    <button id="tab-btn-estado" class="active">Estado de respaldos</button>
+    <button id="tab-btn-dashboard">Routers</button>
     <button id="tab-btn-audit">Auditoría</button>
     <button id="tab-btn-import">Carga masiva</button>
     <button id="tab-btn-system">Ajustes del sistema</button>
   </nav>
   <main>
-    <div id="tab-dashboard">
+    <div id="tab-estado">
     <div style="display:flex;gap:8px;margin-top:24px;flex-wrap:wrap;justify-content:flex-end">
-      <input id="filter-text" type="search" placeholder="🔍 Buscar…" title="Filtra por nombre, identity, IP, puerto, plataforma, versión, usuario o grupo" style="width:200px;padding:6px 10px;font-size:.85rem">
-      <select id="filter-group" style="font-size:.85rem"><option value="">Todas las empresas</option></select>
+      <input id="filter-text-estado" type="search" placeholder="🔍 Buscar…" title="Filtra por nombre, identity, IP, puerto, plataforma, versión, usuario o grupo" style="width:200px;padding:6px 10px;font-size:.85rem">
+      <select id="filter-group-estado" style="font-size:.85rem"><option value="">Todas las empresas</option></select>
     </div>
     <h2>Estado de respaldos</h2>
     <div class="card">
@@ -306,7 +307,13 @@
         <tbody id="status-body"><tr><td colspan="7" class="muted">Sin routers registrados.</td></tr></tbody>
       </table>
     </div>
+    </div>
 
+    <div id="tab-dashboard" hidden>
+    <div style="display:flex;gap:8px;margin-top:24px;flex-wrap:wrap;justify-content:flex-end">
+      <input id="filter-text" type="search" placeholder="🔍 Buscar…" title="Filtra por nombre, identity, IP, puerto, plataforma, versión, usuario o grupo" style="width:200px;padding:6px 10px;font-size:.85rem">
+      <select id="filter-group" style="font-size:.85rem"><option value="">Todas las empresas</option></select>
+    </div>
     <h2>Routers</h2>
     <div class="card">
       <div style="margin:2px 0 10px">
@@ -352,7 +359,6 @@
       </div>
     </div>
     </div>
-
     <div id="tab-audit" hidden>
     <h2>Auditoría de configuraciones</h2>
     <div class="card">
@@ -872,9 +878,11 @@ const pendingBackups = {};
 let allDevices = [];
 let statusCache = { evByNode: {}, oxByNode: {}, eventNodes: [] };
 
-function deviceMatchesFilter(device) {
-  const query = $("filter-text").value.trim().toLowerCase();
-  const group = $("filter-group").value;
+// `sufijo` elige el juego de filtros: "" es el de Routers y "-estado" el de
+// la pestaña de estado, que tiene los suyos.
+function deviceMatchesFilter(device, sufijo = "") {
+  const query = $("filter-text" + sufijo).value.trim().toLowerCase();
+  const group = $("filter-group" + sufijo).value;
   if (group && (device.group_name || "") !== group) return false;
   if (!query) return true;
   return [
@@ -884,7 +892,11 @@ function deviceMatchesFilter(device) {
 }
 
 function updateGroupOptions() {
-  const select = $("filter-group");
+  ["-estado", ""].forEach(rellenarGrupos);
+}
+
+function rellenarGrupos(sufijo) {
+  const select = $("filter-group" + sufijo);
   const current = select.value;
   const groups = [...new Set(
     allDevices.map((d) => d.group_name).filter(Boolean)
@@ -907,10 +919,10 @@ function renderStatus() {
   const evByNode = statusCache.evByNode;
   const oxByNode = statusCache.oxByNode;
   const visibleDeviceNames = allDevices
-    .filter(deviceMatchesFilter)
+    .filter((d) => deviceMatchesFilter(d, "-estado"))
     .map((d) => d.name);
-  const query = $("filter-text").value.trim().toLowerCase();
-  const groupFilter = $("filter-group").value;
+  const query = $("filter-text-estado").value.trim().toLowerCase();
+  const groupFilter = $("filter-group-estado").value;
   const deviceNameSet = new Set(allDevices.map((d) => d.name));
   const orphanNodes = statusCache.eventNodes.filter((node) =>
     !deviceNameSet.has(node) &&
@@ -965,7 +977,8 @@ function renderDevices() {
           <button class="ghost mini" onclick="openEdit(${d.id})">Editar</button>
           <button class="ghost mini" onclick="toggleDevice(${d.id}, ${!d.enabled})">${d.enabled ? "Pausar" : "Activar"}</button>
           <button class="danger mini" onclick="deleteDevice(${d.id}, '${esc(d.name)}')">Eliminar</button>
-        ` : '<span class="muted">solo lectura</span>'}</td>
+        ` : `<button class="ghost mini" onclick="descargarUltimo('${esc(d.name)}')"
+            title="Descargar la última configuración respaldada">⬇ Último respaldo</button>`}</td>
       </tr>`).join("")
     : '<tr><td colspan="10" class="muted">Sin routers que coincidan.</td></tr>';
 }
@@ -1078,8 +1091,10 @@ async function refresh() {
   } catch (e) {}
 }
 
-$("filter-text").addEventListener("input", () => { renderDevices(); renderStatus(); });
-$("filter-group").addEventListener("change", () => { renderDevices(); renderStatus(); });
+$("filter-text").addEventListener("input", renderDevices);
+$("filter-group").addEventListener("change", renderDevices);
+$("filter-text-estado").addEventListener("input", renderStatus);
+$("filter-group-estado").addEventListener("change", renderStatus);
 
 
 let changesNode = "";
@@ -1476,7 +1491,7 @@ $("btn-upload").addEventListener("click", async () => {
   }
 });
 
-const TAB_NAMES = ["dashboard", "audit", "import", "system"];
+const TAB_NAMES = ["estado", "dashboard", "audit", "import", "system"];
 
 // Permisos de la cuenta actual. La interfaz solo esconde lo que la API ya
 // rechaza: ocultar un botón no es un control de acceso.
@@ -1514,7 +1529,7 @@ function allowedTab(tab) {
 }
 
 function switchTab(tab) {
-  if (!allowedTab(tab)) tab = "dashboard";
+  if (!allowedTab(tab)) tab = "estado";
   TAB_NAMES.forEach((name) => {
     $("tab-" + name).hidden = name !== tab;
     $("tab-btn-" + name).classList.toggle("active", name === tab);
@@ -2264,10 +2279,35 @@ $("btn-update-chip").addEventListener("click", () => {
 
 setInterval(comprobarActualizacion, INTERVALO_AVISO_MS);
 
+// Descarga directa del último respaldo, sin abrir el historial. Pensado para
+// las cuentas de solo lectura, que no tienen los botones de operación.
+window.descargarUltimo = async (node) => {
+  try {
+    const versiones = await api(
+      `/api/backups/versions?node=${encodeURIComponent(node)}&limit=1`);
+    if (!versiones.length) {
+      setMsg("device-msg", "«" + node + "» todavía no tiene ningún respaldo.", false);
+      return;
+    }
+    const resultado = await api(
+      `/api/backups/config?node=${encodeURIComponent(node)}&commit=${versiones[0].commit}`);
+    const blob = new Blob([resultado.config], { type: "text/plain;charset=utf-8" });
+    const enlace = document.createElement("a");
+    enlace.href = URL.createObjectURL(blob);
+    enlace.download = node + "-" + versiones[0].commit.slice(0, 7) + ".rsc";
+    enlace.click();
+    URL.revokeObjectURL(enlace.href);
+    setMsg("device-msg", "Descargado el respaldo de " + node + ".", true);
+  } catch (error) {
+    setMsg("device-msg", error.message, false);
+  }
+};
+
 function initialTab() {
   const fromHash = location.hash.slice(1);
-  return TAB_NAMES.includes(fromHash) ? fromHash : "dashboard";
+  return TAB_NAMES.includes(fromHash) ? fromHash : "estado";
 }
+$("tab-btn-estado").addEventListener("click", () => switchTab("estado"));
 $("tab-btn-dashboard").addEventListener("click", () => switchTab("dashboard"));
 $("tab-btn-audit").addEventListener("click", () => switchTab("audit"));
 $("tab-btn-import").addEventListener("click", () => switchTab("import"));
@@ -2293,7 +2333,7 @@ if (token) {
   // que /api/auth/me conteste no se conoce el rol, así que se parte sin
   // permisos: enterApp() los aplica y recoloca la pestaña.
   show("app");
-  switchTab("dashboard");
+  switchTab("estado");
   enterApp();
 } else {
   show("login");
