@@ -133,3 +133,50 @@ async def test_change_password_rejects_short_password(auth_headers) -> None:
         )
 
     assert response.status_code == 422
+
+
+# --- Sesión por inactividad -----------------------------------------------
+
+
+async def test_refresh_extends_the_session(auth_headers) -> None:
+    """Mientras hay actividad el panel renueva; sin ella el token caduca solo."""
+    async with client() as api:
+        response = await api.post("/api/auth/refresh", headers=auth_headers)
+
+    assert response.status_code == 200
+    assert response.json()["access_token"]
+    assert response.json()["token_type"] == "bearer"
+
+
+async def test_refresh_needs_a_valid_session() -> None:
+    async with client() as api:
+        response = await api.post("/api/auth/refresh")
+
+    assert response.status_code == 401
+
+
+async def test_refresh_gives_a_token_that_works(user_repository) -> None:
+    from app.config import get_settings
+    from app.security import create_access_token, decode_access_token
+
+    viejo = create_access_token("admin", get_settings().app_secret_key, 60)
+    async with client() as api:
+        nuevo = await api.post(
+            "/api/auth/refresh", headers={"Authorization": f"Bearer {viejo}"}
+        )
+        usable = await api.get(
+            "/api/devices",
+            headers={"Authorization": f"Bearer {nuevo.json()['access_token']}"},
+        )
+
+    assert usable.status_code == 200
+    assert decode_access_token(
+        nuevo.json()["access_token"], get_settings().app_secret_key
+    ) == "admin"
+
+
+async def test_me_tells_the_panel_the_idle_window(auth_headers) -> None:
+    async with client() as api:
+        response = await api.get("/api/auth/me", headers=auth_headers)
+
+    assert response.json()["idle_minutes"] == 60

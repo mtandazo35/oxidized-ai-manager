@@ -197,6 +197,12 @@
     stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
   .hub-item .badge { margin-top: 2px; }
   .hub-back { display: inline-flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+  .overlay .card.xwide { width: min(1100px, 95vw); }
+  .modal-head { display: flex; align-items: center; justify-content: space-between;
+    gap: 16px; margin-bottom: 14px; }
+  .modal-head h1 { font-size: 1.1rem; }
+  .modal-body { max-height: 74vh; overflow-y: auto; padding-right: 4px; }
+  .modal-body > h2:first-child { margin-top: 0; }
   nav.tabs { display: flex; gap: 4px; padding: 0 16px; background: var(--surface);
     border-bottom: 1px solid var(--border); }
   nav.tabs button { background: transparent; color: var(--ink-muted); border-radius: 0;
@@ -252,7 +258,6 @@
     <button id="tab-btn-dashboard" class="active">Respaldos</button>
     <button id="tab-btn-audit">Auditoría</button>
     <button id="tab-btn-import">Carga masiva</button>
-    <button id="tab-btn-config">Configuración</button>
     <button id="tab-btn-system">Ajustes del sistema</button>
   </nav>
   <main>
@@ -342,8 +347,48 @@
     </div>
     </div>
 
-    <div id="tab-config" hidden>
-    <h2>Configuración</h2>
+    <div id="tab-system" hidden>
+    <div id="hub-home">
+      <h2>Ajustes del sistema</h2>
+      <div class="hub">
+        <button type="button" class="hub-item" data-seccion="version">
+          <span class="disc"><svg viewBox="0 0 24 24"><path d="M12 3v10"/><path d="m8 9 4 4 4-4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg></span>
+          Versión y<br>actualizaciones
+        </button>
+        <button type="button" class="hub-item" data-seccion="seguridad">
+          <span class="disc"><svg viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.4-3 8.3-7 10-4-1.7-7-5.6-7-10V6z"/><path d="M9.5 12l1.8 1.8 3.4-3.6"/></svg></span>
+          Seguridad<br>de acceso
+        </button>
+        <button type="button" class="hub-item" data-seccion="actividad">
+          <span class="disc"><svg viewBox="0 0 24 24"><path d="M5 5h14"/><path d="M5 10h14"/><path d="M5 15h9"/><path d="M5 20h9"/></svg></span>
+          Actividad
+        </button>
+        <button type="button" class="hub-item" data-seccion="config">
+          <span class="disc"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9 17 7M7 17l-2.1 2.1"/></svg></span>
+          Respaldos<br>programados
+        </button>
+        <button type="button" class="hub-item" data-seccion="cuentas">
+          <span class="disc"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M2.5 20c0-3.6 3-5.6 6.5-5.6s6.5 2 6.5 5.6"/><path d="M17 11.5a2.6 2.6 0 1 0 0-5.2"/><path d="M18.5 20c0-2.2-.7-3.8-2-4.8"/></svg></span>
+          Cuentas<br>de acceso
+        </button>
+      </div>
+    </div>
+
+
+
+
+    </div>
+
+  </main>
+</div>
+
+<div class="overlay" id="sec-config" hidden>
+  <div class="card xwide">
+    <div class="modal-head">
+      <h1>Respaldos programados</h1>
+      <button type="button" class="ghost" data-cerrar="sec-config">Cerrar</button>
+    </div>
+    <div class="modal-body">
     <div class="card">
       <form id="settings-form">
         <div class="field" style="margin-bottom:12px">
@@ -383,37 +428,18 @@
       <button type="button" class="ghost" id="btn-bulk-run-selected">Respaldar seleccionados</button>
       <p class="msg" id="bulk-run-msg"></p>
     </div>
-    </div>
-    <div id="tab-system" hidden>
-    <div id="hub-home">
-      <h2>Ajustes del sistema</h2>
-      <div class="hub">
-        <button type="button" class="hub-item" data-seccion="version">
-          <span class="disc"><svg viewBox="0 0 24 24"><path d="M12 3v10"/><path d="m8 9 4 4 4-4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg></span>
-          Versión y<br>actualizaciones
-        </button>
-        <button type="button" class="hub-item" data-seccion="seguridad">
-          <span class="disc"><svg viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.4-3 8.3-7 10-4-1.7-7-5.6-7-10V6z"/><path d="M9.5 12l1.8 1.8 3.4-3.6"/></svg></span>
-          Seguridad<br>de acceso
-        </button>
-        <button type="button" class="hub-item" data-seccion="actividad">
-          <span class="disc"><svg viewBox="0 0 24 24"><path d="M5 5h14"/><path d="M5 10h14"/><path d="M5 15h9"/><path d="M5 20h9"/></svg></span>
-          Actividad
-        </button>
-        <button type="button" class="hub-item" data-ir="config">
-          <span class="disc"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9 17 7M7 17l-2.1 2.1"/></svg></span>
-          Respaldos<br>programados
-        </button>
-        <button type="button" class="hub-item" data-seccion="cuentas">
-          <span class="disc"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M2.5 20c0-3.6 3-5.6 6.5-5.6s6.5 2 6.5 5.6"/><path d="M17 11.5a2.6 2.6 0 1 0 0-5.2"/><path d="M18.5 20c0-2.2-.7-3.8-2-4.8"/></svg></span>
-          Cuentas<br>de acceso
-        </button>
-      </div>
-    </div>
 
-    <div class="hub-seccion" id="sec-cuentas" hidden>
-      <button type="button" class="ghost hub-back" data-volver="1">← Ajustes del sistema</button>
-    <h2>Cuentas de acceso</h2>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="sec-cuentas" hidden>
+  <div class="card xwide">
+    <div class="modal-head">
+      <h1>Cuentas de acceso</h1>
+      <button type="button" class="ghost" data-cerrar="sec-cuentas">Cerrar</button>
+    </div>
+    <div class="modal-body">
     <div class="card">
       <p class="muted" style="margin-top:0">
         Cada cuenta pertenece a una <strong>empresa</strong> y solo ve los equipos de
@@ -453,10 +479,16 @@
       </div>
     </div>
     </div>
+  </div>
+</div>
 
-    <div class="hub-seccion" id="sec-version" hidden>
-      <button type="button" class="ghost hub-back" data-volver="1">← Ajustes del sistema</button>
-    <h2>Versión y actualizaciones</h2>
+<div class="overlay" id="sec-version" hidden>
+  <div class="card xwide">
+    <div class="modal-head">
+      <h1>Versión y actualizaciones</h1>
+      <button type="button" class="ghost" data-cerrar="sec-version">Cerrar</button>
+    </div>
+    <div class="modal-body">
       <div class="card">
         <div style="display:flex;gap:16px;align-items:baseline;flex-wrap:wrap">
           <div>
@@ -483,10 +515,16 @@
         </p>
       </div>
     </div>
+  </div>
+</div>
 
-    <div class="hub-seccion" id="sec-seguridad" hidden>
-      <button type="button" class="ghost hub-back" data-volver="1">← Ajustes del sistema</button>
-    <h2>Seguridad de acceso</h2>
+<div class="overlay" id="sec-seguridad" hidden>
+  <div class="card xwide">
+    <div class="modal-head">
+      <h1>Seguridad de acceso</h1>
+      <button type="button" class="ghost" data-cerrar="sec-seguridad">Cerrar</button>
+    </div>
+    <div class="modal-body">
     <div class="card">
       <div class="field" style="margin-bottom:8px">
         <input type="checkbox" id="acl-enabled">
@@ -507,12 +545,17 @@
         <tbody id="blocks-body"></tbody>
       </table>
     </div>
-
     </div>
+  </div>
+</div>
 
-    <div class="hub-seccion" id="sec-actividad" hidden>
-      <button type="button" class="ghost hub-back" data-volver="1">← Ajustes del sistema</button>
-    <h2>Actividad</h2>
+<div class="overlay" id="sec-actividad" hidden>
+  <div class="card xwide">
+    <div class="modal-head">
+      <h1>Actividad</h1>
+      <button type="button" class="ghost" data-cerrar="sec-actividad">Cerrar</button>
+    </div>
+    <div class="modal-body">
     <div class="card">
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
         <select id="log-action" style="font-size:.85rem">
@@ -541,9 +584,7 @@
       </div>
     </div>
     </div>
-    </div>
-
-  </main>
+  </div>
 </div>
 
 <div class="overlay" id="changes-overlay" hidden>
@@ -1417,7 +1458,7 @@ $("btn-upload").addEventListener("click", async () => {
   }
 });
 
-const TAB_NAMES = ["dashboard", "audit", "import", "config", "system"];
+const TAB_NAMES = ["dashboard", "audit", "import", "system"];
 
 // Permisos de la cuenta actual. La interfaz solo esconde lo que la API ya
 // rechaza: ocultar un botón no es un control de acceso.
@@ -1435,13 +1476,14 @@ function applyPermissions(me) {
     is_admin: !!me.is_admin,
   };
   currentUser = me;
+  if (me.idle_minutes) idleMinutes = me.idle_minutes;
+  marcarActividad();
   $("user-name").textContent = me.username;
   $("user-avatar").textContent = initials(me.username);
   $("btn-user").title = (ROLE_LABEL[me.role] || me.role) +
     (me.group_name ? " · " + me.group_name : "");
   $("tab-btn-audit").hidden = !perms.can_audit;
   $("tab-btn-import").hidden = !perms.can_write;
-  $("tab-btn-config").hidden = !perms.is_admin;
   $("tab-btn-system").hidden = !perms.is_admin;
   $("btn-reload").hidden = !perms.is_admin;
   $("btn-open-add").hidden = !perms.can_write;
@@ -1450,7 +1492,7 @@ function applyPermissions(me) {
 function allowedTab(tab) {
   if (tab === "audit") return perms.can_audit;
   if (tab === "import") return perms.can_write;
-  if (tab === "config" || tab === "system") return perms.is_admin;
+  if (tab === "system") return perms.is_admin;
   return true;
 }
 
@@ -1461,7 +1503,6 @@ function switchTab(tab) {
     $("tab-btn-" + name).classList.toggle("active", name === tab);
   });
   if (location.hash !== "#" + tab) history.replaceState(null, "", "#" + tab);
-  if (tab === "config") { loadSettings(); loadBulkRun(); }
   if (tab === "system") hubMostrar(null);
   if (tab === "audit") loadAudit();
 }
@@ -2034,19 +2075,69 @@ function sessionExpiry() {
   } catch (e) { return null; }
 }
 
-function renderSessionLeft() {
-  const fin = sessionExpiry();
-  const destino = $("session-left");
-  if (!fin) { destino.textContent = ""; return; }
-  const restan = Math.floor((fin - Date.now()) / 1000);
-  if (restan <= 0) { logout(); return; }
-  const h = Math.floor(restan / 3600);
-  const m = Math.floor((restan % 3600) / 60);
-  const s = restan % 60;
-  const reloj = h
+// --- Cierre por inactividad ---------------------------------------------
+//
+// La sesión se cierra si no se toca nada durante `idleMinutes`. No basta con
+// hacerlo en el navegador: el token dura lo mismo y solo se renueva mientras
+// haya actividad, así que sin uso caduca y el servidor deja de aceptarlo
+// aunque alguien se quede con él.
+
+let idleMinutes = 60;
+let ultimaActividad = Date.now();
+let renovando = false;
+
+function marcarActividad() {
+  ultimaActividad = Date.now();
+}
+
+["pointerdown", "keydown", "wheel", "touchstart"].forEach((evento) =>
+  document.addEventListener(evento, marcarActividad, { passive: true }));
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) marcarActividad();
+});
+
+function relojDe(segundos) {
+  const h = Math.floor(segundos / 3600);
+  const m = Math.floor((segundos % 3600) / 60);
+  const s = segundos % 60;
+  return h
     ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`
     : `${m}:${String(s).padStart(2, "0")}`;
-  destino.textContent = "La sesión se cierra en " + reloj;
+}
+
+async function renovarSiHaceFalta(restanToken) {
+  // A mitad de vida del token y con el usuario delante: se alarga.
+  if (renovando || restanToken > (idleMinutes * 60) / 2) return;
+  renovando = true;
+  try {
+    const nuevo = await api("/api/auth/refresh", { method: "POST" });
+    token = nuevo.access_token;
+    localStorage.setItem("oxm_token", token);
+  } catch (error) {
+    // Si no se pudo renovar, el token acabará caducando y `api()` cerrará.
+  } finally {
+    renovando = false;
+  }
+}
+
+function renderSessionLeft() {
+  const destino = $("session-left");
+  if (!token) { destino.textContent = ""; return; }
+
+  const inactivo = Math.floor((Date.now() - ultimaActividad) / 1000);
+  const restanInactividad = idleMinutes * 60 - inactivo;
+  if (restanInactividad <= 0) {
+    logout();
+    setMsg("login-msg", "Sesión cerrada por inactividad.", false);
+    return;
+  }
+
+  const fin = sessionExpiry();
+  const restanToken = fin ? Math.floor((fin - Date.now()) / 1000) : restanInactividad;
+  if (restanToken <= 0) { logout(); return; }
+  if (inactivo < 120) renovarSiHaceFalta(restanToken);
+
+  destino.textContent = "La sesión se cierra en " + relojDe(restanInactividad);
 }
 
 setInterval(renderSessionLeft, 1000);
@@ -2074,29 +2165,44 @@ $("btn-close-account").addEventListener("click", () => {
 // Cada círculo abre su apartado y esconde los demás; así la pestaña no es un
 // muro de tarjetas y cada cosa se consulta cuando hace falta.
 const HUB_CARGA = {
+  config: () => { loadSettings(); loadBulkRun(); },
   version: () => loadVersion(),
   seguridad: () => { loadPolicy(); loadBlocks(); },
   actividad: () => loadActivity(),
   cuentas: () => { loadUsers(); loadRoleMatrix(); },
 };
 
-function hubMostrar(seccion) {
-  $("hub-home").hidden = !!seccion;
-  document.querySelectorAll(".hub-seccion").forEach((bloque) => {
-    bloque.hidden = bloque.id !== "sec-" + seccion;
+function hubCerrar() {
+  document.querySelectorAll(".overlay[id^='sec-']").forEach((m) => {
+    m.hidden = true;
   });
-  if (seccion && HUB_CARGA[seccion]) HUB_CARGA[seccion]();
+}
+
+function hubMostrar(seccion) {
+  hubCerrar();
+  if (!seccion) return;
+  const modal = $("sec-" + seccion);
+  if (!modal) return;
+  modal.hidden = false;
+  if (HUB_CARGA[seccion]) HUB_CARGA[seccion]();
 }
 
 document.querySelectorAll(".hub-item").forEach((boton) => {
-  boton.addEventListener("click", () => {
-    if (boton.dataset.ir) { switchTab(boton.dataset.ir); return; }
-    hubMostrar(boton.dataset.seccion);
-  });
+  boton.addEventListener("click", () => hubMostrar(boton.dataset.seccion));
 });
 
-document.querySelectorAll("[data-volver]").forEach((boton) => {
-  boton.addEventListener("click", () => hubMostrar(null));
+document.querySelectorAll("[data-cerrar]").forEach((boton) => {
+  boton.addEventListener("click", hubCerrar);
+});
+
+// Cerrar con Escape o pulsando fuera de la tarjeta, como cualquier ventana.
+document.addEventListener("keydown", (evento) => {
+  if (evento.key === "Escape") hubCerrar();
+});
+document.querySelectorAll(".overlay[id^='sec-']").forEach((modal) => {
+  modal.addEventListener("click", (evento) => {
+    if (evento.target === modal) hubCerrar();
+  });
 });
 
 function initialTab() {
@@ -2107,7 +2213,6 @@ $("tab-btn-dashboard").addEventListener("click", () => switchTab("dashboard"));
 $("tab-btn-audit").addEventListener("click", () => switchTab("audit"));
 $("tab-btn-import").addEventListener("click", () => switchTab("import"));
 $("tab-btn-system").addEventListener("click", () => switchTab("system"));
-$("tab-btn-config").addEventListener("click", () => switchTab("config"));
 
 async function enterApp() {
   try {

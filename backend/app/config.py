@@ -20,7 +20,11 @@ class Settings(BaseSettings):
     oxidized_source_token: str
     admin_username: str = "admin"
     admin_password: str = ""
-    access_token_ttl_minutes: int = 480
+    # La sesión caduca por INACTIVIDAD: el token dura esto y se renueva
+    # mientras se use. Sin actividad, expira solo y el servidor deja de
+    # aceptarlo, sin depender de que el navegador haga nada.
+    access_token_ttl_minutes: int = 60
+    session_idle_minutes: int = 60
     oxidized_backup_repo: str = "/oxidized-data/backups.git"
     # HSTS solo cuando el dominio y su certificado estén confirmados en NPM.
     app_enable_hsts: bool = False

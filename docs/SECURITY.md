@@ -17,7 +17,10 @@ recomendado del servidor. Lea también `docs/PUBLIC_ACCESS.md`.
 
 ### Autenticación y sesión
 - Login propio con usuario en PostgreSQL y clave **bcrypt** (nunca en claro).
-- Tokens **JWT HS256** firmados con `APP_SECRET_KEY`, expiración 8 h.
+- Tokens **JWT HS256** firmados con `APP_SECRET_KEY`. La sesión caduca por
+  **inactividad** (60 min): el token dura eso y el panel solo lo renueva
+  mientras se use. Si nadie toca nada, nadie renueva y el servidor deja de
+  aceptarlo — la caducidad no depende de que el navegador colabore.
 - Tres controles antes de comprobar siquiera la contraseña, en este orden:
   **lista de IPs permitidas** (desactivada por defecto), **bloqueo de IP** por
   fallos acumulados y **bloqueo de cuenta** (8 fallos → 15 min). Los dos

@@ -187,11 +187,28 @@ async def login(
     return {"access_token": token, "token_type": "bearer"}
 
 
+@router.post("/refresh", response_model=TokenResponse)
+async def refresh(user: CurrentUser = Depends(current_user)) -> dict:
+    """Alarga la sesión mientras haya actividad.
+
+    El panel lo llama cuando el usuario está usando la aplicación y al token
+    le queda menos de la mitad de vida. Si nadie toca nada, nadie renueva y el
+    token caduca solo: la caducidad la impone el servidor, no el navegador.
+    """
+    settings = get_settings()
+    token = create_access_token(
+        user.username, settings.app_secret_key, settings.access_token_ttl_minutes
+    )
+    return {"access_token": token, "token_type": "bearer"}
+
+
 @router.get("/me")
 async def me(request: Request, user: CurrentUser = Depends(current_user)) -> dict:
+    settings = get_settings()
     stored = await request.app.state.users.get_by_username(user.username)
     return {
         "username": user.username,
+        "idle_minutes": settings.session_idle_minutes,
         "role": user.role,
         "group_name": user.group_name,
         "can_write": user.can_write(),
