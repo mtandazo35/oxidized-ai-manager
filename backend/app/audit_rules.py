@@ -75,6 +75,19 @@ class Rule:
     title: str
     recommendation: str
     check: Callable[[Export], list[Evidence]]
+    # Permite ajustar la severidad según el resto de la configuración. Sin
+    # esto, un servicio protegido por el firewall pesaba igual que uno abierto
+    # a Internet.
+    severity_of: Callable[[Export], str] | None = None
+
+
+def _lower_if_firewalled(base: str, protegido: str = LOW):
+    """Baja la severidad cuando la cadena `input` está cerrada."""
+
+    def calcular(export: Export) -> str:
+        return protegido if _input_chain_is_closed(export) else base
+
+    return calcular
 
 
 def _service_state(export: Export) -> dict[str, Stanza | None]:
@@ -107,22 +120,75 @@ def _input_filters(export: Export) -> list[Stanza]:
     ]
 
 
+# Condiciones que estrechan una regla: si aparece alguna, el descarte NO cubre
+# todo lo demás. `connection-state=invalid` es el ejemplo típico: descarta
+# basura, no cierra la cadena.
+NARROWING = (
+    "dst-port",
+    "connection-state",
+    "src-address",
+    "src-address-list",
+    "dst-address",
+    "dst-address-list",
+    "content",
+    "layer7-protocol",
+    "tls-host",
+    "p2p",
+)
+
+
+def _is_catch_all_drop(stanza: Stanza, protocol: str = "") -> bool:
+    """¿Esta regla descarta todo lo que llegue a la cadena?
+
+    Se admite acotar por interfaz (`in-interface`, `in-interface-list=WAN`):
+    para juzgar si un servicio queda expuesto a Internet, un descarte en la
+    WAN cuenta igual que uno global.
+    """
+    if stanza.get("action") not in ("drop", "reject"):
+        return False
+    if any(clave in stanza.params for clave in NARROWING):
+        return False
+    return stanza.get("protocol") in ("", protocol) or not protocol
+
+
 def _drops_input_port(export: Export, port: str, protocol: str) -> bool:
-    """¿Hay alguna regla que descarte tráfico entrante a ese puerto?"""
+    """¿El firewall descarta el tráfico entrante a ese puerto?"""
     for stanza in _input_filters(export):
+        if _is_catch_all_drop(stanza, protocol):
+            return True
         if stanza.get("action") not in ("drop", "reject"):
             continue
         ports = stanza.get("dst-port")
         if not ports:
-            # Descarte genérico: cubre también este puerto.
-            if not stanza.get("protocol") or stanza.get("protocol") == protocol:
-                return True
             continue
         if stanza.get("protocol") not in ("", protocol):
             continue
         if port in {chunk.strip() for chunk in ports.replace("-", ",").split(",")}:
             return True
     return False
+
+
+def _input_chain_is_closed(export: Export) -> Stanza | None:
+    """Devuelve el descarte final de la cadena `input`, si lo hay.
+
+    Una cadena que termina en `add action=drop chain=input` sin condiciones
+    solo deja pasar lo permitido explícitamente antes. Con eso, tener un
+    servicio habilitado no significa tenerlo expuesto, y señalarlo como si lo
+    estuviera es un falso positivo.
+
+    El orden importa: si después del descarte hubiera un `accept`, la cadena no
+    estaría cerrada de verdad.
+    """
+    reglas = [st for st in export.section("/ip firewall filter")
+              if st.command == "add" and st.get("chain") == "input"
+              and not st.is_true("disabled")]
+    for indice, stanza in enumerate(reglas):
+        if not _is_catch_all_drop(stanza):
+            continue
+        if any(posterior.get("action") == "accept" for posterior in reglas[indice + 1:]):
+            continue
+        return stanza
+    return None
 
 
 # --- Security Agent ---------------------------------------------------------
@@ -140,19 +206,32 @@ def _make_plaintext_service_check(service: str) -> Callable[[Export], list[Evide
                     "de fábrica (habilitado)."
                 )
             ]
+        detalle = stanza.raw
         if stanza.get("address"):
             # Sigue viajando en claro, pero solo lo alcanzan las redes
             # indicadas: no es lo mismo que tenerlo abierto a Internet.
-            return [
-                Evidence(
-                    f"{stanza.raw}  ← limitado a `{stanza.get('address')}`, "
-                    "pero el tráfico sigue sin cifrar.",
-                    stanza.line,
-                )
-            ]
-        return [Evidence(stanza.raw, stanza.line)]
+            detalle += (
+                f"  ← limitado a `{stanza.get('address')}`, pero el tráfico "
+                "sigue sin cifrar."
+            )
+        return [Evidence(detalle, stanza.line)] + _nota_firewall(export)
 
     return check
+
+
+def _nota_firewall(export: Export) -> list[Evidence]:
+    """Deja constancia de que el firewall ya protege el servicio."""
+    cierre = _input_chain_is_closed(export)
+    if cierre is None:
+        return []
+    return [
+        Evidence(
+            "La cadena `input` termina en un descarte general, así que el "
+            "servicio no es alcanzable desde fuera de lo permitido; queda "
+            "como aviso de higiene, no de exposición.",
+            cierre.line,
+        )
+    ]
 
 
 def _restricted_plaintext_service(export: Export, service: str) -> bool:
@@ -175,6 +254,8 @@ def _check_services_without_address(export: Export) -> list[Evidence]:
             else stanza.raw
         )
         evidence.append(Evidence(detail, stanza.line if stanza else 0))
+    if evidence:
+        evidence += _nota_firewall(export)
     return evidence
 
 
@@ -500,6 +581,7 @@ RULES: tuple[Rule, ...] = (
                 f"`/ip service disable {service}`."
             ),
             check=_make_plaintext_service_check(service),
+            severity_of=_lower_if_firewalled(PLAINTEXT_SERVICES[service][0]),
         )
         for index, service in enumerate(PLAINTEXT_SERVICES, start=1)
     ),
@@ -513,6 +595,7 @@ RULES: tuple[Rule, ...] = (
             "address=<prefijos de gestión>`, o bloquee el puerto en `chain=input`."
         ),
         check=_check_services_without_address,
+        severity_of=_lower_if_firewalled(MEDIUM),
     ),
     Rule(
         id="ROS-SEC-006",
@@ -744,12 +827,13 @@ def audit_config(config_text: str) -> dict:
         evidence = rule.check(export)
         if not evidence:
             continue
-        counts[rule.severity] += 1
+        severidad = rule.severity_of(export) if rule.severity_of else rule.severity
+        counts[severidad] += 1
         findings.append(
             {
                 "rule_id": rule.id,
                 "category": rule.category,
-                "severity": rule.severity,
+                "severity": severidad,
                 "title": rule.title,
                 "recommendation": rule.recommendation,
                 # Los respaldos contienen las claves de los equipos a

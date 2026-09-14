@@ -203,7 +203,7 @@ restauración verificada en [docs/BACKUP_RESTORE.md](docs/BACKUP_RESTORE.md).
 | `/health/ready` | PostgreSQL, Redis y Oxidized alcanzables |
 | `/health/backups` | 503 si algún equipo lleva sin respaldo más de 3× su intervalo |
 
-Los tres son públicos y aptos para Uptime Kuma; `/health/backups` devuelve solo
+Los tres son públicos y valen para cualquier monitor; `/health/backups` devuelve solo
 recuentos, nunca nombres de equipos.
 
 ## Pruebas del backend

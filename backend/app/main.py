@@ -116,7 +116,7 @@ async def liveness() -> dict[str, str]:
 
 @app.get("/health/backups")
 async def backups_health() -> JSONResponse:
-    """Frescura de los respaldos, para monitoreo externo (Uptime Kuma).
+    """Frescura de los respaldos, para monitoreo externo.
 
     Responde 503 cuando algún equipo activo lleva sin respaldo más de
     `backup_staleness_factor` veces su intervalo, para que el monitor alerte

@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     # HSTS solo cuando el dominio y su certificado estén confirmados en NPM.
     app_enable_hsts: bool = False
     # Si no se recibe ningún evento de respaldo en este múltiplo del
-    # intervalo configurado, /health/backups responde 503 (para Uptime Kuma).
+    # intervalo configurado, /health/backups responde 503 (monitoreo externo).
     backup_staleness_factor: float = 3.0
     # Repositorio montado de solo lectura, para saber en qué commit corre.
     repo_git_dir: str = "/repo/.git"

@@ -96,7 +96,7 @@ ese host y complica volver atrás.
 Las cabeceras y el rate limit viven en la aplicación a propósito: son lo
 primero que se pierde cuando alguien recrea un proxy host en NPM.
 
-## 6. Monitoreo desde Uptime Kuma
+## 6. Monitoreo externo
 
 | URL | Qué vigila |
 | --- | --- |
@@ -107,8 +107,11 @@ primero que se pierde cuando alguien recrea un proxy host en NPM.
 Los tres son públicos (sin token) y `/health/backups` devuelve solo recuentos,
 nunca nombres de equipos. El umbral se ajusta con `BACKUP_STALENESS_FACTOR`.
 
-Si aplica una Access List en NPM, agregue la IP de Uptime Kuma o publique un
-proxy host aparte solo para `/health/*`.
+Sirve cualquier monitor capaz de mirar un código HTTP —Zabbix, LibreNMS,
+Grafana, o un `cron` con `curl`—: el endpoint no sabe quién lo consulta.
+
+Si aplica una Access List en NPM, agregue la IP del monitor o publique un proxy
+host aparte solo para `/health/*`.
 
 ## 7. Operación
 

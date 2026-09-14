@@ -258,3 +258,77 @@ def test_a_public_peer_without_filters_is_still_serious() -> None:
 
     assert {"ROS-BGP-001", "ROS-BGP-002"} <= found
     assert "ROS-BGP-003" not in found
+
+
+# --- La auditoría mira el firewall antes de señalar un servicio -----------
+
+CADENA_CERRADA = """/ip service
+set api address=203.0.113.9/32
+/ip firewall filter
+add action=accept chain=input src-address=10.99.99.0/24
+add action=drop chain=input connection-state=invalid
+add action=drop chain=input comment="Bloquea el resto"
+"""
+
+CADENA_ABIERTA = """/ip service
+set api address=203.0.113.9/32
+/ip firewall filter
+add action=accept chain=input src-address=10.99.99.0/24
+add action=drop chain=input connection-state=invalid
+"""
+
+
+def severidad_de(config: str, regla: str) -> str | None:
+    for hallazgo in audit_config(config)["findings"]:
+        if hallazgo["rule_id"] == regla:
+            return hallazgo["severity"]
+    return None
+
+
+def test_a_closed_input_chain_lowers_the_severity() -> None:
+    """Con la cadena cerrada el servicio no es alcanzable desde fuera."""
+    assert severidad_de(CADENA_ABIERTA, "ROS-SEC-004") == "high"
+    assert severidad_de(CADENA_CERRADA, "ROS-SEC-004") == "low"
+
+
+def test_the_evidence_explains_why_it_was_lowered() -> None:
+    hallazgo = next(
+        f for f in audit_config(CADENA_CERRADA)["findings"]
+        if f["rule_id"] == "ROS-SEC-004"
+    )
+    detalles = " ".join(e["detail"] for e in hallazgo["evidence"])
+
+    assert "descarte general" in detalles
+
+
+def test_dropping_invalid_connections_is_not_closing_the_chain() -> None:
+    """El fallo contrario: una regla que solo descarta basura no protege nada,
+    y tomarla por un cierre ocultaba hallazgos reales."""
+    config = (
+        "/ip dns\nset allow-remote-requests=yes\n"
+        "/ip firewall filter\nadd action=drop chain=input connection-state=invalid\n"
+    )
+
+    assert "ROS-SEC-007" in rule_ids(audit_config(config))
+
+
+def test_an_accept_after_the_catch_all_reopens_the_chain() -> None:
+    """El orden importa: si tras el descarte hay un accept, no está cerrada."""
+    config = (
+        "/ip service\nset api address=203.0.113.9/32\n"
+        "/ip firewall filter\n"
+        'add action=drop chain=input comment="Bloquea el resto"\n'
+        "add action=accept chain=input protocol=tcp dst-port=8728\n"
+    )
+
+    assert severidad_de(config, "ROS-SEC-004") == "high"
+
+
+def test_a_wan_only_drop_still_counts_as_protection() -> None:
+    config = (
+        "/ip dns\nset allow-remote-requests=yes\n"
+        "/ip firewall filter\n"
+        "add action=drop chain=input in-interface-list=WAN\n"
+    )
+
+    assert "ROS-SEC-007" not in rule_ids(audit_config(config))

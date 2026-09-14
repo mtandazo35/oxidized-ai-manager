@@ -63,8 +63,8 @@ class _ResultadoReciente:
     aplicación inservible.
 
     Con una caché de pocos segundos el monitoreo externo sigue viendo el estado
-    al día —Uptime Kuma consulta cada 30 o 60 s— y una ráfaga deja de
-    multiplicar el trabajo real.
+    al día —un monitor consulta cada 30 o 60 s, no varias veces por
+    segundo— y una ráfaga deja de multiplicar el trabajo real.
     """
 
     def __init__(self, ttl_segundos: float) -> None:
@@ -121,8 +121,8 @@ async def backup_freshness(app, settings: Settings) -> dict:
 async def _backup_freshness(app, settings: Settings) -> dict:
     """Resumen de antigüedad de los respaldos, para monitoreo externo.
 
-    Deliberadamente **sin nombres de equipos**: lo consulta Uptime Kuma sin
-    token, así que solo devuelve recuentos. El detalle por equipo está en
+    Deliberadamente **sin nombres de equipos**: se consulta sin token, así
+    que solo devuelve recuentos. El detalle por equipo está en
     `/api/backups/status`, que sí exige sesión.
 
     Un equipo cuenta como atrasado cuando su último respaldo exitoso es más

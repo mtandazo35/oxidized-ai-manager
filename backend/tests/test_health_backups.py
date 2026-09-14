@@ -1,5 +1,5 @@
-"""`/health/backups` lo consulta Uptime Kuma sin token: debe alertar por
-antigüedad y no revelar el inventario."""
+"""`/health/backups` se consulta sin token: debe alertar por antigüedad y
+no revelar el inventario."""
 
 import datetime as dt
 
