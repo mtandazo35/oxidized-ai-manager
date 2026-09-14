@@ -210,6 +210,9 @@
   .modal-body { max-height: 74vh; overflow-y: auto; padding-right: 6px; }
   .modal-body > h2:first-child { margin-top: 0; }
   .modal-body > h2 { margin-top: 22px; }
+  /* Las tarjetas de dentro ocupan todo el ancho de la ventana y pierden la
+     sombra: enmarcar una tarjeta dentro de otra se ve recargado. */
+  .modal-body .card { width: auto; box-shadow: none; }
   /* Dentro de la ventana los campos recuperan su tamaño natural: son
      formularios en línea, no el formulario estrecho de un modal de login. */
   .modal-body input:not([type=checkbox]), .modal-body select,
@@ -217,6 +220,18 @@
   .modal-body input[type=number] { width: 90px; }
   .modal-body .field { flex-wrap: wrap; }
   .modal-body .field label { white-space: normal; }
+  .update-chip { display: inline-flex; align-items: center; gap: 7px;
+    background: #15803d; color: #fff; border: 0; border-radius: 999px;
+    padding: 6px 14px 6px 11px; font-size: .82rem; font-weight: 600;
+    box-shadow: 0 2px 10px -3px rgba(21, 128, 61, .7);
+    animation: aparece .35s ease-out; }
+  .update-chip:hover { background: #166534; }
+  .update-chip svg { width: 15px; height: 15px; stroke: #fff; fill: none;
+    stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  @keyframes aparece {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: none; }
+  }
   nav.tabs { display: flex; gap: 4px; padding: 0 16px; background: var(--surface);
     border-bottom: 1px solid var(--border); }
   nav.tabs button { background: transparent; color: var(--ink-muted); border-radius: 0;
@@ -243,7 +258,11 @@
   <header class="bar">
     <h1><span class="brand-badge">🛡️</span> Oxidized AI Manager</h1>
     <div class="bar-right">
-      <button class="ghost" id="btn-reload">Recargar Oxidized</button>
+      <button type="button" class="update-chip" id="btn-update-chip" hidden
+        title="Ir a Ajustes del sistema para instalarla">
+        <svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+        Actualización disponible
+      </button>
       <div class="menu">
         <button class="user-btn" id="btn-user" title="Su cuenta">
           <span class="avatar" id="user-avatar">·</span>
@@ -387,7 +406,6 @@
         </button>
       </div>
     </div>
-
 
 
 
@@ -993,7 +1011,6 @@ $("edit-form").addEventListener("submit", async (event) => {
     });
     $("edit-overlay").hidden = true;
     setMsg("device-msg", "Router actualizado.", true);
-    await reloadOxidized(true);
     refresh();
   } catch (error) { setMsg("edit-msg", error.message, false); }
 });
@@ -1064,14 +1081,6 @@ async function refresh() {
 $("filter-text").addEventListener("input", () => { renderDevices(); renderStatus(); });
 $("filter-group").addEventListener("change", () => { renderDevices(); renderStatus(); });
 
-async function reloadOxidized(silent) {
-  try {
-    await api("/api/oxidized/reload", { method: "POST" });
-    if (!silent) setMsg("device-msg", "Oxidized recargado.", true);
-  } catch (error) {
-    if (!silent) setMsg("device-msg", "Reload: " + error.message, false);
-  }
-}
 
 let changesNode = "";
 
@@ -1173,7 +1182,6 @@ window.toggleDevice = async (id, enabled) => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ enabled }),
     });
-    await reloadOxidized(true);
     refresh();
   } catch (error) { setMsg("device-msg", error.message, false); }
 };
@@ -1182,7 +1190,6 @@ window.deleteDevice = async (id, name) => {
   if (!confirm("¿Eliminar " + name + " del inventario?")) return;
   try {
     await api("/api/devices/" + id, { method: "DELETE" });
-    await reloadOxidized(true);
     refresh();
   } catch (error) { setMsg("device-msg", error.message, false); }
 };
@@ -1235,7 +1242,6 @@ $("add-form").addEventListener("submit", async (event) => {
     });
     $("add-overlay").hidden = true;
     setMsg("device-msg", "Router agregado.", true);
-    await reloadOxidized(true);
     refresh();
   } catch (error) { setMsg("add-msg", error.message, false); }
 });
@@ -1300,7 +1306,6 @@ $("btn-close-pass").addEventListener("click", () => {
   $("pass-form").reset();
 });
 $("btn-logout").addEventListener("click", logout);
-$("btn-reload").addEventListener("click", () => reloadOxidized(false));
 
 const CSV_TEMPLATE = [
   "nombre,ip,puerto,usuario,clave,grupo,plataforma",
@@ -1467,7 +1472,6 @@ $("btn-upload").addEventListener("click", async () => {
     bad === 0);
   button.disabled = false;
   if (ok) {
-    await reloadOxidized(true);
     refresh();
   }
 });
@@ -1499,7 +1503,6 @@ function applyPermissions(me) {
   $("tab-btn-audit").hidden = !perms.can_audit;
   $("tab-btn-import").hidden = !perms.can_write;
   $("tab-btn-system").hidden = !perms.is_admin;
-  $("btn-reload").hidden = !perms.is_admin;
   $("btn-open-add").hidden = !perms.can_write;
 }
 
@@ -1893,6 +1896,7 @@ function startUpdatePoll() {
     }
     clearInterval(updatePollTimer);
     updatePollTimer = null;
+    comprobarActualizacion();
     if (estado.state === "error") {
       setMsg("ver-msg", estado.detail || "La actualización falló.", false);
       $("ver-progress").textContent = "";
@@ -2236,6 +2240,30 @@ document.addEventListener("keydown", (evento) => {
   if (arriba && overlayCerrable(arriba)) arriba.hidden = true;
 });
 
+// --- Aviso de versión nueva ----------------------------------------------
+//
+// Solo lo ve quien puede instalarla. La consulta sale al repositorio remoto,
+// así que se hace de tarde en tarde y nunca bloquea la carga del panel.
+
+const INTERVALO_AVISO_MS = 30 * 60 * 1000;
+
+async function comprobarActualizacion() {
+  if (!perms.is_admin || !token) return;
+  try {
+    const info = await api("/api/system/version");
+    $("btn-update-chip").hidden = !info.update_available;
+  } catch (error) {
+    $("btn-update-chip").hidden = true;   // sin datos, no se molesta a nadie
+  }
+}
+
+$("btn-update-chip").addEventListener("click", () => {
+  switchTab("system");
+  hubMostrar("version");
+});
+
+setInterval(comprobarActualizacion, INTERVALO_AVISO_MS);
+
 function initialTab() {
   const fromHash = location.hash.slice(1);
   return TAB_NAMES.includes(fromHash) ? fromHash : "dashboard";
@@ -2250,6 +2278,7 @@ async function enterApp() {
     const me = await api("/api/auth/me");
     applyPermissions(me);
     renderSessionLeft();
+    comprobarActualizacion();
     show("app");
     switchTab(initialTab());
     refresh();

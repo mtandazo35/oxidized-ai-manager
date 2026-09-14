@@ -19,7 +19,7 @@ from pydantic import ValidationError
 from .auth import CurrentUser, current_user, require_write
 from .config import get_settings
 from .repository import DeviceRepository, DuplicateDeviceError
-from .scheduler import backup_new_nodes, trigger_node_backup
+from .scheduler import backup_new_nodes, refresh_inventory, trigger_node_backup
 from .schemas import (
     DeviceCreate,
     DeviceImportRequest,
@@ -136,6 +136,7 @@ async def update_device(
     request: Request,
     device_id: int,
     payload: DeviceUpdate,
+    background: BackgroundTasks,
     user: CurrentUser = Depends(require_write),
 ) -> dict:
     data = payload.model_dump(exclude_unset=True)
@@ -152,16 +153,23 @@ async def update_device(
         )
     if device is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found.")
+    # Cambiar dirección, puerto, credenciales, plataforma o el estado de pausa
+    # no sirve de nada si Oxidized sigue con la lista anterior.
+    background.add_task(refresh_inventory, get_settings().oxidized_url)
     return device
 
 
 @router.delete("/{device_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_device(
-    request: Request, device_id: int, user: CurrentUser = Depends(require_write)
+    request: Request,
+    device_id: int,
+    background: BackgroundTasks,
+    user: CurrentUser = Depends(require_write),
 ) -> None:
     deleted = await _repository(request).delete_device(device_id, user.scope)
     if not deleted:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found.")
+    background.add_task(refresh_inventory, get_settings().oxidized_url)
 
 
 HEADER_WORDS = {"name", "nombre", "host", "router"}

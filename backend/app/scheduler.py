@@ -36,6 +36,23 @@ async def reload_nodes(oxidized_url: str) -> None:
         response.raise_for_status()
 
 
+async def refresh_inventory(oxidized_url: str) -> None:
+    """Hace que Oxidized relea el inventario tras un cambio.
+
+    Oxidized no consulta la base: pide la lista al backend y la guarda en
+    memoria. Sin esto, editar la clave de un equipo dejaba a Oxidized
+    intentando entrar con la vieja, y borrar uno lo dejaba respaldando un
+    equipo que ya no existe.
+
+    Es "mejor esfuerzo": si Oxidized no responde, la operación del usuario no
+    debe fallar por ello.
+    """
+    try:
+        await reload_nodes(oxidized_url)
+    except httpx.HTTPError as error:
+        log.warning("No se pudo recargar el inventario en Oxidized: %s", error)
+
+
 async def backup_new_nodes(oxidized_url: str, names: list[str]) -> None:
     """Encola el primer respaldo de equipos recién dados de alta.
 

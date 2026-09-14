@@ -276,3 +276,80 @@ async def test_bulk_import_backs_up_everything_it_created(
         )
 
     assert no_network_backups == ["rb-a", "rb-b"]
+
+
+async def test_editing_a_device_tells_oxidized(auth_headers, monkeypatch) -> None:
+    """Cambiar la clave no sirve de nada si Oxidized sigue con la anterior."""
+    avisos = []
+
+    async def fake_refresh(url):
+        avisos.append(url)
+
+    monkeypatch.setattr("app.devices.refresh_inventory", fake_refresh)
+    async with client(auth_headers) as api:
+        creado = await api.post(
+            "/api/devices", json={"name": "rb-edit", "address": "192.0.2.70"}
+        )
+        await api.patch(
+            f"/api/devices/{creado.json()['id']}", json={"password": "NuevaClave"}
+        )
+
+    assert len(avisos) == 1
+
+
+async def test_deleting_a_device_tells_oxidized(auth_headers, monkeypatch) -> None:
+    avisos = []
+
+    async def fake_refresh(url):
+        avisos.append(url)
+
+    monkeypatch.setattr("app.devices.refresh_inventory", fake_refresh)
+    async with client(auth_headers) as api:
+        creado = await api.post(
+            "/api/devices", json={"name": "rb-borrar", "address": "192.0.2.71"}
+        )
+        await api.delete(f"/api/devices/{creado.json()['id']}")
+
+    assert len(avisos) == 1
+
+
+async def test_pausing_a_device_tells_oxidized_too(auth_headers, monkeypatch) -> None:
+    avisos = []
+
+    async def fake_refresh(url):
+        avisos.append(url)
+
+    monkeypatch.setattr("app.devices.refresh_inventory", fake_refresh)
+    async with client(auth_headers) as api:
+        creado = await api.post(
+            "/api/devices", json={"name": "rb-pausa", "address": "192.0.2.72"}
+        )
+        await api.patch(f"/api/devices/{creado.json()['id']}", json={"enabled": False})
+
+    assert len(avisos) == 1
+
+
+async def test_an_operator_edit_also_reaches_oxidized(
+    auth_headers, make_user, monkeypatch
+) -> None:
+    """Antes lo recargaba el panel llamando a un endpoint solo de admin: un
+    operador editaba y Oxidized nunca se enteraba."""
+    avisos = []
+
+    async def fake_refresh(url):
+        avisos.append(url)
+
+    monkeypatch.setattr("app.devices.refresh_inventory", fake_refresh)
+    async with client(auth_headers) as api:
+        creado = await api.post(
+            "/api/devices",
+            json={"name": "rb-op", "address": "192.0.2.73", "group_name": "EmpresaA"},
+        )
+    headers = make_user("op-a", role="operador", group_name="EmpresaA")
+    async with client(headers) as api:
+        respuesta = await api.patch(
+            f"/api/devices/{creado.json()['id']}", json={"port": 2222}
+        )
+
+    assert respuesta.status_code == 200
+    assert len(avisos) == 1

@@ -52,3 +52,14 @@ async def test_readiness_fails_when_a_dependency_is_unavailable(monkeypatch) -> 
     assert response.status_code == 503
     assert response.json()["status"] == "degraded"
     assert response.json()["checks"]["redis"] is False
+
+
+async def test_the_panel_is_always_revalidated() -> None:
+    """Sin esto, tras actualizar se seguía viendo el panel anterior desde la
+    caché del navegador mientras la API ya reportaba el commit nuevo."""
+    transport = ASGITransport(app=main_module.app)
+    async with AsyncClient(transport=transport, base_url="http://test") as api:
+        response = await api.get("/")
+
+    assert response.status_code == 200
+    assert "no-cache" in response.headers.get("cache-control", "")

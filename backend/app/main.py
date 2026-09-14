@@ -106,7 +106,18 @@ PANEL_FILE = Path(__file__).parent / "static" / "index.html"
 
 @app.get("/", include_in_schema=False)
 async def root() -> FileResponse:
-    return FileResponse(PANEL_FILE, media_type="text/html")
+    """El panel es un único archivo y cambia en cada actualización.
+
+    Sin `no-cache` el navegador puede seguir sirviendo la versión anterior
+    después de actualizar: se ve el diseño viejo mientras la API ya responde
+    con el commit nuevo, y hace falta un recargado forzado para notarlo.
+    Con esta cabecera revalida siempre (y sigue ahorrando con un 304).
+    """
+    return FileResponse(
+        PANEL_FILE,
+        media_type="text/html",
+        headers={"Cache-Control": "no-cache, must-revalidate"},
+    )
 
 
 @app.get("/health/live")
