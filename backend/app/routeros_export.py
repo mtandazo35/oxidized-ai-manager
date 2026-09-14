@@ -16,7 +16,14 @@ import re
 from dataclasses import dataclass, field
 
 
-VERSION_PATTERN = re.compile(r"by RouterOS (?P<version>[0-9][0-9a-zA-Z.\-]*)")
+# RouterOS 7 escribe «# ... by RouterOS 7.23.2» en la primera línea;
+# RouterOS 6 usa una cabecera distinta, «#   version: 6.49.21 (long-term)».
+# Sin las dos, toda la flota v6 quedaba sin versión detectada y las reglas que
+# dependen de ella no se evaluaban nunca.
+VERSION_PATTERN = re.compile(
+    r"by RouterOS (?P<version>[0-9][0-9a-zA-Z.\-]*)"
+    r"|^#\s*version:\s*(?P<v6>[0-9][0-9a-zA-Z.\-]*)"
+)
 
 
 @dataclass(frozen=True)
@@ -125,7 +132,7 @@ def parse_export(text: str) -> Export:
         if line.startswith("#"):
             match = VERSION_PATTERN.search(line)
             if match and not export.version:
-                export.version = match.group("version")
+                export.version = match.group("version") or match.group("v6")
             continue
         if line.startswith("/"):
             section = " ".join(line.split())

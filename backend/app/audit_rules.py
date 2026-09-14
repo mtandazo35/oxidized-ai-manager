@@ -19,6 +19,7 @@ evidencia, para que el hallazgo sea auditable y no parezca magia.
 
 from __future__ import annotations
 
+import ipaddress
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -41,6 +42,8 @@ SEVERITY_WEIGHT = {CRITICAL: 40, HIGH: 15, MEDIUM: 5, LOW: 1}
 
 # Versión mínima que consideramos soportada para RouterOS 7.
 MIN_SUPPORTED_VERSION = (7, 12)
+# La rama 6 long-term sigue con mantenimiento: por debajo de esto sí preocupa.
+MIN_V6_LONG_TERM = (6, 49)
 
 # Servicios que RouterOS habilita de fábrica y transportan credenciales en
 # claro (o exponen una superficie de gestión innecesaria).
@@ -137,9 +140,25 @@ def _make_plaintext_service_check(service: str) -> Callable[[Export], list[Evide
                     "de fábrica (habilitado)."
                 )
             ]
+        if stanza.get("address"):
+            # Sigue viajando en claro, pero solo lo alcanzan las redes
+            # indicadas: no es lo mismo que tenerlo abierto a Internet.
+            return [
+                Evidence(
+                    f"{stanza.raw}  ← limitado a `{stanza.get('address')}`, "
+                    "pero el tráfico sigue sin cifrar.",
+                    stanza.line,
+                )
+            ]
         return [Evidence(stanza.raw, stanza.line)]
 
     return check
+
+
+def _restricted_plaintext_service(export: Export, service: str) -> bool:
+    """¿El servicio está habilitado pero limitado por `address=`?"""
+    enabled, stanza = _service_is_enabled(export, service)
+    return bool(enabled and stanza is not None and stanza.get("address"))
 
 
 def _check_services_without_address(export: Export) -> list[Evidence]:
@@ -331,10 +350,28 @@ def _check_ntp_client(export: Export) -> list[Evidence]:
 
 
 def _check_routeros_version(export: Export) -> list[Evidence]:
+    """Solo avisa de versiones realmente atrasadas.
+
+    La rama 6 long-term (6.49.x) sigue recibiendo mantenimiento de MikroTik:
+    tratarla como «fuera de soporte» sería un aviso grave donde no lo hay. Lo
+    que sí merece aviso es una 6 anterior a la long-term, o una 7 vieja.
+    """
     if not export.version:
         return []
     parsed = version_tuple(export.version)
-    if not parsed or parsed >= MIN_SUPPORTED_VERSION:
+    if not parsed:
+        return []
+    if parsed[0] <= 6:
+        if parsed >= MIN_V6_LONG_TERM:
+            return []
+        return [
+            Evidence(
+                f"RouterOS {export.version}: anterior a la rama long-term "
+                f"{'.'.join(str(p) for p in MIN_V6_LONG_TERM)}, que acumula "
+                "vulnerabilidades ya corregidas."
+            )
+        ]
+    if parsed >= MIN_SUPPORTED_VERSION:
         return []
     return [
         Evidence(
@@ -371,24 +408,84 @@ def _has_filter(stanza: Stanza, direction: str) -> bool:
     )
 
 
+# Rangos que indican infraestructura propia. Se enumeran a mano en lugar de
+# usar `is_private` porque esa propiedad de Python incluye también los rangos
+# de documentación (192.0.2.0/24, 198.51.100.0/24...), que son justo los que se
+# usan para representar un tránsito de ejemplo.
+INTERNAL_RANGES = (
+    "10.0.0.0/8",
+    "172.16.0.0/12",
+    "192.168.0.0/16",
+    "100.64.0.0/10",   # CGNAT
+    "169.254.0.0/16",
+    "127.0.0.0/8",
+    "fc00::/7",
+    "fe80::/10",
+)
+
+
+def _is_internal_peer(address: str) -> bool:
+    """¿El vecino BGP está en un rango de infraestructura propia?
+
+    Una sesión contra 172.16.x.x o 10.x.x.x es la red del propio operador
+    (iBGP, el enlace con la matriz). Exigirle filtros como a un tránsito de
+    Internet genera un aviso grave donde no hay un riesgo equivalente.
+    """
+    try:
+        ip = ipaddress.ip_address(address.strip())
+    except ValueError:
+        return False
+    return any(
+        ip in ipaddress.ip_network(rango)
+        for rango in INTERNAL_RANGES
+        if ipaddress.ip_network(rango).version == ip.version
+    )
+
+
+def _peer_address(stanza: Stanza) -> str:
+    return (
+        stanza.get("remote.address")
+        or stanza.get("remote-address")
+        or stanza.get("name")
+        or "?"
+    )
+
+
 def _make_bgp_filter_check(direction: str) -> Callable[[Export], list[Evidence]]:
     def check(export: Export) -> list[Evidence]:
         evidence = []
         for stanza in _bgp_sessions(export):
             if _has_filter(stanza, direction):
                 continue
-            peer = (
-                stanza.get("remote.address")
-                or stanza.get("remote-address")
-                or stanza.get("name")
-                or "?"
-            )
+            peer = _peer_address(stanza)
+            if _is_internal_peer(peer):
+                # Se informa aparte, con severidad baja: ver ROS-BGP-003.
+                continue
             evidence.append(
                 Evidence(f"Sesión BGP `{peer}` sin filtro de {direction}.", stanza.line)
             )
         return evidence
 
     return check
+
+
+def _check_internal_bgp_without_filters(export: Export) -> list[Evidence]:
+    evidence = []
+    for stanza in _bgp_sessions(export):
+        peer = _peer_address(stanza)
+        if not _is_internal_peer(peer):
+            continue
+        if _has_filter(stanza, "input") and _has_filter(stanza, "output"):
+            continue
+        evidence.append(
+            Evidence(
+                f"Sesión interna con `{peer}` sin filtros. Es infraestructura "
+                "propia, así que el riesgo es bajo, pero un error de "
+                "redistribución en el otro extremo se propaga sin freno.",
+                stanza.line,
+            )
+        )
+    return evidence
 
 
 RULES: tuple[Rule, ...] = (
@@ -578,6 +675,18 @@ RULES: tuple[Rule, ...] = (
             "sin filtro se acepta cualquier prefijo del vecino."
         ),
         check=_make_bgp_filter_check("input"),
+    ),
+    Rule(
+        id="ROS-BGP-003",
+        category="bgp",
+        severity=LOW,
+        title="Sesión BGP interna sin filtros",
+        recommendation=(
+            "Con infraestructura propia el riesgo es menor, pero conviene "
+            "filtrar también en iBGP: evita que un error de redistribución en "
+            "el otro extremo se propague por toda la red."
+        ),
+        check=_check_internal_bgp_without_filters,
     ),
     Rule(
         id="ROS-BGP-002",

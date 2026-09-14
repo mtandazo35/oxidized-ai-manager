@@ -253,7 +253,6 @@
     <button id="tab-btn-audit">Auditoría</button>
     <button id="tab-btn-import">Carga masiva</button>
     <button id="tab-btn-config">Configuración</button>
-    <button id="tab-btn-users">Usuarios</button>
     <button id="tab-btn-system">Ajustes del sistema</button>
   </nav>
   <main>
@@ -385,7 +384,35 @@
       <p class="msg" id="bulk-run-msg"></p>
     </div>
     </div>
-    <div id="tab-users" hidden>
+    <div id="tab-system" hidden>
+    <div id="hub-home">
+      <h2>Ajustes del sistema</h2>
+      <div class="hub">
+        <button type="button" class="hub-item" data-seccion="version">
+          <span class="disc"><svg viewBox="0 0 24 24"><path d="M12 3v10"/><path d="m8 9 4 4 4-4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg></span>
+          Versión y<br>actualizaciones
+        </button>
+        <button type="button" class="hub-item" data-seccion="seguridad">
+          <span class="disc"><svg viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.4-3 8.3-7 10-4-1.7-7-5.6-7-10V6z"/><path d="M9.5 12l1.8 1.8 3.4-3.6"/></svg></span>
+          Seguridad<br>de acceso
+        </button>
+        <button type="button" class="hub-item" data-seccion="actividad">
+          <span class="disc"><svg viewBox="0 0 24 24"><path d="M5 5h14"/><path d="M5 10h14"/><path d="M5 15h9"/><path d="M5 20h9"/></svg></span>
+          Actividad
+        </button>
+        <button type="button" class="hub-item" data-ir="config">
+          <span class="disc"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9 17 7M7 17l-2.1 2.1"/></svg></span>
+          Respaldos<br>programados
+        </button>
+        <button type="button" class="hub-item" data-seccion="cuentas">
+          <span class="disc"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M2.5 20c0-3.6 3-5.6 6.5-5.6s6.5 2 6.5 5.6"/><path d="M17 11.5a2.6 2.6 0 1 0 0-5.2"/><path d="M18.5 20c0-2.2-.7-3.8-2-4.8"/></svg></span>
+          Cuentas<br>de acceso
+        </button>
+      </div>
+    </div>
+
+    <div class="hub-seccion" id="sec-cuentas" hidden>
+      <button type="button" class="ghost hub-back" data-volver="1">← Ajustes del sistema</button>
     <h2>Cuentas de acceso</h2>
     <div class="card">
       <p class="muted" style="margin-top:0">
@@ -425,33 +452,6 @@
         </table>
       </div>
     </div>
-    </div>
-
-    <div id="tab-system" hidden>
-    <div id="hub-home">
-      <h2>Ajustes del sistema</h2>
-      <div class="hub">
-        <button type="button" class="hub-item" data-seccion="version">
-          <span class="disc"><svg viewBox="0 0 24 24"><path d="M12 3v10"/><path d="m8 9 4 4 4-4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg></span>
-          Versión y<br>actualizaciones
-        </button>
-        <button type="button" class="hub-item" data-seccion="seguridad">
-          <span class="disc"><svg viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.4-3 8.3-7 10-4-1.7-7-5.6-7-10V6z"/><path d="M9.5 12l1.8 1.8 3.4-3.6"/></svg></span>
-          Seguridad<br>de acceso
-        </button>
-        <button type="button" class="hub-item" data-seccion="actividad">
-          <span class="disc"><svg viewBox="0 0 24 24"><path d="M5 5h14"/><path d="M5 10h14"/><path d="M5 15h9"/><path d="M5 20h9"/></svg></span>
-          Actividad
-        </button>
-        <button type="button" class="hub-item" data-ir="config">
-          <span class="disc"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9 17 7M7 17l-2.1 2.1"/></svg></span>
-          Respaldos<br>programados
-        </button>
-        <button type="button" class="hub-item" data-ir="users">
-          <span class="disc"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M2.5 20c0-3.6 3-5.6 6.5-5.6s6.5 2 6.5 5.6"/><path d="M17 11.5a2.6 2.6 0 1 0 0-5.2"/><path d="M18.5 20c0-2.2-.7-3.8-2-4.8"/></svg></span>
-          Cuentas<br>de acceso
-        </button>
-      </div>
     </div>
 
     <div class="hub-seccion" id="sec-version" hidden>
@@ -1417,7 +1417,7 @@ $("btn-upload").addEventListener("click", async () => {
   }
 });
 
-const TAB_NAMES = ["dashboard", "audit", "import", "config", "users", "system"];
+const TAB_NAMES = ["dashboard", "audit", "import", "config", "system"];
 
 // Permisos de la cuenta actual. La interfaz solo esconde lo que la API ya
 // rechaza: ocultar un botón no es un control de acceso.
@@ -1442,7 +1442,6 @@ function applyPermissions(me) {
   $("tab-btn-audit").hidden = !perms.can_audit;
   $("tab-btn-import").hidden = !perms.can_write;
   $("tab-btn-config").hidden = !perms.is_admin;
-  $("tab-btn-users").hidden = !perms.is_admin;
   $("tab-btn-system").hidden = !perms.is_admin;
   $("btn-reload").hidden = !perms.is_admin;
   $("btn-open-add").hidden = !perms.can_write;
@@ -1451,8 +1450,7 @@ function applyPermissions(me) {
 function allowedTab(tab) {
   if (tab === "audit") return perms.can_audit;
   if (tab === "import") return perms.can_write;
-  if (tab === "config" || tab === "users" || tab === "system")
-    return perms.is_admin;
+  if (tab === "config" || tab === "system") return perms.is_admin;
   return true;
 }
 
@@ -1466,7 +1464,6 @@ function switchTab(tab) {
   if (tab === "config") { loadSettings(); loadBulkRun(); }
   if (tab === "system") hubMostrar(null);
   if (tab === "audit") loadAudit();
-  if (tab === "users") { loadUsers(); loadRoleMatrix(); }
 }
 
 async function loadBulkRun() {
@@ -2080,6 +2077,7 @@ const HUB_CARGA = {
   version: () => loadVersion(),
   seguridad: () => { loadPolicy(); loadBlocks(); },
   actividad: () => loadActivity(),
+  cuentas: () => { loadUsers(); loadRoleMatrix(); },
 };
 
 function hubMostrar(seccion) {
@@ -2108,7 +2106,6 @@ function initialTab() {
 $("tab-btn-dashboard").addEventListener("click", () => switchTab("dashboard"));
 $("tab-btn-audit").addEventListener("click", () => switchTab("audit"));
 $("tab-btn-import").addEventListener("click", () => switchTab("import"));
-$("tab-btn-users").addEventListener("click", () => switchTab("users"));
 $("tab-btn-system").addEventListener("click", () => switchTab("system"));
 $("tab-btn-config").addEventListener("click", () => switchTab("config"));
 

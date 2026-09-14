@@ -193,3 +193,68 @@ def test_empty_config_does_not_crash() -> None:
 
     assert report["level"] in {"ok", "low", "medium", "high", "critical"}
     assert report["ros_version"] == ""
+
+
+# --- Falsos positivos corregidos ------------------------------------------
+
+# Cabecera real de un RouterOS 6: no dice «by RouterOS», usa «version:».
+CABECERA_V6 = "#             version: 6.49.21 (long-term)\n#    factory-software: 6.45.7\n"
+
+
+def test_routeros_6_version_is_detected() -> None:
+    """Sin esto, toda la flota v6 quedaba sin versión y las reglas que
+    dependen de ella no se evaluaban nunca."""
+    report = audit_config(CABECERA_V6 + "/ip service\nset telnet disabled=yes\n")
+
+    assert report["ros_version"] == "6.49.21"
+
+
+def test_the_long_term_6_branch_is_not_flagged_as_outdated() -> None:
+    """6.49.x sigue con mantenimiento: avisar sería un falso positivo."""
+    report = audit_config(CABECERA_V6)
+
+    assert "ROS-HYG-003" not in rule_ids(report)
+
+
+def test_a_6_older_than_long_term_is_flagged() -> None:
+    report = audit_config("#   version: 6.44.5 (stable)\n")
+
+    assert "ROS-HYG-003" in rule_ids(report)
+
+
+def test_a_restricted_plaintext_service_says_it_is_restricted() -> None:
+    """Estaba señalado igual que si estuviera abierto a Internet."""
+    config = "/ip service\nset api address=203.0.113.9/32\n"
+    hallazgo = next(
+        f for f in audit_config(config)["findings"] if f["rule_id"] == "ROS-SEC-004"
+    )
+
+    assert "limitado a" in hallazgo["evidence"][0]["detail"]
+    assert "203.0.113.9/32" in hallazgo["evidence"][0]["detail"]
+
+
+def test_an_internal_bgp_session_is_not_treated_as_transit() -> None:
+    """Un vecino en rango privado es infraestructura propia, no un tránsito."""
+    config = "/routing bgp peer\nadd name=Matriz remote-address=172.16.103.1\n"
+    found = rule_ids(audit_config(config))
+
+    assert "ROS-BGP-001" not in found
+    assert "ROS-BGP-002" not in found
+    assert "ROS-BGP-003" in found
+
+
+def test_an_internal_session_with_filters_says_nothing() -> None:
+    config = (
+        "/routing bgp peer\n"
+        "add name=Matriz remote-address=10.0.0.1 in-filter=in out-filter=out\n"
+    )
+
+    assert "ROS-BGP-003" not in rule_ids(audit_config(config))
+
+
+def test_a_public_peer_without_filters_is_still_serious() -> None:
+    config = "/routing bgp peer\nadd name=transito remote-address=198.51.100.1\n"
+    found = rule_ids(audit_config(config))
+
+    assert {"ROS-BGP-001", "ROS-BGP-002"} <= found
+    assert "ROS-BGP-003" not in found
