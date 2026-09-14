@@ -228,6 +228,13 @@
   .modal-body input[type=number] { width: 90px; }
   .modal-body .field { flex-wrap: wrap; }
   .modal-body .field label { white-space: normal; }
+  .table-tools { display: flex; align-items: center; gap: 8px;
+    flex-wrap: wrap; margin: 2px 0 12px; }
+  .table-tools > input[type=search] { margin-left: auto; }
+  .table-tools > input[type=search]:first-child { margin-left: 0; }
+  @media (max-width: 700px) {
+    .table-tools > input[type=search] { margin-left: 0; }
+  }
   .change-list { list-style: none; margin: 0; padding: 0;
     max-height: 210px; overflow-y: auto; font-size: .86rem; }
   .change-list li { display: flex; gap: 10px; align-items: baseline;
@@ -332,14 +339,12 @@
   </nav>
   <main>
     <div id="tab-dashboard">
-    <div style="display:flex;gap:8px;margin-top:24px;flex-wrap:wrap;justify-content:flex-end">
-      <input id="filter-text" type="search" placeholder="🔍 Buscar…" title="Filtra por nombre, identity, IP, puerto, plataforma, versión, usuario o grupo" style="width:200px;padding:6px 10px;font-size:.85rem">
-      <select id="filter-group" style="font-size:.85rem"><option value="">Todas las empresas</option></select>
-    </div>
     <h2>Routers</h2>
     <div class="card">
-      <div style="margin:2px 0 10px">
+      <div class="table-tools">
         <button type="button" id="btn-open-add">+ Agregar router</button>
+        <input id="filter-text" type="search" placeholder="🔍 Buscar…" title="Filtra por nombre, identity, IP, puerto, plataforma, versión, usuario o grupo" style="width:200px;padding:6px 10px;font-size:.85rem">
+        <select id="filter-group" style="font-size:.85rem"><option value="">Todas las empresas</option></select>
       </div>
       <p class="msg" id="device-msg"></p>
       <table>
@@ -382,12 +387,12 @@
     </div>
     </div>
     <div id="tab-estado" hidden>
-    <div style="display:flex;gap:8px;margin-top:24px;flex-wrap:wrap;justify-content:flex-end">
-      <input id="filter-text-estado" type="search" placeholder="🔍 Buscar…" title="Filtra por nombre, identity, IP, puerto, plataforma, versión, usuario o grupo" style="width:200px;padding:6px 10px;font-size:.85rem">
-      <select id="filter-group-estado" style="font-size:.85rem"><option value="">Todas las empresas</option></select>
-    </div>
     <h2>Estado de respaldos</h2>
     <div class="card">
+      <div class="table-tools">
+        <input id="filter-text-estado" type="search" placeholder="🔍 Buscar…" title="Filtra por nombre, identity, IP, puerto, plataforma, versión, usuario o grupo" style="width:200px;padding:6px 10px;font-size:.85rem">
+        <select id="filter-group-estado" style="font-size:.85rem"><option value="">Todas las empresas</option></select>
+      </div>
       <p class="msg" id="estado-msg"></p>
       <table>
         <thead><tr><th>Router</th><th>Estado actual</th><th>Último evento</th><th>Fecha</th><th>Último éxito</th><th>Commit</th><th></th></tr></thead>
