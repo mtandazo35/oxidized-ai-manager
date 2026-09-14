@@ -80,6 +80,9 @@
   .badge.fail { background: var(--fail-bg); color: var(--fail-ink); }
   .badge.off { background: var(--off-bg); color: var(--off-ink); }
   .badge.run { background: var(--warn-bg); color: var(--warn-ink); animation: pulse 1.2s infinite; }
+  /* Verde sólido: hay algo que hacer. El verde suave de `ok` se reserva para
+     «todo en orden», y así los dos estados no se confunden. */
+  .badge.nuevo { background: #15803d; color: #fff; }
   @keyframes pulse { 50% { opacity: .55; } }
   #login-view { display: grid; place-items: center; min-height: 100vh;
     position: relative; overflow: hidden; }
@@ -1824,7 +1827,7 @@ function renderVersion(info) {
     boton.hidden = true;
     setMsg("ver-msg", info.error, false);
   } else if (info.update_available) {
-    badge.className = "badge run";
+    badge.className = "badge nuevo";
     badge.textContent = "hay una versión nueva";
     boton.hidden = false;
     $("ver-msg").textContent = "";
