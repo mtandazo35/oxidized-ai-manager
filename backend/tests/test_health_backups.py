@@ -143,3 +143,41 @@ async def test_response_never_names_a_device(
         response = await api.get("/health/backups")
 
     assert "rb-secreto" not in response.text
+
+
+# --- Protección de los health checks públicos -----------------------------
+
+
+async def test_ready_is_cached_so_a_burst_cannot_saturate_it(monkeypatch) -> None:
+    """Sin caché, 40 conexiones contra /health/ready bajaban el panel de
+    140 req/s a 1,5 req/s: un endpoint sin autenticar bastaba para tumbarlo."""
+    from app import health
+
+    llamadas = 0
+
+    async def contar(settings):
+        nonlocal llamadas
+        llamadas += 1
+        return {"postgres": True, "redis": True, "oxidized": True}
+
+    monkeypatch.setattr(health, "_probe_dependencies", contar)
+
+    async with client() as api:
+        for _ in range(25):
+            respuesta = await api.get("/health/ready")
+
+    assert respuesta.status_code == 200
+    # Una sola comprobación real para las 25 peticiones.
+    assert llamadas == 1
+
+
+async def test_backups_health_is_cached_too(auth_headers, device_repository) -> None:
+    async with client() as api:
+        await add_device(api, auth_headers, "rb-cache")
+        primera = await api.get("/health/backups")
+        # Se envejece el equipo DESPUÉS de la primera consulta: la respuesta
+        # cacheada debe seguir siendo la de antes.
+        age(device_repository, "rb-cache", minutes=60 * 5)
+        segunda = await api.get("/health/backups")
+
+    assert primera.json() == segunda.json()

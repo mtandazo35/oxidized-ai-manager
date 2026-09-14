@@ -1,5 +1,6 @@
 import asyncio
 import datetime as dt
+import time
 from collections.abc import Awaitable, Callable
 
 import asyncpg
@@ -52,7 +53,55 @@ async def _probe(check: Callable[[], Awaitable[None]]) -> bool:
     return True
 
 
-async def check_dependencies(settings: Settings) -> dict[str, bool]:
+class _ResultadoReciente:
+    """Guarda el último resultado y evita comprobaciones simultáneas.
+
+    `/health/ready` es **público**: sin esto, cada petición abría una conexión
+    nueva a PostgreSQL, otra a Redis y una consulta a Oxidized. Con 40
+    conexiones en paralelo el panel pasaba de 140 req/s a 1,5 req/s y de 28 ms
+    a 4,4 s de latencia: un endpoint sin autenticar bastaba para dejar la
+    aplicación inservible.
+
+    Con una caché de pocos segundos el monitoreo externo sigue viendo el estado
+    al día —Uptime Kuma consulta cada 30 o 60 s— y una ráfaga deja de
+    multiplicar el trabajo real.
+    """
+
+    def __init__(self, ttl_segundos: float) -> None:
+        self._ttl = ttl_segundos
+        self._valor: dict | None = None
+        self._momento = 0.0
+        self._lock = asyncio.Lock()
+
+    def _fresco(self) -> bool:
+        return self._valor is not None and (
+            time.monotonic() - self._momento < self._ttl
+        )
+
+    async def obtener(self, producir: Callable[[], Awaitable[dict]]) -> dict:
+        if self._fresco():
+            return self._valor
+        async with self._lock:
+            # Mientras se esperaba el turno, otra petición pudo refrescarlo.
+            if self._fresco():
+                return self._valor
+            self._valor = await producir()
+            self._momento = time.monotonic()
+            return self._valor
+
+
+_dependencias = _ResultadoReciente(ttl_segundos=5.0)
+_respaldos = _ResultadoReciente(ttl_segundos=15.0)
+
+
+def reset_health_cache() -> None:
+    """Olvida lo cacheado. Lo usan las pruebas para no arrastrar estado."""
+    for cache in (_dependencias, _respaldos):
+        cache._valor = None
+        cache._momento = 0.0
+
+
+async def _probe_dependencies(settings: Settings) -> dict[str, bool]:
     results = await asyncio.gather(
         _probe(lambda: check_postgres(settings)),
         _probe(lambda: check_redis(settings)),
@@ -61,7 +110,15 @@ async def check_dependencies(settings: Settings) -> dict[str, bool]:
     return dict(zip(("postgres", "redis", "oxidized"), results, strict=True))
 
 
+async def check_dependencies(settings: Settings) -> dict[str, bool]:
+    return await _dependencias.obtener(lambda: _probe_dependencies(settings))
+
+
 async def backup_freshness(app, settings: Settings) -> dict:
+    return await _respaldos.obtener(lambda: _backup_freshness(app, settings))
+
+
+async def _backup_freshness(app, settings: Settings) -> dict:
     """Resumen de antigüedad de los respaldos, para monitoreo externo.
 
     Deliberadamente **sin nombres de equipos**: lo consulta Uptime Kuma sin

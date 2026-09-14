@@ -434,6 +434,17 @@ def anyio_backend() -> str:
 
 
 @pytest.fixture(autouse=True)
+def reset_health_cache_between_tests():
+    """Los health checks cachean su resultado unos segundos; sin esto una
+    prueba vería el estado calculado por la anterior."""
+    from app.health import reset_health_cache
+
+    reset_health_cache()
+    yield
+    reset_health_cache()
+
+
+@pytest.fixture(autouse=True)
 def no_network_backups(monkeypatch):
     """Evita que el primer respaldo salga a la red durante las pruebas.
 
