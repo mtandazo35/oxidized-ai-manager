@@ -228,6 +228,14 @@
   .modal-body input[type=number] { width: 90px; }
   .modal-body .field { flex-wrap: wrap; }
   .modal-body .field label { white-space: normal; }
+  .change-list { list-style: none; margin: 0; padding: 0;
+    max-height: 210px; overflow-y: auto; font-size: .86rem; }
+  .change-list li { display: flex; gap: 10px; align-items: baseline;
+    padding: 6px 0; border-bottom: 1px solid var(--border); }
+  .change-list li:last-child { border-bottom: 0; }
+  .change-list code { flex: 0 0 auto; font-size: .78rem; color: var(--ink-muted); }
+  .change-list .fecha { margin-left: auto; flex: 0 0 auto;
+    font-size: .76rem; color: var(--ink-muted); }
   .update-chip { display: inline-flex; align-items: center; gap: 7px;
     background: #15803d; color: #fff; border: 0; border-radius: 999px;
     padding: 6px 14px 6px 11px; font-size: .82rem; font-weight: 600;
@@ -575,6 +583,11 @@
           <span id="ver-progress" class="muted"></span>
         </div>
         <p class="msg" id="ver-msg"></p>
+        <div id="ver-changes" hidden>
+          <h3 style="font-size:.92rem;color:var(--accent-hover);margin:14px 0 6px">
+            Qué trae esta actualización</h3>
+          <ul class="change-list" id="ver-changes-list"></ul>
+        </div>
         <p class="muted" style="margin:0">
           La actualización la aplica el servidor, no el navegador: respalda la
           plataforma, baja los cambios del repositorio y reconstruye. <strong>No se
@@ -1927,6 +1940,16 @@ function renderVersion(info) {
     boton.hidden = true;
     $("ver-msg").textContent = "";
   }
+
+  // La lista solo aparece cuando hay algo que traer y el remoto la pudo dar:
+  // con un remoto que no sea de GitHub o sin salida a internet llega vacía.
+  const cambios = info.changes || [];
+  $("ver-changes").hidden = !cambios.length;
+  $("ver-changes-list").innerHTML = cambios.map((c) => {
+    const fecha = c.date ? new Date(c.date).toLocaleDateString() : "";
+    return `<li><code>${esc(c.short)}</code><span>${esc(c.subject)}</span>` +
+      `<span class="fecha">${esc(fecha)}</span></li>`;
+  }).join("");
 
   const estado = info.last_update || {};
   const enCurso = info.updating || ["solicitada", "en-progreso"].includes(estado.state);

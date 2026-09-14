@@ -258,6 +258,9 @@ class VersionOut(BaseModel):
     updating: bool = False
     error: str = ""
     last_update: dict = {}
+    # Qué trae la actualización, del commit más nuevo al más viejo. Vacía si el
+    # remoto no es de GitHub o no se pudo consultar.
+    changes: list[dict] = []
 
 
 class UpdateRequestResult(BaseModel):

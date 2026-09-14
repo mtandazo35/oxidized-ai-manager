@@ -9,6 +9,7 @@ from .updater import (
     UpdaterError,
     is_running,
     local_commit,
+    pending_changes,
     read_status,
     remote_commit,
     request_update,
@@ -34,6 +35,7 @@ async def version() -> dict:
         "remote_commit": "",
         "update_available": False,
         "error": "",
+        "changes": [],
         "last_update": read_status(settings.update_channel_dir),
         "updating": is_running(settings.update_channel_dir),
     }
@@ -56,6 +58,10 @@ async def version() -> dict:
         return result
     result["remote_commit"] = remote
     result["update_available"] = remote != result["commit"]
+    if result["update_available"]:
+        result["changes"] = await pending_changes(
+            settings.repo_git_dir, result["commit"], remote
+        )
     return result
 
 

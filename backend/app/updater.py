@@ -21,7 +21,10 @@ import asyncio
 import datetime as dt
 import json
 import os
+import re
 from pathlib import Path
+
+import httpx
 
 
 REQUEST_FILE = "update-request.json"
@@ -131,3 +134,53 @@ def request_update(channel_dir: str, username: str) -> dict:
     except OSError as error:
         raise UpdaterError(f"no se pudo escribir la petición: {error}")
     return payload
+
+
+# Un remoto de GitHub, en cualquiera de sus dos formas habituales.
+_GITHUB = re.compile(
+    r"^(?:https://github\.com/|git@github\.com:)(?P<repo>[^/]+/[^/]+?)(?:\.git)?$"
+)
+
+
+async def pending_changes(git_dir: str, base: str, head: str) -> list[dict]:
+    """Los commits que trae la actualización, del más nuevo al más viejo.
+
+    El repositorio está montado de solo lectura, así que no se puede hacer
+    `git fetch` para leer los mensajes: se piden a la API pública de GitHub,
+    que para un repositorio público no necesita credenciales. Si el remoto no
+    es de GitHub o la consulta falla, se devuelve una lista vacía: saber qué
+    trae la actualización está bien, pero no es motivo para romper la pantalla
+    de versión.
+    """
+    if not base or not head or base == head:
+        return []
+    try:
+        url = await _git("--git-dir", git_dir, "config", "--get", "remote.origin.url")
+    except UpdaterError:
+        return []
+    match = _GITHUB.match(url.strip())
+    if not match:
+        return []
+    api = f"https://api.github.com/repos/{match.group('repo')}/compare/{base}...{head}"
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            response = await client.get(
+                api, headers={"Accept": "application/vnd.github+json"}
+            )
+        response.raise_for_status()
+        commits = response.json().get("commits") or []
+    except (httpx.HTTPError, ValueError):
+        return []
+    cambios = [
+        {
+            "short": str(c.get("sha", ""))[:7],
+            # Solo el asunto: el cuerpo del mensaje explica el porqué y aquí
+            # sobra, la pantalla es una lista.
+            "subject": (str((c.get("commit") or {}).get("message", "")).splitlines() or [""])[0][:150],
+            "date": ((c.get("commit") or {}).get("author") or {}).get("date", ""),
+        }
+        for c in commits
+        if c.get("sha")
+    ]
+    cambios.reverse()
+    return cambios[:30]
