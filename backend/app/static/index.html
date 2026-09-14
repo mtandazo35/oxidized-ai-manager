@@ -261,19 +261,24 @@
   /* Barra lateral. La cabecera sigue siendo pegajosa, asi que el lateral
      empieza justo debajo de ella (--bar-h) y se queda fijo al desplazar. */
   .shell { display: flex; align-items: flex-start; }
-  nav.tabs { flex: 0 0 216px; display: flex; flex-direction: column; gap: 2px;
+  nav.tabs { flex: 0 0 224px; display: flex; flex-direction: column; gap: 2px;
     padding: 14px 10px; background: var(--surface);
     border-right: 1px solid var(--border);
     position: sticky; top: var(--bar-h); height: calc(100vh - var(--bar-h));
     overflow-y: auto; }
+  /* Una línea siempre y la misma altura en todos: si el botón activo cambia de
+     tamaño, el menú entero se mueve al pulsar. Por eso tampoco engorda la
+     letra al activarse —«Estado de respaldos» en negrita no cabía y partía en
+     dos líneas—: la sección activa se distingue por el color, no por el peso. */
   nav.tabs button { display: flex; align-items: center; gap: 10px; width: 100%;
-    background: transparent; color: var(--ink-muted); border: 0; border-radius: 8px;
-    padding: 9px 12px; font-size: .9rem; text-align: left; }
+    min-height: 38px; background: transparent; color: var(--ink-muted);
+    border: 0; border-radius: 8px; padding: 9px 12px; font-size: .9rem;
+    font-weight: 500; text-align: left; white-space: nowrap; }
   nav.tabs button svg { flex: 0 0 18px; width: 18px; height: 18px; fill: none;
     stroke: currentColor; stroke-width: 1.7;
     stroke-linecap: round; stroke-linejoin: round; }
   nav.tabs button:hover { color: var(--ink); background: var(--surface-2); }
-  nav.tabs button.active { color: #fff; background: var(--accent); font-weight: 600; }
+  nav.tabs button.active { color: #fff; background: var(--accent); }
   nav.tabs button.active:hover { background: var(--accent-hover); }
   .shell > main { flex: 1; min-width: 0; margin: 0; }
   /* En pantallas estrechas el lateral vuelve a ser una fila desplazable. */
