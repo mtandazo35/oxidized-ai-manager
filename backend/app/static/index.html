@@ -474,6 +474,33 @@
   </div>
 </div>
 
+<div class="overlay" id="pppoe-overlay" hidden>
+  <div class="card wide">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <h1 style="font-size:1.1rem" id="pppoe-title">Usuarios PPPoE</h1>
+      <div style="display:flex;gap:8px">
+        <button type="button" class="ghost" id="btn-pppoe-csv">⬇ CSV</button>
+        <button type="button" class="ghost" id="btn-close-pppoe">Cerrar</button>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
+      <input id="pppoe-filter" type="search" placeholder="🔍 Buscar usuario…"
+        style="width:220px;padding:6px 10px;font-size:.85rem">
+      <label class="field" style="font-size:.85rem">
+        <input type="checkbox" id="pppoe-show"> Mostrar claves
+      </label>
+      <span id="pppoe-count" class="muted"></span>
+    </div>
+    <p class="msg" id="pppoe-msg"></p>
+    <div style="max-height:52vh;overflow-y:auto">
+      <table>
+        <thead><tr><th>Usuario</th><th>Clave</th><th>Perfil</th><th>IP</th><th>Comentario</th><th>Estado</th></tr></thead>
+        <tbody id="pppoe-body"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
 <div class="overlay" id="findings-overlay" hidden>
   <div class="card wide">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
@@ -509,11 +536,11 @@
   <form class="card" id="add-form">
     <h1 style="margin-bottom:16px;font-size:1.1rem">Agregar router</h1>
     <label for="a-name">Nombre</label>
-    <input id="a-name" placeholder="Core El Rosario" required style="margin:4px 0 4px">
+    <input id="a-name" placeholder="Router Sucursal Norte" required style="margin:4px 0 4px">
     <p class="muted" style="margin:0 0 10px">
       Escríbalo como quiera: los espacios y acentos se ajustan solos, porque
       este nombre es el del archivo en el repositorio de respaldos.
-      «Core El Rosario» se guarda como «Core-El-Rosario».
+      «Router Sucursal Norte» se guarda como «Router-Sucursal-Norte».
     </p>
     <label for="a-address">Dirección (IP o host)</label>
     <input id="a-address" required style="margin:4px 0 10px">
@@ -668,7 +695,7 @@ function describeFieldError(err) {
 
 // El nombre acaba siendo el archivo del equipo dentro del repositorio Git y
 // viaja en las URLs, así que no admite espacios. En vez de rechazarlo, se
-// corrige mientras se escribe: "Core El Rosario" -> "Core-El-Rosario".
+// corrige mientras se escribe: "Router Sucursal" -> "Router-Sucursal".
 function sanitizeNodeName(value) {
   return value
     .normalize("NFD").replace(/[\u0300-\u036f]/g, "")   // quita acentos
@@ -787,6 +814,7 @@ function renderDevices() {
         <td>${esc(d.username)}</td>
         <td><span class="badge ${d.enabled ? "ok" : "off"}">${d.enabled ? "activo" : "pausado"}</span></td>
         <td style="text-align:right">${perms.can_write ? `
+          <button class="ghost mini" onclick="showPppoe('${esc(d.name)}')" title="Usuarios PPPoE del último respaldo">PPPoE</button>
           <button class="ghost mini" onclick="backupNow(${d.id})">Respaldar</button>
           <button class="ghost mini" onclick="openEdit(${d.id})">Editar</button>
           <button class="ghost mini" onclick="toggleDevice(${d.id}, ${!d.enabled})">${d.enabled ? "Pausar" : "Activar"}</button>
@@ -1909,6 +1937,89 @@ $("btn-log-refresh").addEventListener("click", loadActivity);
       campo.setSelectionRange(pos, pos);
     }
   });
+});
+
+// --- Credenciales PPPoE del último respaldo ------------------------------
+
+let pppoeData = null;
+let pppoeNode = "";
+
+function renderPppoe() {
+  if (!pppoeData) return;
+  const query = $("pppoe-filter").value.trim().toLowerCase();
+  const verClaves = $("pppoe-show").checked;
+  const filas = pppoeData.secrets.filter((s) =>
+    !query || [s.user, s.comment, s.profile, s.remote_address]
+      .some((v) => (v || "").toLowerCase().includes(query)));
+  $("pppoe-body").innerHTML = filas.length
+    ? filas.map((s) => `
+      <tr>
+        <td style="font-family:ui-monospace,monospace">${esc(s.user)}</td>
+        <td style="font-family:ui-monospace,monospace">${
+          s.password
+            ? (verClaves ? esc(s.password) : "••••••••")
+            : '<span class="muted">(sin clave en el respaldo)</span>'}</td>
+        <td class="muted">${esc(s.profile || "—")}</td>
+        <td class="muted">${esc(s.remote_address || "—")}</td>
+        <td class="muted" style="white-space:normal">${esc(s.comment || "")}</td>
+        <td><span class="badge ${s.enabled ? "ok" : "off"}">${
+          s.enabled ? "activo" : "deshabilitado"}</span></td>
+      </tr>`).join("")
+    : '<tr><td colspan="6" class="muted">Sin usuarios que coincidan.</td></tr>';
+  $("pppoe-count").textContent =
+    `${filas.length} de ${pppoeData.total} usuarios` +
+    (pppoeData.clients.length ? ` · ${pppoeData.clients.length} conexión(es) pppoe-client` : "");
+}
+
+window.showPppoe = async (node) => {
+  pppoeNode = node;
+  pppoeData = null;
+  $("pppoe-title").textContent = "Usuarios PPPoE de " + node;
+  $("pppoe-body").innerHTML = '<tr><td colspan="6" class="muted">Cargando…</td></tr>';
+  $("pppoe-msg").textContent = "";
+  $("pppoe-filter").value = "";
+  $("pppoe-show").checked = false;
+  $("pppoe-count").textContent = "";
+  $("pppoe-overlay").hidden = false;
+  try {
+    pppoeData = await api(`/api/backups/pppoe?node=${encodeURIComponent(node)}`);
+    if (pppoeData.censored) {
+      setMsg("pppoe-msg",
+        "El respaldo trae los usuarios pero sin claves: a la cuenta de respaldo del " +
+        "MikroTik le falta la policy 'sensitive'. Añádala y vuelva a respaldar.", false);
+    } else if (!pppoeData.total) {
+      setMsg("pppoe-msg", "Este equipo no tiene usuarios PPPoE configurados.", true);
+    }
+    renderPppoe();
+  } catch (error) {
+    $("pppoe-body").innerHTML = "";
+    setMsg("pppoe-msg", error.message, false);
+  }
+};
+
+$("pppoe-filter").addEventListener("input", renderPppoe);
+$("pppoe-show").addEventListener("change", renderPppoe);
+$("btn-close-pppoe").addEventListener("click", () => {
+  $("pppoe-overlay").hidden = true;
+  pppoeData = null;   // no dejar las claves en memoria más de lo necesario
+});
+
+$("btn-pppoe-csv").addEventListener("click", () => {
+  if (!pppoeData || !pppoeData.secrets.length) return;
+  const escapaCsv = (v) => `"${String(v || "").replace(/"/g, '""')}"`;
+  const csv = [
+    "usuario,clave,perfil,ip,comentario,estado",
+    ...pppoeData.secrets.map((s) => [
+      s.user, s.password, s.profile, s.remote_address, s.comment,
+      s.enabled ? "activo" : "deshabilitado",
+    ].map(escapaCsv).join(",")),
+  ].join("\n");
+  const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = "pppoe-" + pppoeNode + ".csv";
+  link.click();
+  URL.revokeObjectURL(link.href);
 });
 
 function initialTab() {

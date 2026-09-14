@@ -182,11 +182,11 @@ async def test_name_with_spaces_is_normalized(auth_headers) -> None:
         response = await api.post(
             "/api/devices",
             headers=auth_headers,
-            json={"name": "Core El Rosario", "address": "200.24.130.153", "port": 2232},
+            json={"name": "Router Sucursal Norte", "address": "198.51.100.7", "port": 2232},
         )
 
     assert response.status_code == 201
-    assert response.json()["name"] == "Core-El-Rosario"
+    assert response.json()["name"] == "Router-Sucursal-Norte"
 
 
 async def test_accents_and_separators_are_cleaned(auth_headers) -> None:
@@ -194,10 +194,10 @@ async def test_accents_and_separators_are_cleaned(auth_headers) -> None:
         response = await api.post(
             "/api/devices",
             headers=auth_headers,
-            json={"name": "AMG - Ñuñoa (Quito)", "address": "192.0.2.1"},
+            json={"name": "Empresa - Señal (Norte)", "address": "192.0.2.1"},
         )
 
-    assert response.json()["name"] == "AMG-Nunoa-Quito"
+    assert response.json()["name"] == "Empresa-Senal-Norte"
 
 
 async def test_a_name_with_nothing_usable_is_rejected(auth_headers) -> None:

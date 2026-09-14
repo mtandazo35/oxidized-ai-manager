@@ -95,6 +95,16 @@ recomendado del servidor. Lea también `docs/PUBLIC_ACCESS.md`.
   usa `docker compose down` ni toca los volúmenes.
 - El repositorio se monta de solo lectura (`/repo/.git:ro`) para leer la versión.
 
+### Credenciales PPPoE
+- `GET /api/backups/pppoe` extrae los usuarios de `/ppp secret` del respaldo ya
+  guardado; no abre sesión contra el equipo.
+- Restringido a `admin` y `operador` (no a `auditor` ni `lector`): son
+  contraseñas de clientes finales, no información de consulta general.
+- Filtrado por empresa como el resto: pedir un equipo ajeno responde 404.
+- **Cada consulta se anota en la bitácora** con quién, desde qué IP y cuántos
+  usuarios; la anotación nunca incluye las contraseñas.
+- En el panel salen ocultas hasta que se pide verlas.
+
 ### Superficie de la aplicación
 - `/docs` y `/openapi.json` deshabilitados salvo `APP_ENV=development`.
 - Parámetros de las consultas a Git (nombre de nodo, hash de commit) validados

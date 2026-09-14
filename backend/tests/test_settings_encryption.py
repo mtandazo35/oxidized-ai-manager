@@ -13,7 +13,7 @@ from app.secrets_box import looks_encrypted
 
 pytestmark = pytest.mark.anyio
 
-REMOTE_WITH_TOKEN = "https://mtandazo:ghp_tokensecreto123@github.com/u/respaldos.git"
+REMOTE_WITH_TOKEN = "https://usuario:ghp_tokenficticio123@github.com/u/respaldos.git"
 
 
 class FakePool:
@@ -54,7 +54,7 @@ async def test_git_remote_url_is_stored_encrypted(key) -> None:
 
     stored = pool.rows["git_remote_url"]
     assert stored != REMOTE_WITH_TOKEN
-    assert "ghp_tokensecreto123" not in stored
+    assert "ghp_tokenficticio123" not in stored
     assert looks_encrypted(key, stored)
 
 

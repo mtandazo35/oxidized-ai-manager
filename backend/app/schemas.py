@@ -15,7 +15,7 @@ DEVICE_NAME_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
 def normalize_node_name(value: str) -> str:
     """Convierte lo que escriba una persona en un nombre de nodo válido.
 
-    «Core El Rosario» -> «Core-El-Rosario»; «Ñuñoa Principal» -> «Nunoa-Principal».
+    «Router Sucursal Norte» -> «Router-Sucursal-Norte»; los acentos se pierden.
     Se normaliza en el servidor en vez de rechazar la entrada: el operador
     escribe el nombre como lo tiene en la cabeza y la plataforma se encarga.
     """

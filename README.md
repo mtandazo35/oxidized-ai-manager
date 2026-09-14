@@ -162,9 +162,20 @@ de Oxidized.
 La cuenta de respaldo del MikroTik necesita `policy=ssh,read,sensitive`; sin
 `sensitive` el `/export` sale censurado y el respaldo no sirve para restaurar.
 
-El nombre del equipo se ajusta solo: «Core El Rosario» se guarda como
-«Core-El-Rosario», porque ese nombre es el del archivo dentro del repositorio
-de respaldos.
+El nombre del equipo se ajusta solo: «Router Sucursal Norte» se guarda como
+«Router-Sucursal-Norte», porque ese nombre es el del archivo dentro del
+repositorio de respaldos.
+
+## Usuarios PPPoE
+
+Botón **PPPoE** en cada equipo: saca del último respaldo los usuarios de
+`/ppp secret` con su clave, perfil, IP y comentario, con buscador y descarga a
+CSV. Las claves salen ocultas hasta que se marca «Mostrar claves».
+
+Solo lo ven `admin` y `operador` —son credenciales de clientes finales— y cada
+consulta queda anotada en la bitácora. Requiere que la cuenta de respaldo del
+MikroTik tenga la policy `sensitive`; si falta, el panel lo dice en lugar de
+mostrar claves vacías sin explicación.
 
 ## Bitácora y control de acceso
 
