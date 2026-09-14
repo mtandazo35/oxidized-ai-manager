@@ -38,7 +38,10 @@
       linear-gradient(160deg, #f5f7fa 0%, #edf1f7 50%, #f5f7fa 100%);
     background-attachment: fixed; }
   main { max-width: 1600px; margin: 0 auto; padding: 24px 24px 64px; }
-  .shell > main { padding-top: 12px; }
+  .shell > main { padding-top: 14px; }
+  /* El h2 de cabecera de pestaña lleva 32px arriba para separarse de la
+     sección anterior; el primero de cada pestaña no tiene nada encima. */
+  .shell > main > div > h2:first-child { margin-top: 0; }
   h1 { font-size: 1.3rem; margin: 0; }
   h2 { font-size: 1.05rem; margin: 32px 0 12px; color: var(--accent-hover); }
   header.bar { display: flex; align-items: center; justify-content: space-between;
@@ -229,7 +232,7 @@
   .modal-body .field { flex-wrap: wrap; }
   .modal-body .field label { white-space: normal; }
   .table-tools { display: flex; align-items: center; gap: 8px;
-    flex-wrap: wrap; margin: 2px 0 12px; }
+    flex-wrap: wrap; margin: 0 0 10px; }
   .table-tools > input[type=search] { margin-left: auto; }
   .table-tools > input[type=search]:first-child { margin-left: 0; }
   @media (max-width: 700px) {
