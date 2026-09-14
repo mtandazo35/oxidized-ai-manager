@@ -238,12 +238,31 @@
   @media (max-width: 700px) {
     .table-tools > input[type=search] { margin-left: 0; }
   }
-  .change-list { list-style: none; margin: 0; padding: 0;
-    max-height: 210px; overflow-y: auto; font-size: .86rem; }
+  .ver-linea { display: flex; align-items: center; justify-content: space-between;
+    gap: 16px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+  .ver-linea:first-child { padding-top: 0; }
+  .ver-acciones { display: flex; justify-content: center; gap: 8px;
+    flex-wrap: wrap; margin-top: 14px; }
+  .ver-aviso { display: flex; align-items: center; justify-content: center;
+    gap: 9px; margin: 14px 0 4px; color: var(--ok-ink);
+    font-size: 1.02rem; font-weight: 600; }
+  .ver-aviso svg { width: 22px; height: 22px; fill: none; stroke: currentColor;
+    stroke-width: 2; stroke-linecap: round; }
+  .changes-head { margin: 16px 0 0; padding: 8px 12px;
+    background: var(--ink); color: #fff; font-size: .82rem; font-weight: 600;
+    text-align: center; border-radius: 8px 8px 0 0; }
+  .change-list { list-style: none; margin: 0; padding: 4px 0;
+    max-height: 230px; overflow-y: auto; font-size: .86rem;
+    border: 1px solid var(--border); border-top: 0; border-radius: 0 0 8px 8px;
+    background: var(--surface); }
   .change-list li { display: flex; gap: 10px; align-items: baseline;
-    padding: 6px 0; border-bottom: 1px solid var(--border); }
-  .change-list li:last-child { border-bottom: 0; }
-  .change-list code { flex: 0 0 auto; font-size: .78rem; color: var(--ink-muted); }
+    padding: 6px 12px; }
+  .change-list li + li { border-top: 1px solid var(--border); }
+  /* Etiqueta del tipo de cambio, deducida del prefijo del commit. */
+  .change-list .tipo { flex: 0 0 82px; font-size: .78rem; font-weight: 600; }
+  .change-list .tipo.nuevo { color: #0891b2; }
+  .change-list .tipo.correccion { color: #b45309; }
+  .change-list .tipo.mejora { color: var(--ink-muted); }
   .change-list .fecha { margin-left: auto; flex: 0 0 auto;
     font-size: .76rem; color: var(--ink-muted); }
   .update-chip { display: inline-flex; align-items: center; gap: 7px;
@@ -579,34 +598,36 @@
     </div>
     <div class="modal-body">
       <div class="card">
-        <div style="display:flex;gap:16px;align-items:baseline;flex-wrap:wrap">
+        <div class="ver-linea">
           <div>
             <div class="muted">Versión desplegada</div>
             <div id="ver-commit" style="font-family:ui-monospace,monospace">—</div>
           </div>
-          <div style="flex:1;min-width:200px">
+          <span id="ver-badge" class="badge off">—</span>
+        </div>
+        <div class="ver-linea">
+          <div style="min-width:0">
             <div class="muted">Último cambio</div>
             <div id="ver-subject">—</div>
           </div>
-          <span id="ver-badge" class="badge off">—</span>
         </div>
-        <div style="display:flex;gap:8px;align-items:center;margin-top:12px;flex-wrap:wrap">
+
+        <div id="ver-aviso" class="ver-aviso" hidden>
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M12 11v5"/></svg>
+          <span>Hay actualizaciones disponibles</span>
+        </div>
+
+        <div class="ver-acciones">
+          <button type="button" id="btn-do-update" hidden>⬇ Actualizar ahora</button>
           <button type="button" class="ghost" id="btn-check-update">Buscar actualizaciones</button>
-          <button type="button" id="btn-do-update" hidden>Actualizar ahora</button>
-          <span id="ver-progress" class="muted"></span>
         </div>
-        <p class="msg" id="ver-msg"></p>
+        <p class="muted" id="ver-progress" style="text-align:center;margin:8px 0 0"></p>
+        <p class="msg" id="ver-msg" style="text-align:center"></p>
+
         <div id="ver-changes" hidden>
-          <h3 style="font-size:.92rem;color:var(--accent-hover);margin:14px 0 6px">
-            Qué trae esta actualización</h3>
+          <div class="changes-head">Registro de cambios</div>
           <ul class="change-list" id="ver-changes-list"></ul>
         </div>
-        <p class="muted" style="margin:0">
-          La actualización la aplica el servidor, no el navegador: respalda la
-          plataforma, baja los cambios del repositorio y reconstruye. <strong>No se
-          borra ningún dato</strong> — los volúmenes no se tocan. El panel se
-          reinicia solo y basta con recargar la página.
-        </p>
       </div>
     </div>
   </div>
@@ -1931,6 +1952,22 @@ $("u-role").addEventListener("change", () => {
 
 let updatePollTimer = null;
 
+// Los mensajes de commit siguen la convención feat/fix/...: sirve para decirle
+// al usuario qué clase de cambio es sin que tenga que interpretar el prefijo.
+function tipoDeCambio(asunto) {
+  const prefijo = (asunto || "").split(":")[0].trim().toLowerCase();
+  if (prefijo.startsWith("feat")) return ["nuevo", "Nuevo"];
+  if (prefijo.startsWith("fix")) return ["correccion", "Corrección"];
+  return ["mejora", "Mejora"];
+}
+
+function limpiarAsunto(asunto) {
+  const partes = (asunto || "").split(":");
+  if (partes.length < 2) return asunto || "";
+  const resto = partes.slice(1).join(":").trim();
+  return resto ? resto.charAt(0).toUpperCase() + resto.slice(1) : asunto;
+}
+
 function renderVersion(info) {
   $("ver-commit").textContent = info.short || "—";
   $("ver-subject").textContent = info.subject || "—";
@@ -1958,9 +1995,12 @@ function renderVersion(info) {
   // con un remoto que no sea de GitHub o sin salida a internet llega vacía.
   const cambios = info.changes || [];
   $("ver-changes").hidden = !cambios.length;
+  $("ver-aviso").hidden = !info.update_available;
   $("ver-changes-list").innerHTML = cambios.map((c) => {
     const fecha = c.date ? new Date(c.date).toLocaleDateString() : "";
-    return `<li><code>${esc(c.short)}</code><span>${esc(c.subject)}</span>` +
+    const [clase, etiqueta] = tipoDeCambio(c.subject);
+    return `<li><span class="tipo ${clase}">${etiqueta}</span>` +
+      `<span>${esc(limpiarAsunto(c.subject))}</span>` +
       `<span class="fecha">${esc(fecha)}</span></li>`;
   }).join("");
 

@@ -142,45 +142,53 @@ _GITHUB = re.compile(
 )
 
 
-async def pending_changes(git_dir: str, base: str, head: str) -> list[dict]:
-    """Los commits que trae la actualización, del más nuevo al más viejo.
-
-    El repositorio está montado de solo lectura, así que no se puede hacer
-    `git fetch` para leer los mensajes: se piden a la API pública de GitHub,
-    que para un repositorio público no necesita credenciales. Si el remoto no
-    es de GitHub o la consulta falla, se devuelve una lista vacía: saber qué
-    trae la actualización está bien, pero no es motivo para romper la pantalla
-    de versión.
-    """
-    if not base or not head or base == head:
-        return []
+async def github_repo(git_dir: str) -> str:
+    """`usuario/repo` si el remoto es de GitHub; cadena vacía si no."""
     try:
         url = await _git("--git-dir", git_dir, "config", "--get", "remote.origin.url")
     except UpdaterError:
-        return []
+        return ""
     match = _GITHUB.match(url.strip())
-    if not match:
-        return []
-    api = f"https://api.github.com/repos/{match.group('repo')}/compare/{base}...{head}"
+    return match.group("repo") if match else ""
+
+
+async def github_compare(repo: str, base: str, branch: str) -> tuple[str, list[dict]]:
+    """Punta de la rama y commits pendientes, en UNA sola consulta.
+
+    `git ls-remote` levanta un proceso y negocia con el servidor, y en el VPS
+    eso costaba varios segundos cada vez que se pulsaba «buscar». La API de
+    GitHub responde en una petición con el commit de la punta *y* la lista de
+    lo que falta, así que cuando el remoto es de GitHub se usa esta vía y
+    `ls-remote` queda como respaldo.
+
+    Para un repositorio público no hacen falta credenciales. Devuelve
+    `("", [])` si algo falla, para que el llamador caiga al respaldo.
+    """
+    api = f"https://api.github.com/repos/{repo}/compare/{base}...{branch}"
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             response = await client.get(
                 api, headers={"Accept": "application/vnd.github+json"}
             )
         response.raise_for_status()
-        commits = response.json().get("commits") or []
+        data = response.json()
     except (httpx.HTTPError, ValueError):
-        return []
+        return "", []
+    head = str(((data.get("commits") or [{}])[-1]).get("sha", "")) if data.get(
+        "commits"
+    ) else str(base)
     cambios = [
         {
             "short": str(c.get("sha", ""))[:7],
             # Solo el asunto: el cuerpo del mensaje explica el porqué y aquí
             # sobra, la pantalla es una lista.
-            "subject": (str((c.get("commit") or {}).get("message", "")).splitlines() or [""])[0][:150],
+            "subject": (
+                str((c.get("commit") or {}).get("message", "")).splitlines() or [""]
+            )[0][:150],
             "date": ((c.get("commit") or {}).get("author") or {}).get("date", ""),
         }
-        for c in commits
+        for c in (data.get("commits") or [])
         if c.get("sha")
     ]
     cambios.reverse()
-    return cambios[:30]
+    return head, cambios[:30]

@@ -8,8 +8,9 @@ from .schemas import UpdateRequestResult, VersionOut
 from .updater import (
     UpdaterError,
     is_running,
+    github_compare,
+    github_repo,
     local_commit,
-    pending_changes,
     read_status,
     remote_commit,
     request_update,
@@ -47,6 +48,19 @@ async def version() -> dict:
             "¿Está montado el repositorio en /repo/.git?"
         )
         return result
+    # Con un remoto de GitHub, una sola consulta da la punta de la rama y la
+    # lista de lo que falta. `git ls-remote` levanta un proceso y negocia con
+    # el servidor: costaba varios segundos en cada pulsación.
+    repo = await github_repo(settings.repo_git_dir)
+    if repo:
+        remote, cambios = await github_compare(
+            repo, result["commit"], settings.update_branch
+        )
+        if remote:
+            result["remote_commit"] = remote
+            result["update_available"] = remote != result["commit"]
+            result["changes"] = cambios
+            return result
     try:
         remote = await remote_commit(
             settings.repo_git_dir, settings.update_branch
@@ -58,10 +72,6 @@ async def version() -> dict:
         return result
     result["remote_commit"] = remote
     result["update_available"] = remote != result["commit"]
-    if result["update_available"]:
-        result["changes"] = await pending_changes(
-            settings.repo_git_dir, result["commit"], remote
-        )
     return result
 
 
