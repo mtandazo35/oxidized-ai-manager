@@ -124,8 +124,9 @@
      alcanzaba también a las tarjetas de dentro, que quedaban aplastadas a
      340 px dentro de un modal de 1100. */
   .overlay > .card { width: 340px; }
-  .overlay > .card > input,
-  .overlay > .card > form > input { width: 100%; margin-bottom: 10px; }
+  .overlay > .card > input, .overlay > .card > select,
+  .overlay > .card > form > input,
+  .overlay > .card > form > select { width: 100%; margin-bottom: 10px; }
   .overlay > .card.wide { width: min(900px, 94vw); }
   .version-list { display: flex; flex-direction: column; gap: 4px;
     max-height: 160px; overflow-y: auto; margin-bottom: 10px; }
@@ -654,26 +655,6 @@
   </div>
 </div>
 
-<datalist id="plataformas">
-  <option value="routeros" label="MikroTik RouterOS (6 y 7)"></option>
-  <option value="swos" label="MikroTik SwOS (switches)"></option>
-  <option value="vrp" label="Huawei VRP (routers y switches)"></option>
-  <option value="smartax" label="Huawei OLT SmartAX (MA5600/MA5800)"></option>
-  <option value="zteolt" label="ZTE OLT (C300/C320)"></option>
-  <option value="bdcom" label="BDCOM (base de varias OLT, probar para VSOL)"></option>
-  <option value="uplinkolt" label="UPLINK OLT"></option>
-  <option value="zhoneolt" label="Zhone OLT"></option>
-  <option value="ios" label="Cisco IOS"></option>
-  <option value="iosxe" label="Cisco IOS-XE"></option>
-  <option value="nxos" label="Cisco NX-OS"></option>
-  <option value="edgeos" label="Ubiquiti EdgeOS"></option>
-  <option value="airos" label="Ubiquiti AirOS"></option>
-  <option value="fortios" label="Fortinet FortiOS"></option>
-  <option value="pfsense" label="pfSense"></option>
-  <option value="opnsense" label="OPNsense"></option>
-  <option value="linuxgeneric" label="Linux genérico"></option>
-</datalist>
-
 <div class="overlay" id="add-overlay" hidden>
   <form class="card" id="add-form">
     <h1 style="margin-bottom:16px;font-size:1.1rem">Agregar router</h1>
@@ -695,10 +676,9 @@
     <label for="a-group">Grupo / Empresa</label>
     <input id="a-group" style="margin:4px 0 10px">
     <label for="a-model">Plataforma</label>
-    <input id="a-model" list="plataformas" value="routeros" required
-      pattern="[a-z0-9_-]+" placeholder="routeros" style="margin:4px 0 4px">
+    <select id="a-model" required style="margin:4px 0 4px"></select>
     <p class="muted" style="margin:0 0 10px">
-      MikroTik RouterOS por defecto (sirve para la 6 y la 7). Escriba otra si el
+      MikroTik RouterOS por defecto (sirve para la 6 y la 7). Elija otra si el
       equipo no es MikroTik.
     </p>
     <label for="a-interval">Respaldar cada (minutos; 0 = usar el global)</label>
@@ -725,8 +705,7 @@
     <label for="e-group">Grupo / Empresa</label>
     <input id="e-group" style="margin:4px 0 10px">
     <label for="e-model">Plataforma</label>
-    <input id="e-model" list="plataformas" value="routeros" required
-      pattern="[a-z0-9_-]+" placeholder="routeros" style="margin:4px 0 4px">
+    <select id="e-model" required style="margin:4px 0 4px"></select>
     <p class="muted" style="margin:0 0 10px">
       Cambiarla hace que Oxidized use otro conjunto de comandos en el próximo
       respaldo.
@@ -874,6 +853,50 @@ function fmtDate(value) {
   return value ? new Date(value).toLocaleString() : "—";
 }
 
+// Plataformas que Oxidized sabe respaldar, agrupadas por fabricante. Son los
+// nombres de modelo que entiende Oxidized: cambiarlos rompe el respaldo.
+const PLATAFORMAS = [
+  ["MikroTik", [
+    ["routeros", "RouterOS (6 y 7)"],
+    ["swos", "SwOS (switches)"],
+  ]],
+  ["OLT", [
+    ["smartax", "Huawei SmartAX (MA5600/MA5800)"],
+    ["zteolt", "ZTE C300/C320"],
+    ["bdcom", "BDCOM (base de varias OLT, probar para VSOL)"],
+    ["uplinkolt", "UPLINK"],
+    ["zhoneolt", "Zhone"],
+  ]],
+  ["Otros fabricantes", [
+    ["vrp", "Huawei VRP (routers y switches)"],
+    ["ios", "Cisco IOS"],
+    ["iosxe", "Cisco IOS-XE"],
+    ["nxos", "Cisco NX-OS"],
+    ["edgeos", "Ubiquiti EdgeOS"],
+    ["airos", "Ubiquiti AirOS"],
+    ["fortios", "Fortinet FortiOS"],
+    ["pfsense", "pfSense"],
+    ["opnsense", "OPNsense"],
+    ["linuxgeneric", "Linux genérico"],
+  ]],
+];
+
+// Llena un desplegable de plataformas. Si el equipo tiene una que no está en la
+// lista (viene de una carga masiva, por ejemplo) se añade para no perderla al
+// guardar.
+function poblarPlataformas(id, valor = "routeros") {
+  const sel = $(id);
+  const conocidas = PLATAFORMAS.flatMap(([, items]) => items.map(([v]) => v));
+  sel.innerHTML = PLATAFORMAS.map(([grupo, items]) =>
+    `<optgroup label="${esc(grupo)}">` + items.map(([v, etiqueta]) =>
+      `<option value="${esc(v)}">${esc(etiqueta)}</option>`).join("") + "</optgroup>").join("");
+  if (valor && !conocidas.includes(valor)) {
+    sel.insertAdjacentHTML("beforeend",
+      `<optgroup label="Configurada a mano"><option value="${esc(valor)}">${esc(valor)}</option></optgroup>`);
+  }
+  sel.value = valor || "routeros";
+}
+
 function setMsg(id, text, ok) {
   const el = $(id);
   el.textContent = text;
@@ -1008,7 +1031,7 @@ window.openEdit = (id) => {
   $("e-username").value = device.username;
   $("e-password").value = "";
   $("e-group").value = device.group_name || "";
-  $("e-model").value = device.model || "routeros";
+  poblarPlataformas("e-model", device.model || "routeros");
   $("e-interval").value = device.backup_interval_minutes || 0;
   $("edit-msg").textContent = "";
   $("edit-overlay").hidden = false;
@@ -1240,6 +1263,7 @@ $("login-form").addEventListener("submit", async (event) => {
 
 $("btn-open-add").addEventListener("click", () => {
   $("add-form").reset();
+  poblarPlataformas("a-model");
   $("a-port").value = 22;
   $("a-interval").value = 0;
   $("add-msg").textContent = "";
