@@ -2197,14 +2197,31 @@ document.querySelectorAll("[data-cerrar]").forEach((boton) => {
   boton.addEventListener("click", hubCerrar);
 });
 
-// Cerrar con Escape o pulsando fuera de la tarjeta, como cualquier ventana.
-document.addEventListener("keydown", (evento) => {
-  if (evento.key === "Escape") hubCerrar();
-});
-document.querySelectorAll(".overlay[id^='sec-']").forEach((modal) => {
-  modal.addEventListener("click", (evento) => {
-    if (evento.target === modal) hubCerrar();
+// --- Cierre de ventanas --------------------------------------------------
+//
+// Vale para TODAS: pulsar fuera de la tarjeta o Escape. La única excepción es
+// el cambio de clave obligatorio del primer ingreso, que no debe poder
+// esquivarse (por eso ahí también se esconde su botón de cancelar).
+
+function overlayCerrable(overlay) {
+  return !(overlay.id === "pass-overlay" && mustChangePassword);
+}
+
+document.querySelectorAll(".overlay").forEach((overlay) => {
+  overlay.addEventListener("click", (evento) => {
+    // Solo si el clic cae en el fondo, no dentro de la tarjeta.
+    if (evento.target === overlay && overlayCerrable(overlay)) {
+      overlay.hidden = true;
+    }
   });
+});
+
+document.addEventListener("keydown", (evento) => {
+  if (evento.key !== "Escape") return;
+  const abiertos = [...document.querySelectorAll(".overlay")]
+    .filter((overlay) => !overlay.hidden);
+  const arriba = abiertos[abiertos.length - 1];
+  if (arriba && overlayCerrable(arriba)) arriba.hidden = true;
 });
 
 function initialTab() {
