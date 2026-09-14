@@ -203,16 +203,21 @@
   .hub-item svg { width: 34px; height: 34px; stroke: #fff; fill: none;
     stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
   .hub-item .badge { margin-top: 2px; }
-  .overlay > .card.xwide { width: min(1100px, 95vw); }
+  /* Tres anchos de ventana segun lo que lleven dentro: las de tablas anchas,
+     las de formularios normales y las de una sola tarjeta corta. */
+  .overlay > .card.xwide { width: min(980px, 94vw); padding: 16px 18px; }
+  .overlay > .card.mwide { width: min(620px, 94vw); padding: 16px 18px; }
   .modal-head { display: flex; align-items: center; justify-content: space-between;
-    gap: 16px; margin-bottom: 14px; }
-  .modal-head h1 { font-size: 1.1rem; }
-  .modal-body { max-height: 74vh; overflow-y: auto; padding-right: 6px; }
+    gap: 16px; margin-bottom: 12px; }
+  .modal-head h1 { font-size: 1.05rem; }
+  .modal-body { max-height: 72vh; overflow-y: auto; padding-right: 6px; }
   .modal-body > h2:first-child { margin-top: 0; }
   .modal-body > h2 { margin-top: 22px; }
   /* Las tarjetas de dentro ocupan todo el ancho de la ventana y pierden la
      sombra: enmarcar una tarjeta dentro de otra se ve recargado. */
-  .modal-body .card { width: auto; box-shadow: none; }
+  .modal-body .card { width: auto; box-shadow: none; border: 0; padding: 0; }
+  .modal-body .card + .card { border-top: 1px solid var(--border);
+    padding-top: 14px; margin-top: 14px; }
   /* Dentro de la ventana los campos recuperan su tamaño natural: son
      formularios en línea, no el formulario estrecho de un modal de login. */
   .modal-body input:not([type=checkbox]), .modal-body select,
@@ -288,28 +293,14 @@
     </div>
   </header>
   <nav class="tabs">
-    <button id="tab-btn-estado" class="active">Estado de respaldos</button>
-    <button id="tab-btn-dashboard">Routers</button>
+    <button id="tab-btn-dashboard" class="active">Routers</button>
+    <button id="tab-btn-estado">Estado de respaldos</button>
     <button id="tab-btn-audit">Auditoría</button>
     <button id="tab-btn-import">Carga masiva</button>
     <button id="tab-btn-system">Ajustes del sistema</button>
   </nav>
   <main>
-    <div id="tab-estado">
-    <div style="display:flex;gap:8px;margin-top:24px;flex-wrap:wrap;justify-content:flex-end">
-      <input id="filter-text-estado" type="search" placeholder="🔍 Buscar…" title="Filtra por nombre, identity, IP, puerto, plataforma, versión, usuario o grupo" style="width:200px;padding:6px 10px;font-size:.85rem">
-      <select id="filter-group-estado" style="font-size:.85rem"><option value="">Todas las empresas</option></select>
-    </div>
-    <h2>Estado de respaldos</h2>
-    <div class="card">
-      <table>
-        <thead><tr><th>Router</th><th>Estado actual</th><th>Último evento</th><th>Fecha</th><th>Último éxito</th><th>Commit</th><th></th></tr></thead>
-        <tbody id="status-body"><tr><td colspan="7" class="muted">Sin routers registrados.</td></tr></tbody>
-      </table>
-    </div>
-    </div>
-
-    <div id="tab-dashboard" hidden>
+    <div id="tab-dashboard">
     <div style="display:flex;gap:8px;margin-top:24px;flex-wrap:wrap;justify-content:flex-end">
       <input id="filter-text" type="search" placeholder="🔍 Buscar…" title="Filtra por nombre, identity, IP, puerto, plataforma, versión, usuario o grupo" style="width:200px;padding:6px 10px;font-size:.85rem">
       <select id="filter-group" style="font-size:.85rem"><option value="">Todas las empresas</option></select>
@@ -359,6 +350,21 @@
       </div>
     </div>
     </div>
+    <div id="tab-estado" hidden>
+    <div style="display:flex;gap:8px;margin-top:24px;flex-wrap:wrap;justify-content:flex-end">
+      <input id="filter-text-estado" type="search" placeholder="🔍 Buscar…" title="Filtra por nombre, identity, IP, puerto, plataforma, versión, usuario o grupo" style="width:200px;padding:6px 10px;font-size:.85rem">
+      <select id="filter-group-estado" style="font-size:.85rem"><option value="">Todas las empresas</option></select>
+    </div>
+    <h2>Estado de respaldos</h2>
+    <div class="card">
+      <p class="msg" id="estado-msg"></p>
+      <table>
+        <thead><tr><th>Router</th><th>Estado actual</th><th>Último evento</th><th>Fecha</th><th>Último éxito</th><th>Commit</th><th></th></tr></thead>
+        <tbody id="status-body"><tr><td colspan="7" class="muted">Sin routers registrados.</td></tr></tbody>
+      </table>
+    </div>
+    </div>
+
     <div id="tab-audit" hidden>
     <h2>Auditoría de configuraciones</h2>
     <div class="card">
@@ -521,7 +527,7 @@
 </div>
 
 <div class="overlay" id="sec-version" hidden>
-  <div class="card xwide">
+  <div class="card mwide">
     <div class="modal-head">
       <h1>Versión y actualizaciones</h1>
       <button type="button" class="ghost" data-cerrar="sec-version">Cerrar</button>
@@ -557,7 +563,7 @@
 </div>
 
 <div class="overlay" id="sec-seguridad" hidden>
-  <div class="card xwide">
+  <div class="card mwide">
     <div class="modal-head">
       <h1>Seguridad de acceso</h1>
       <button type="button" class="ghost" data-cerrar="sec-seguridad">Cerrar</button>
@@ -945,7 +951,10 @@ function renderStatus() {
           <td>${fmtDate(ev && ev.last_event_at)}</td>
           <td>${fmtDate(ev && ev.last_success_at)}</td>
           <td class="muted">${esc(((ev && ev.last_commit) || "").slice(0, 10))}</td>
-          <td style="text-align:right"><button class="ghost mini" onclick="showChanges('${esc(name)}')">Cambios</button></td>
+          <td style="text-align:right;white-space:nowrap">
+            <button class="ghost mini" onclick="descargarUltimo('${esc(name)}', 'estado-msg')"
+              title="Descargar la última configuración respaldada">⬇ Último respaldo</button>
+            <button class="ghost mini" onclick="showChanges('${esc(name)}')">Cambios</button></td>
         </tr>`;
       }).join("")
     : '<tr><td colspan="7" class="muted">Sin routers registrados.</td></tr>';
@@ -1495,7 +1504,7 @@ $("btn-upload").addEventListener("click", async () => {
   }
 });
 
-const TAB_NAMES = ["estado", "dashboard", "audit", "import", "system"];
+const TAB_NAMES = ["dashboard", "estado", "audit", "import", "system"];
 
 // Permisos de la cuenta actual. La interfaz solo esconde lo que la API ya
 // rechaza: ocultar un botón no es un control de acceso.
@@ -1533,7 +1542,7 @@ function allowedTab(tab) {
 }
 
 function switchTab(tab) {
-  if (!allowedTab(tab)) tab = "estado";
+  if (!allowedTab(tab)) tab = "dashboard";
   TAB_NAMES.forEach((name) => {
     $("tab-" + name).hidden = name !== tab;
     $("tab-btn-" + name).classList.toggle("active", name === tab);
@@ -2285,12 +2294,12 @@ setInterval(comprobarActualizacion, INTERVALO_AVISO_MS);
 
 // Descarga directa del último respaldo, sin abrir el historial. Pensado para
 // las cuentas de solo lectura, que no tienen los botones de operación.
-window.descargarUltimo = async (node) => {
+window.descargarUltimo = async (node, destino = "device-msg") => {
   try {
     const versiones = await api(
       `/api/backups/versions?node=${encodeURIComponent(node)}&limit=1`);
     if (!versiones.length) {
-      setMsg("device-msg", "«" + node + "» todavía no tiene ningún respaldo.", false);
+      setMsg(destino, "«" + node + "» todavía no tiene ningún respaldo.", false);
       return;
     }
     const resultado = await api(
@@ -2301,18 +2310,18 @@ window.descargarUltimo = async (node) => {
     enlace.download = node + "-" + versiones[0].commit.slice(0, 7) + ".rsc";
     enlace.click();
     URL.revokeObjectURL(enlace.href);
-    setMsg("device-msg", "Descargado el respaldo de " + node + ".", true);
+    setMsg(destino, "Descargado el respaldo de " + node + ".", true);
   } catch (error) {
-    setMsg("device-msg", error.message, false);
+    setMsg(destino, error.message, false);
   }
 };
 
 function initialTab() {
   const fromHash = location.hash.slice(1);
-  return TAB_NAMES.includes(fromHash) ? fromHash : "estado";
+  return TAB_NAMES.includes(fromHash) ? fromHash : "dashboard";
 }
-$("tab-btn-estado").addEventListener("click", () => switchTab("estado"));
 $("tab-btn-dashboard").addEventListener("click", () => switchTab("dashboard"));
+$("tab-btn-estado").addEventListener("click", () => switchTab("estado"));
 $("tab-btn-audit").addEventListener("click", () => switchTab("audit"));
 $("tab-btn-import").addEventListener("click", () => switchTab("import"));
 $("tab-btn-system").addEventListener("click", () => switchTab("system"));
