@@ -881,6 +881,10 @@ let statusCache = { evByNode: {}, oxByNode: {}, eventNodes: [] };
 // `sufijo` elige el juego de filtros: "" es el de Routers y "-estado" el de
 // la pestaña de estado, que tiene los suyos.
 function deviceMatchesFilter(device, sufijo = "") {
+  // `Array.filter` llama con (elemento, índice, array): si esta función se
+  // usa como referencia directa, `sufijo` recibe el índice y se acaba
+  // buscando un campo inexistente. Normalizarlo evita que vuelva a pasar.
+  if (typeof sufijo !== "string") sufijo = "";
   const query = $("filter-text" + sufijo).value.trim().toLowerCase();
   const group = $("filter-group" + sufijo).value;
   if (group && (device.group_name || "") !== group) return false;
@@ -960,7 +964,7 @@ function startFastPoll() {
 }
 
 function renderDevices() {
-  const rows = allDevices.filter(deviceMatchesFilter);
+  const rows = allDevices.filter((d) => deviceMatchesFilter(d));
   $("devices-body").innerHTML = rows.length
     ? rows.map((d) => `<tr>
         <td>${esc(d.name)}</td>
