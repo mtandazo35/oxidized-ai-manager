@@ -120,9 +120,13 @@
   .menu-list button:hover { background: var(--surface-2); }
   .overlay { position: fixed; inset: 0; background: rgba(15, 23, 42, .45);
     display: grid; place-items: center; z-index: 30; }
-  .overlay .card { width: 340px; }
-  .overlay input { width: 100%; margin-bottom: 10px; }
-  .overlay .card.wide { width: min(900px, 94vw); }
+  /* Solo la tarjeta que ES la ventana lleva ancho fijo. Antes esta regla
+     alcanzaba también a las tarjetas de dentro, que quedaban aplastadas a
+     340 px dentro de un modal de 1100. */
+  .overlay > .card { width: 340px; }
+  .overlay > .card > input,
+  .overlay > .card > form > input { width: 100%; margin-bottom: 10px; }
+  .overlay > .card.wide { width: min(900px, 94vw); }
   .version-list { display: flex; flex-direction: column; gap: 4px;
     max-height: 160px; overflow-y: auto; margin-bottom: 10px; }
   .version-list .vrow { display: flex; align-items: center; gap: 6px; }
@@ -199,12 +203,20 @@
   .hub-item svg { width: 34px; height: 34px; stroke: #fff; fill: none;
     stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
   .hub-item .badge { margin-top: 2px; }
-  .overlay .card.xwide { width: min(1100px, 95vw); }
+  .overlay > .card.xwide { width: min(1100px, 95vw); }
   .modal-head { display: flex; align-items: center; justify-content: space-between;
     gap: 16px; margin-bottom: 14px; }
   .modal-head h1 { font-size: 1.1rem; }
-  .modal-body { max-height: 74vh; overflow-y: auto; padding-right: 4px; }
+  .modal-body { max-height: 74vh; overflow-y: auto; padding-right: 6px; }
   .modal-body > h2:first-child { margin-top: 0; }
+  .modal-body > h2 { margin-top: 22px; }
+  /* Dentro de la ventana los campos recuperan su tamaño natural: son
+     formularios en línea, no el formulario estrecho de un modal de login. */
+  .modal-body input:not([type=checkbox]), .modal-body select,
+  .modal-body textarea { width: auto; margin-bottom: 0; }
+  .modal-body input[type=number] { width: 90px; }
+  .modal-body .field { flex-wrap: wrap; }
+  .modal-body .field label { white-space: normal; }
   nav.tabs { display: flex; gap: 4px; padding: 0 16px; background: var(--surface);
     border-bottom: 1px solid var(--border); }
   nav.tabs button { background: transparent; color: var(--ink-muted); border-radius: 0;
