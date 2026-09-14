@@ -496,6 +496,17 @@
   </div>
 </div>
 
+<div class="overlay" id="ask-overlay" hidden>
+  <div class="card" style="width:min(430px,94vw)">
+    <h1 id="ask-title" style="font-size:1.05rem;margin:0 0 8px">¿Confirmar?</h1>
+    <p id="ask-text" class="muted" style="margin:0 0 16px"></p>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button type="button" class="ghost" id="ask-no">Cancelar</button>
+      <button type="button" id="ask-yes">Aceptar</button>
+    </div>
+  </div>
+</div>
+
 <div class="overlay" id="sec-config" hidden>
   <div class="card xwide">
     <div class="modal-head">
@@ -973,6 +984,33 @@ function poblarPlataformas(id, valor = "routeros") {
   sel.value = valor || "routeros";
 }
 
+// Confirmación en un modal del panel. El `confirm()` del navegador enseña el
+// dominio, ofrece «no volver a preguntar» (que desactiva la confirmación para
+// siempre y sin avisar) y no se puede maquetar.
+let askResolver = null;
+
+function preguntar(titulo, texto, etiquetaOk = "Aceptar", peligro = false) {
+  $("ask-title").textContent = titulo;
+  $("ask-text").textContent = texto || "";
+  $("ask-text").hidden = !texto;
+  const si = $("ask-yes");
+  si.textContent = etiquetaOk;
+  si.className = peligro ? "danger" : "";
+  $("ask-overlay").hidden = false;
+  si.focus();
+  return new Promise((resolve) => { askResolver = resolve; });
+}
+
+function cerrarPregunta(respuesta) {
+  $("ask-overlay").hidden = true;
+  const resolver = askResolver;
+  askResolver = null;
+  if (resolver) resolver(respuesta);
+}
+
+$("ask-yes").addEventListener("click", () => cerrarPregunta(true));
+$("ask-no").addEventListener("click", () => cerrarPregunta(false));
+
 function setMsg(id, text, ok) {
   const el = $(id);
   el.textContent = text;
@@ -1373,7 +1411,8 @@ window.toggleDevice = async (id, enabled) => {
 };
 
 window.deleteDevice = async (id, name) => {
-  if (!confirm("¿Eliminar " + name + " del inventario?")) return;
+  if (!await preguntar("Eliminar router",
+    "Se quita «" + name + "» del inventario y deja de respaldarse. Los respaldos ya hechos no se borran.", "Eliminar", true)) return;
   try {
     await api("/api/devices/" + id, { method: "DELETE" });
     refresh();
@@ -1748,8 +1787,9 @@ async function runBulkBackup(payload) {
   } catch (error) { setMsg("bulk-run-msg", error.message, false); }
 }
 
-$("btn-bulk-all").addEventListener("click", () => {
-  if (confirm("¿Encolar el respaldo de TODOS los routers activos?"))
+$("btn-bulk-all").addEventListener("click", async () => {
+  if (await preguntar("Respaldar todo",
+    "Se encola el respaldo de todos los routers activos.", "Encolar"))
     runBulkBackup({ scope: "all" });
 });
 $("btn-bulk-run-group").addEventListener("click", () => {
@@ -1969,7 +2009,9 @@ window.resetUserPass = (username) => {
 };
 
 window.deleteUser = async (username) => {
-  if (!confirm("¿Eliminar la cuenta " + username + "?")) return;
+  if (!await preguntar("Eliminar cuenta",
+    "La cuenta «" + username + "» dejará de tener acceso al panel.",
+    "Eliminar", true)) return;
   try {
     await api("/api/users/" + encodeURIComponent(username), { method: "DELETE" });
     setMsg("users-msg", "Cuenta " + username + " eliminada.", true);
@@ -2130,11 +2172,10 @@ $("btn-check-update").addEventListener("click", () => {
 });
 
 $("btn-do-update").addEventListener("click", async () => {
-  if (!confirm(
-    "¿Actualizar la plataforma a la última versión?\n\n" +
-    "El servidor respaldará todo antes de empezar y no se borra ningún dato. " +
-    "El panel quedará unos segundos sin responder mientras se reinicia."
-  )) return;
+  if (!await preguntar("Actualizar la plataforma",
+    "El servidor respalda todo antes de empezar y no se borra ningún dato. " +
+    "El panel quedará unos segundos sin responder mientras se reinicia.",
+    "Actualizar ahora")) return;
   $("ver-msg").textContent = "";
   try {
     const resultado = await api("/api/system/update", { method: "POST" });
@@ -2443,7 +2484,8 @@ document.querySelectorAll(".overlay").forEach((overlay) => {
   overlay.addEventListener("click", (evento) => {
     // Solo si el clic cae en el fondo, no dentro de la tarjeta.
     if (evento.target === overlay && overlayCerrable(overlay)) {
-      overlay.hidden = true;
+      if (overlay.id === "ask-overlay") cerrarPregunta(false);
+      else overlay.hidden = true;
     }
   });
 });
@@ -2453,7 +2495,9 @@ document.addEventListener("keydown", (evento) => {
   const abiertos = [...document.querySelectorAll(".overlay")]
     .filter((overlay) => !overlay.hidden);
   const arriba = abiertos[abiertos.length - 1];
-  if (arriba && overlayCerrable(arriba)) arriba.hidden = true;
+  if (!arriba || !overlayCerrable(arriba)) return;
+  if (arriba.id === "ask-overlay") cerrarPregunta(false);
+  else arriba.hidden = true;
 });
 
 // --- Aviso de versión nueva ----------------------------------------------
