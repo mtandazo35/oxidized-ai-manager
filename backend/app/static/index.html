@@ -231,6 +231,12 @@
   .modal-body input[type=number] { width: 90px; }
   .modal-body .field { flex-wrap: wrap; }
   .modal-body .field label { white-space: normal; }
+  /* Cabecera de grupo dentro de la tabla, al estilo de Winbox. */
+  .grupo-fila td { background: var(--surface-2); font-weight: 600;
+    font-size: .82rem; color: var(--accent-hover);
+    padding: 7px 12px; border-bottom: 1px solid var(--border-strong); }
+  .grupo-fila:hover td { background: var(--surface-2); }
+  .grupo-fila .cuenta { color: var(--ink-muted); font-weight: 500; }
   .table-tools { display: flex; align-items: center; gap: 8px;
     flex-wrap: wrap; margin: 0 0 10px; }
   .table-tools > input[type=search] { margin-left: auto; }
@@ -366,12 +372,12 @@
   </nav>
   <main>
     <div id="tab-dashboard">
-    <h2>Routers</h2>
     <div class="card">
       <div class="table-tools">
         <button type="button" id="btn-open-add">+ Agregar router</button>
         <input id="filter-text" type="search" placeholder="🔍 Buscar…" title="Filtra por nombre, identity, IP, puerto, plataforma, versión, usuario o grupo" style="width:200px;padding:6px 10px;font-size:.85rem">
         <select id="filter-group" style="font-size:.85rem"><option value="">Todas las empresas</option></select>
+        <select id="group-by" style="font-size:.85rem" title="Agrupa las filas"><option value="">Sin agrupar</option><option value="group_name">Por empresa</option><option value="estado">Por estado actual</option></select>
       </div>
       <p class="msg" id="device-msg"></p>
       <table>
@@ -414,11 +420,11 @@
     </div>
     </div>
     <div id="tab-estado" hidden>
-    <h2>Estado de respaldos</h2>
     <div class="card">
       <div class="table-tools">
         <input id="filter-text-estado" type="search" placeholder="🔍 Buscar…" title="Filtra por nombre, identity, IP, puerto, plataforma, versión, usuario o grupo" style="width:200px;padding:6px 10px;font-size:.85rem">
         <select id="filter-group-estado" style="font-size:.85rem"><option value="">Todas las empresas</option></select>
+        <select id="group-by-estado" style="font-size:.85rem" title="Agrupa las filas"><option value="">Sin agrupar</option><option value="group_name">Por empresa</option><option value="estado">Por estado actual</option></select>
       </div>
       <p class="msg" id="estado-msg"></p>
       <table>
@@ -1018,6 +1024,37 @@ function currentStateBadge(name, oxByNode) {
   return `<span class="badge fail">${esc(ox.status)}</span>`;
 }
 
+// Agrupa filas ya pintadas bajo una cabecera por grupo, estilo Winbox. Recibe
+// los elementos y dos funciones: de qué grupo es cada uno y su <tr>.
+function agruparFilas(items, clave, fila, columnas) {
+  if (!items.length) return "";
+  const grupos = new Map();
+  items.forEach((item) => {
+    const g = clave(item) || "Sin asignar";
+    if (!grupos.has(g)) grupos.set(g, []);
+    grupos.get(g).push(item);
+  });
+  // «Sin asignar» al final: lo que falta por clasificar no encabeza la tabla.
+  const nombres = [...grupos.keys()].sort((a, b) =>
+    a === "Sin asignar" ? 1 : b === "Sin asignar" ? -1 : a.localeCompare(b));
+  return nombres.map((nombre) => {
+    const filas = grupos.get(nombre);
+    return `<tr class="grupo-fila"><td colspan="${columnas}">` +
+      `${esc(nombre)} <span class="cuenta">${filas.length}</span></td></tr>` +
+      filas.map(fila).join("");
+  }).join("");
+}
+
+// Estado actual de un equipo en texto, para agrupar por él.
+function estadoDe(name) {
+  if (pendingBackups[name]) return "Respaldando";
+  const ox = statusCache.oxByNode[name];
+  if (!ox) return "Sin datos";
+  if (ox.status === "success") return "Correctos";
+  if (ox.status === "never") return "Pendientes";
+  return "Con fallo";
+}
+
 function renderStatus() {
   const evByNode = statusCache.evByNode;
   const oxByNode = statusCache.oxByNode;
@@ -1034,8 +1071,7 @@ function renderStatus() {
 
   const names = [...new Set([...visibleDeviceNames, ...orphanNodes])].sort();
 
-  $("status-body").innerHTML = names.length
-    ? names.map((name) => {
+  const fila = (name) => {
         const ev = evByNode[name];
         return `<tr>
           <td>${esc(name)}</td>
@@ -1049,8 +1085,17 @@ function renderStatus() {
               title="Descargar la última configuración respaldada">⬇ Último respaldo</button>
             <button class="ghost mini" onclick="showChanges('${esc(name)}')">Cambios</button></td>
         </tr>`;
-      }).join("")
-    : '<tr><td colspan="7" class="muted">Sin routers registrados.</td></tr>';
+  };
+  const agrupar = $("group-by-estado").value;
+  const porEmpresa = Object.fromEntries(
+    allDevices.map((d) => [d.name, d.group_name]));
+  $("status-body").innerHTML = !names.length
+    ? '<tr><td colspan="7" class="muted">Sin routers registrados.</td></tr>'
+    : agrupar === "group_name"
+      ? agruparFilas(names, (n) => porEmpresa[n], fila, 7)
+      : agrupar === "estado"
+        ? agruparFilas(names, estadoDe, fila, 7)
+        : names.map(fila).join("");
 }
 
 let fastPollTimer = null;
@@ -1067,8 +1112,7 @@ function startFastPoll() {
 
 function renderDevices() {
   const rows = allDevices.filter((d) => deviceMatchesFilter(d));
-  $("devices-body").innerHTML = rows.length
-    ? rows.map((d) => `<tr>
+  const fila = (d) => `<tr>
         <td>${esc(d.name)}</td>
         <td>${d.identity ? esc(d.identity) : '<span class="muted">—</span>'}</td>
         <td ${perms.can_write ? `style="cursor:pointer" title="Clic para editar" onclick="editGroup(${d.id}, '${esc(d.group_name || "")}')"` : ""}>${d.group_name ? esc(d.group_name) : `<span class="muted">—${perms.can_write ? " ✎" : ""}</span>`}</td>
@@ -1085,8 +1129,15 @@ function renderDevices() {
           <button class="danger mini" onclick="deleteDevice(${d.id}, '${esc(d.name)}')">Eliminar</button>
         ` : `<button class="ghost mini" onclick="descargarUltimo('${esc(d.name)}')"
             title="Descargar la última configuración respaldada">⬇ Último respaldo</button>`}</td>
-      </tr>`).join("")
-    : '<tr><td colspan="10" class="muted">Sin routers que coincidan.</td></tr>';
+      </tr>`;
+  const agrupar = $("group-by").value;
+  $("devices-body").innerHTML = !rows.length
+    ? '<tr><td colspan="10" class="muted">Sin routers que coincidan.</td></tr>'
+    : agrupar === "group_name"
+      ? agruparFilas(rows, (d) => d.group_name, fila, 10)
+      : agrupar === "estado"
+        ? agruparFilas(rows, (d) => estadoDe(d.name), fila, 10)
+        : rows.map(fila).join("");
 }
 
 let editDeviceId = null;
@@ -1164,17 +1215,29 @@ async function loadSettings() {
 
 async function refresh() {
   try {
-    const [devices, events, oxStatus] = await Promise.all([
+    // Inventario y eventos salen de Postgres y llegan rápido; el estado actual
+    // lo sirve Oxidized, que tarda bastante más (y muchísimo si acaba de
+    // arrancar). Antes un `Promise.all` de los tres dejaba las tablas vacías
+    // hasta que contestaba el más lento: ahora se pinta con lo que hay y la
+    // columna «Estado actual» se completa cuando llega.
+    const [devices, events] = await Promise.all([
       api("/api/devices"),
       api("/api/backups/status"),
-      api("/api/backups/oxidized-status"),
     ]);
     allDevices = devices;
     statusCache.evByNode = {};
     events.forEach((e) => { statusCache.evByNode[e.node] = e; });
+    statusCache.eventNodes = events.map((e) => e.node);
+    updateGroupOptions();
+    renderDevices();
+    renderStatus();
+
+    let oxStatus = [];
+    try {
+      oxStatus = await api("/api/backups/oxidized-status");
+    } catch (e) { oxStatus = []; }
     statusCache.oxByNode = {};
     oxStatus.forEach((n) => { statusCache.oxByNode[n.name] = n; });
-    statusCache.eventNodes = events.map((e) => e.node);
 
     const now = Date.now();
     for (const [name, startedAt] of Object.entries(pendingBackups)) {
@@ -1198,8 +1261,10 @@ async function refresh() {
 }
 
 $("filter-text").addEventListener("input", renderDevices);
+$("group-by").addEventListener("change", renderDevices);
 $("filter-group").addEventListener("change", renderDevices);
 $("filter-text-estado").addEventListener("input", renderStatus);
+$("group-by-estado").addEventListener("change", renderStatus);
 $("filter-group-estado").addEventListener("change", renderStatus);
 
 
@@ -2449,6 +2514,8 @@ $("tab-btn-audit").addEventListener("click", () => switchTab("audit"));
 $("tab-btn-import").addEventListener("click", () => switchTab("import"));
 $("tab-btn-system").addEventListener("click", () => switchTab("system"));
 
+let tabGuardada = initialTab();
+
 async function enterApp() {
   try {
     const me = await api("/api/auth/me");
@@ -2456,7 +2523,7 @@ async function enterApp() {
     renderSessionLeft();
     comprobarActualizacion();
     show("app");
-    switchTab(initialTab());
+    switchTab(tabGuardada);
     refresh();
     setInterval(refresh, 60000);
     if (me.must_change_password) openPassModal(true);
@@ -2469,7 +2536,10 @@ if (token) {
   // que /api/auth/me conteste no se conoce el rol, así que se parte sin
   // permisos: enterApp() los aplica y recoloca la pestaña.
   show("app");
-  switchTab("estado");
+  // Pintar la pestaña del hash y no una fija: `switchTab` reescribe el hash,
+  // así que fijar «estado» aquí borraba la pestaña guardada antes de que
+  // enterApp() la pudiera leer, y siempre se caía en Estado de respaldos.
+  switchTab(allowedTab(tabGuardada) ? tabGuardada : "dashboard");
   enterApp();
 } else {
   show("login");
