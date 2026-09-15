@@ -192,3 +192,41 @@ async def github_compare(repo: str, base: str, branch: str) -> tuple[str, list[d
     ]
     cambios.reverse()
     return head, cambios[:30]
+
+async def deployed_version(git_dir: str) -> str:
+    """Versión legible del archivo VERSION, leída del commit desplegado.
+
+    El repositorio se monta sin árbol de trabajo (solo `.git`), así que el
+    archivo no está en disco: se saca del propio commit con `git show`. Si no
+    existe —despliegues anteriores a que se añadiera— se devuelve vacío y el
+    panel se queda con el commit corto, como antes.
+    """
+    try:
+        return (await _git("--git-dir", git_dir, "show", "HEAD:VERSION")).strip()[:20]
+    except UpdaterError:
+        return ""
+
+
+async def history(git_dir: str, limit: int = 40) -> list[dict]:
+    """Commits ya desplegados, del más nuevo al más viejo.
+
+    Sale del repositorio local, no de la red: es historial que ya está aquí.
+    """
+    try:
+        salida = await _git(
+            "--git-dir",
+            git_dir,
+            "log",
+            f"-{max(1, min(limit, 200))}",
+            "--format=%h%x09%cI%x09%s",
+        )
+    except UpdaterError:
+        return []
+    cambios = []
+    for linea in salida.splitlines():
+        partes = linea.split("	", 2)
+        if len(partes) == 3:
+            cambios.append(
+                {"short": partes[0], "date": partes[1], "subject": partes[2][:150]}
+            )
+    return cambios

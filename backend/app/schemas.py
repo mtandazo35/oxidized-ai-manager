@@ -250,6 +250,8 @@ class UpdateStatusOut(BaseModel):
 
 class VersionOut(BaseModel):
     commit: str = ""
+    # Versión legible del archivo VERSION del repositorio (p. ej. "1.1").
+    version: str = ""
     short: str = ""
     date: datetime | None = None
     subject: str = ""

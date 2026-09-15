@@ -244,6 +244,9 @@
   @media (max-width: 700px) {
     .table-tools > input[type=search] { margin-left: 0; }
   }
+  .ver-num { display: flex; align-items: baseline; gap: 8px; }
+  .ver-num span { font-size: 1.25rem; font-weight: 700; }
+  .ver-num code { font-size: .78rem; color: var(--ink-muted); }
   .ver-linea { display: flex; align-items: center; justify-content: space-between;
     gap: 16px; padding: 8px 0; border-bottom: 1px solid var(--border); }
   .ver-linea:first-child { padding-top: 0; }
@@ -507,6 +510,20 @@
   </div>
 </div>
 
+<div class="overlay" id="hist-overlay" hidden>
+  <div class="card mwide">
+    <div class="modal-head">
+      <h1>Historial de cambios</h1>
+      <button type="button" class="ghost" data-cerrar="hist-overlay">Cerrar</button>
+    </div>
+    <div class="modal-body">
+      <ul class="change-list" id="hist-list" style="max-height:60vh;border-radius:8px;border-top:1px solid var(--border)">
+        <li class="muted">Cargando…</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
 <div class="overlay" id="sec-config" hidden>
   <div class="card xwide">
     <div class="modal-head">
@@ -618,7 +635,10 @@
         <div class="ver-linea">
           <div>
             <div class="muted">Versión desplegada</div>
-            <div id="ver-commit" style="font-family:ui-monospace,monospace">—</div>
+            <div class="ver-num">
+              <span id="ver-version">—</span>
+              <code id="ver-commit" title="Commit desplegado">—</code>
+            </div>
           </div>
           <span id="ver-badge" class="badge off">—</span>
         </div>
@@ -637,6 +657,7 @@
         <div class="ver-acciones">
           <button type="button" id="btn-do-update" hidden>⬇ Actualizar ahora</button>
           <button type="button" class="ghost" id="btn-check-update">Buscar actualizaciones</button>
+          <button type="button" class="ghost" id="btn-historial">Historial de cambios</button>
         </div>
         <p class="muted" id="ver-progress" style="text-align:center;margin:8px 0 0"></p>
         <p class="msg" id="ver-msg" style="text-align:center"></p>
@@ -2075,9 +2096,35 @@ function limpiarAsunto(asunto) {
   return resto ? resto.charAt(0).toUpperCase() + resto.slice(1) : asunto;
 }
 
+async function abrirHistorial() {
+  const lista = $("hist-list");
+  lista.innerHTML = '<li class="muted">Cargando…</li>';
+  $("hist-overlay").hidden = false;
+  try {
+    const datos = await api("/api/system/changelog");
+    const cambios = datos.changes || [];
+    lista.innerHTML = cambios.length
+      ? cambios.map((c) => {
+          const [clase, etiqueta] = tipoDeCambio(c.subject);
+          const fecha = c.date ? new Date(c.date).toLocaleDateString() : "";
+          return `<li><span class="tipo ${clase}">${etiqueta}</span>` +
+            `<span>${esc(limpiarAsunto(c.subject))}</span>` +
+            `<span class="fecha">${esc(fecha)}</span></li>`;
+        }).join("")
+      : '<li class="muted">Sin historial disponible.</li>';
+  } catch (error) {
+    lista.innerHTML = `<li class="muted">${esc(error.message)}</li>`;
+  }
+}
+
+$("btn-historial").addEventListener("click", abrirHistorial);
+
 function renderVersion(info) {
-  $("ver-commit").textContent = info.short || "—";
-  $("ver-subject").textContent = info.subject || "—";
+  $("ver-version").textContent = info.version ? "v" + info.version : (info.short || "—");
+  $("ver-commit").textContent = info.short || "";
+  // Sin el prefijo del commit: «feat:» y «fix:» son convención para quien lee
+  // el repositorio, no información para quien usa el panel.
+  $("ver-subject").textContent = info.subject ? limpiarAsunto(info.subject) : "—";
   const badge = $("ver-badge");
   const boton = $("btn-do-update");
 
@@ -2467,7 +2514,12 @@ document.querySelectorAll(".hub-item").forEach((boton) => {
 });
 
 document.querySelectorAll("[data-cerrar]").forEach((boton) => {
-  boton.addEventListener("click", hubCerrar);
+  // Cierra la ventana que nombra el atributo, no todas: el historial se abre
+  // encima de la de versión y `hubCerrar()` se habría llevado las dos.
+  boton.addEventListener("click", () => {
+    const destino = $(boton.dataset.cerrar);
+    if (destino) destino.hidden = true;
+  });
 });
 
 // --- Cierre de ventanas --------------------------------------------------

@@ -1,8 +1,17 @@
 # Actualizar desde el panel
 
-En **Configuración → Versión y actualizaciones** (solo administrador) hay dos
-botones: *Buscar actualizaciones*, que compara el commit desplegado con
-`origin/main`, y *Actualizar ahora*, que aplica la nueva versión.
+En **Ajustes del sistema → Versión y actualizaciones** (solo administrador):
+*Buscar actualizaciones* compara lo desplegado con `origin/main`, *Actualizar
+ahora* aplica la nueva versión e *Historial de cambios* lista lo ya instalado.
+
+## El número de versión
+
+Sale del archivo `VERSION` de la raíz del repositorio, leído del commit
+desplegado con `git show HEAD:VERSION` (el repositorio se monta sin árbol de
+trabajo, así que el archivo no está en disco). **Hay que subirlo a mano** al
+publicar: cambios de interfaz o correcciones suben el segundo número, un
+cambio grande de funcionamiento el primero. Si el archivo no existe —un
+despliegue anterior a que se añadiera— el panel muestra el commit corto.
 
 ## Por qué el contenedor no se actualiza a sí mismo
 

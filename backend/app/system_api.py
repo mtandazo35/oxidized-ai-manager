@@ -7,6 +7,8 @@ from .config import get_settings
 from .schemas import UpdateRequestResult, VersionOut
 from .updater import (
     UpdaterError,
+    deployed_version,
+    history,
     is_running,
     github_compare,
     github_repo,
@@ -30,6 +32,7 @@ async def version() -> dict:
     settings = get_settings()
     result: dict = {
         "commit": "",
+        "version": "",
         "short": "",
         "date": None,
         "subject": "",
@@ -42,6 +45,7 @@ async def version() -> dict:
     }
     try:
         result.update(await local_commit(settings.repo_git_dir))
+        result["version"] = await deployed_version(settings.repo_git_dir)
     except UpdaterError as error:
         result["error"] = (
             f"No se pudo leer la versión desplegada: {error}. "
@@ -73,6 +77,13 @@ async def version() -> dict:
     result["remote_commit"] = remote
     result["update_available"] = remote != result["commit"]
     return result
+
+
+@router.get("/changelog")
+async def changelog() -> dict:
+    """Historial de cambios ya desplegados, del más nuevo al más viejo."""
+    settings = get_settings()
+    return {"changes": await history(settings.repo_git_dir)}
 
 
 @router.post(
