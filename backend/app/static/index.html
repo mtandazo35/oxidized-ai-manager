@@ -244,6 +244,16 @@
   @media (max-width: 700px) {
     .table-tools > input[type=search] { margin-left: 0; }
   }
+  .spinner { width: 38px; height: 38px; margin: 0 auto; border-radius: 50%;
+    border: 3px solid var(--border-strong); border-top-color: var(--accent);
+    animation: girar .9s linear infinite; }
+  @keyframes girar { to { transform: rotate(360deg); } }
+  .cuenta-atras { font-size: 2rem; font-weight: 700; font-variant-numeric: tabular-nums;
+    color: var(--accent-hover); line-height: 1.1; }
+  /* Las ventanas que se abren sobre otra van por encima: el orden en el
+     documento no basta, todas comparten z-index. */
+  #hist-overlay { z-index: 40; }
+  #ask-overlay, #update-overlay { z-index: 50; }
   .ver-num { display: flex; align-items: baseline; gap: 8px; }
   .ver-num span { font-size: 1.25rem; font-weight: 700; }
   .ver-num code { font-size: .78rem; color: var(--ink-muted); }
@@ -524,6 +534,19 @@
   </div>
 </div>
 
+<div class="overlay" id="update-overlay" hidden>
+  <div class="card" style="width:min(430px,94vw);text-align:center">
+    <div class="spinner"></div>
+    <h1 style="font-size:1.05rem;margin:14px 0 6px">Actualizando la plataforma</h1>
+    <p class="muted" id="update-detail" style="margin:0 0 14px">Preparando…</p>
+    <div class="cuenta-atras"><span id="update-countdown">—</span></div>
+    <p class="muted" id="update-nota" style="margin:12px 0 0;font-size:.82rem">
+      No cierre esta ventana ni apague el servidor. El panel se reinicia solo
+      y la página se recarga al terminar.
+    </p>
+  </div>
+</div>
+
 <div class="overlay" id="sec-config" hidden>
   <div class="card xwide">
     <div class="modal-head">
@@ -635,10 +658,7 @@
         <div class="ver-linea">
           <div>
             <div class="muted">Versión desplegada</div>
-            <div class="ver-num">
-              <span id="ver-version">—</span>
-              <code id="ver-commit" title="Commit desplegado">—</code>
-            </div>
+            <div class="ver-num"><span id="ver-version">—</span></div>
           </div>
           <span id="ver-badge" class="badge off">—</span>
         </div>
@@ -2121,7 +2141,6 @@ $("btn-historial").addEventListener("click", abrirHistorial);
 
 function renderVersion(info) {
   $("ver-version").textContent = info.version ? "v" + info.version : (info.short || "—");
-  $("ver-commit").textContent = info.short || "";
   // Sin el prefijo del commit: «feat:» y «fix:» son convención para quien lee
   // el repositorio, no información para quien usa el panel.
   $("ver-subject").textContent = info.subject ? limpiarAsunto(info.subject) : "—";
@@ -2164,6 +2183,7 @@ function renderVersion(info) {
   $("btn-check-update").disabled = enCurso;
   if (enCurso) {
     $("ver-progress").textContent = "⏳ " + (estado.detail || "actualizando…");
+    if ($("update-overlay").hidden) abrirEspera(estado.detail);
     startUpdatePoll();
   } else if (estado.state === "ok" || estado.state === "al-dia") {
     $("ver-progress").textContent = "✓ " + (estado.detail || "");
@@ -2183,6 +2203,47 @@ async function loadVersion() {
   }
 }
 
+// Ventana de espera durante la actualización. La duración es una estimación
+// (respaldo + git + reconstrucción de imágenes): si se pasa, el contador deja
+// de bajar y avisa de que sigue en marcha, en vez de mentir con un cero.
+const UPDATE_ESTIMADO = 180;
+let updateCuentaTimer = null;
+let updateRestante = 0;
+
+function abrirEspera(detalle) {
+  $("update-detail").textContent = detalle || "Preparando…";
+  $("update-nota").textContent =
+    "No cierre esta ventana ni apague el servidor. El panel se reinicia solo " +
+    "y la página se recarga al terminar.";
+  updateRestante = UPDATE_ESTIMADO;
+  pintarCuenta();
+  $("update-overlay").hidden = false;
+  if (updateCuentaTimer) clearInterval(updateCuentaTimer);
+  updateCuentaTimer = setInterval(() => {
+    updateRestante -= 1;
+    pintarCuenta();
+  }, 1000);
+}
+
+function pintarCuenta() {
+  const el = $("update-countdown");
+  if (updateRestante <= 0) {
+    el.textContent = "casi listo";
+    el.style.fontSize = "1.1rem";
+    return;
+  }
+  const m = Math.floor(updateRestante / 60);
+  const sg = String(updateRestante % 60).padStart(2, "0");
+  el.style.fontSize = "";
+  el.textContent = m + ":" + sg;
+}
+
+function cerrarEspera() {
+  if (updateCuentaTimer) clearInterval(updateCuentaTimer);
+  updateCuentaTimer = null;
+  $("update-overlay").hidden = true;
+}
+
 function startUpdatePoll() {
   if (updatePollTimer) return;
   updatePollTimer = setInterval(async () => {
@@ -2193,22 +2254,29 @@ function startUpdatePoll() {
       // Durante la reconstrucción el backend se reinicia y deja de responder:
       // eso es parte del proceso, no un fallo. Se sigue consultando.
       $("ver-progress").textContent = "⏳ reiniciando el servicio…";
+      $("update-detail").textContent = "Reiniciando el servicio…";
       return;
     }
     if (["solicitada", "en-progreso"].includes(estado.state)) {
       $("ver-progress").textContent = "⏳ " + (estado.detail || "actualizando…");
+      $("update-detail").textContent = estado.detail || "Actualizando…";
       return;
     }
     clearInterval(updatePollTimer);
     updatePollTimer = null;
     comprobarActualizacion();
     if (estado.state === "error") {
+      cerrarEspera();
       setMsg("ver-msg", estado.detail || "La actualización falló.", false);
       $("ver-progress").textContent = "";
-    } else {
-      setMsg("ver-msg", estado.detail || "Actualización terminada.", true);
+      loadVersion();
+      return;
     }
-    loadVersion();
+    // Terminó bien: el panel en memoria sigue siendo el de la versión vieja,
+    // así que se recarga. Sin esto haría falta el Ctrl+F5 a mano.
+    $("update-detail").textContent = "Listo. Recargando el panel…";
+    $("update-countdown").textContent = "✓";
+    setTimeout(() => location.reload(), 1500);
   }, 4000);
 }
 
@@ -2227,6 +2295,7 @@ $("btn-do-update").addEventListener("click", async () => {
   try {
     const resultado = await api("/api/system/update", { method: "POST" });
     $("ver-progress").textContent = "⏳ " + resultado.detail;
+    abrirEspera(resultado.detail);
     $("btn-do-update").disabled = true;
     $("btn-check-update").disabled = true;
     startUpdatePoll();
@@ -2529,6 +2598,7 @@ document.querySelectorAll("[data-cerrar]").forEach((boton) => {
 // esquivarse (por eso ahí también se esconde su botón de cancelar).
 
 function overlayCerrable(overlay) {
+  if (overlay.id === "update-overlay") return false;
   return !(overlay.id === "pass-overlay" && mustChangePassword);
 }
 
