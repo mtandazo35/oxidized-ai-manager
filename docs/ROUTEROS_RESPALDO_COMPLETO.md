@@ -176,7 +176,7 @@ descartarlo dejaría al equipo sin nada. Lo que hace es dejar de mentir sobre su
 estado. En la pestaña **Estado de respaldos** el equipo aparece con un aviso ⚠
 junto al nombre, y al pulsarlo salen los motivos.
 
-## Lo que sigue faltando: el respaldo binario
+## Lo que sigue faltando, y por qué no es una sola cosa
 
 Aunque el `/export` salga completo y con secretos, [la documentación de
 MikroTik](https://help.mikrotik.com/docs/spaces/ROS/pages/328155/Configuration+Management)
@@ -190,7 +190,41 @@ dice que **nunca** incluye:
   imágenes de contenedores
 - las bases de Dude y User Manager
 
-Eso solo se conserva con el respaldo **binario** de RouterOS, que sigue pendiente
-(ver [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md) y [PHASE3.md](PHASE3.md)). El
-binario no sustituye al export de texto: el texto es el que se puede versionar,
-comparar y auditar. Son complementarios.
+Lo tentador es dar por hecho que el respaldo **binario** cubre todo eso. No es
+así, y conviene tenerlo claro antes de diseñar la fase que falta. Según la
+[página de Backup](https://help.mikrotik.com/docs/display/ROS/Backup):
+
+- **No trae Dude ni User Manager**: *«If The Dude or User-manager is installed on
+  the router, then the system backup will not contain configuration from these
+  services»*. Esas dos bases no están **ni** en el export **ni** en el binario;
+  necesitan su propio mecanismo.
+- **No viene cifrado por omisión**: *«Without a provided password, the backup file
+  is unencrypted»*. Antes de la 6.43 se cifraba con la clave del usuario actual;
+  desde la 6.43 el valor por defecto pasó a ser sin cifrar. Un colector que no
+  pase `password=` explícitamente estaría guardando un clon completo de cada
+  router en claro. Algoritmo: AES-SHA256; el RC4 que también admite está *«only
+  available for compatibility reasons»*.
+- **No es portable a otro equipo**: *«includes the device's MAC addresses, which
+  are restored when the backup file is loaded»*, y recomiendan restaurar sobre la
+  misma versión de RouterOS. Es un clon del mismo router, no un respaldo que se
+  pueda llevar a un repuesto.
+- **De los certificados, la documentación no dice nada** — ni que los incluya ni
+  que no. Al no poder asegurarlo, no se puede depender del binario para eso.
+
+La vía documentada para los certificados es sacarlos aparte con
+`/certificate export-certificate ... export-passphrase=<frase>`: con esa frase
+*«also encrypted private KEY file will be exported»*. Es el único de los tres
+mecanismos que entrega la clave privada cifrada por sí mismo.
+
+Así que la fase pendiente son **tres** recolectores, no uno, y ninguno sustituye a
+los otros (ver [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md) y [PHASE3.md](PHASE3.md)):
+
+| Mecanismo | Qué aporta | Cuidado |
+| --- | --- | --- |
+| `/export` (ya hecho) | versionable, comparable, auditable | no trae claves de usuario, certificados ni archivos |
+| `/system backup save` | clon completo del equipo | hay que pasar `password=`; ligado a ese router; sin Dude ni User Manager |
+| `/certificate export-certificate` | certificados con la clave privada cifrada | requiere frase de paso y guardarla aparte |
+
+Los dos últimos son binarios o cifrados, así que **no deben ir a `backups.git`**:
+Git los guardaría como blobs opacos, sin diff posible y engordando el histórico en
+cada ciclo. Necesitan almacenamiento propio con su política de retención.

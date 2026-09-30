@@ -24,7 +24,12 @@ Si la carga lo exige más adelante, los workers/agentes pueden separarse a una s
 ## Backups MikroTik
 Se contemplan dos tipos:
 1. Exportación de texto para Git, comparación y auditoría.
-2. Backup binario de RouterOS como mecanismo adicional de recuperación.
+2. Backup binario de RouterOS como mecanismo adicional de recuperación, y export
+   de certificados con frase de paso. Son dos mecanismos distintos y ninguno
+   cubre lo del otro: ver
+   [ROUTEROS_RESPALDO_COMPLETO.md](ROUTEROS_RESPALDO_COMPLETO.md) antes de
+   implementarlos, en particular que el binario **no viene cifrado por omisión**
+   desde RouterOS 6.43.
 
 El backup binario no sustituye al export de texto.
 
