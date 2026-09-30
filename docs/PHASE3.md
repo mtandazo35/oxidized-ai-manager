@@ -33,7 +33,9 @@
   (se enmascara como `usuario:***@`).
 
 Queda pendiente de la Fase 3: API de diffs entre versiones (leer `backups.git`
-ya montado en el backend) y el backup binario de RouterOS (collector).
+ya montado en el backend) y los recolectores de lo que el export no trae:
+certificados y archivos del equipo, los dos en texto. El respaldo binario se
+descarta a proposito; el porque esta en ROUTEROS_RESPALDO_COMPLETO.md.
 
 ## Criterio de aceptación
 

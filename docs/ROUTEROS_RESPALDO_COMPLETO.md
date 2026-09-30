@@ -216,15 +216,45 @@ La vía documentada para los certificados es sacarlos aparte con
 *«also encrypted private KEY file will be exported»*. Es el único de los tres
 mecanismos que entrega la clave privada cifrada por sí mismo.
 
-Así que la fase pendiente son **tres** recolectores, no uno, y ninguno sustituye a
-los otros (ver [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md) y [PHASE3.md](PHASE3.md)):
+### Decisión: todo en texto plano
 
-| Mecanismo | Qué aporta | Cuidado |
+**La plataforma se queda en texto y no persigue el respaldo binario.** El motivo de
+fondo no es que el texto se pueda leer, es a qué sirve cada cosa: un binario
+restaura **ese** router —trae sus MAC y quiere la misma versión de RouterOS—,
+mientras que un `.rsc` se importa en una caja distinta. El día que se muera un
+equipo y haya que levantar un repuesto, el binario no sirve y el texto sí. Depender
+del binario para recuperación ante desastre es depender de lo que se acaba de
+perder.
+
+Con eso, lo que falta deja de ser «el colector binario» y pasa a ser **lo que el
+`/export` no trae y sí se puede tener en texto**:
+
+| Qué falta | Cómo se obtiene en texto | Cuidado |
 | --- | --- | --- |
-| `/export` (ya hecho) | versionable, comparable, auditable | no trae claves de usuario, certificados ni archivos |
-| `/system backup save` | clon completo del equipo | hay que pasar `password=`; ligado a ese router; sin Dude ni User Manager |
-| `/certificate export-certificate` | certificados con la clave privada cifrada | requiere frase de paso y guardarla aparte |
+| Certificados | `/certificate export-certificate` escribe **PEM**, que es ASCII | la clave privada solo sale con `export-passphrase`, y sale cifrada |
+| Archivos del equipo (hotspot, scripts) | `/file` + descarga; son texto | hay que transferir archivos, cosa que el modelo SSH de Oxidized no hace |
 
-Los dos últimos son binarios o cifrados, así que **no deben ir a `backups.git`**:
-Git los guardaría como blobs opacos, sin diff posible y engordando el histórico en
-cada ciclo. Necesitan almacenamiento propio con su política de retención.
+Y dos que **no se pueden en texto ni de ninguna otra forma legible**, así que lo
+honesto es asumirlo en el diseño en lugar de prometerlas:
+
+- las contraseñas de los usuarios del sistema y sus claves SSH — *«can not be
+  exported»*. El binario las conserva, pero solo para restaurarlas en el mismo
+  equipo, no para leerlas. Esas cuentas se vuelven a crear desde la plataforma.
+- las claves de host SSH, por lo mismo.
+
+### La trampa del PEM cifrado
+
+Sin `export-passphrase`, `export-certificate` entrega el certificado pero **no** la
+clave privada. Con frase de paso entrega la clave en PEM cifrado: texto, sí, pero
+con **sal e IV aleatorios en cada exportación**. Es decir, un certificado que no ha
+cambiado produce un archivo distinto cada vez.
+
+Si ese blob entra a `backups.git` tal cual, cada ciclo genera un diff falso y el
+historial se llena de cambios que no significan nada — exactamente lo que este
+documento trata de evitar en las otras secciones.
+
+La salida es **no versionar el blob por su contenido, sino por sus metadatos**:
+`/certificate print detail` da huella, número de serie y fechas, y eso sí es texto
+estable y comparable. Se re-exporta la clave solo cuando la huella cambia. Así el
+historial dice «este certificado se renovó tal día» en lugar de cambiar por
+cambiar.

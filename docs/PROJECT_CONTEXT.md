@@ -24,14 +24,15 @@ Si la carga lo exige más adelante, los workers/agentes pueden separarse a una s
 ## Backups MikroTik
 Se contemplan dos tipos:
 1. Exportación de texto para Git, comparación y auditoría.
-2. Backup binario de RouterOS como mecanismo adicional de recuperación, y export
-   de certificados con frase de paso. Son dos mecanismos distintos y ninguno
-   cubre lo del otro: ver
-   [ROUTEROS_RESPALDO_COMPLETO.md](ROUTEROS_RESPALDO_COMPLETO.md) antes de
-   implementarlos, en particular que el binario **no viene cifrado por omisión**
-   desde RouterOS 6.43.
+2. Lo que el export deja fuera y sí se puede tener en texto: certificados (PEM,
+   con `export-certificate`) y los archivos del equipo. **Decidido: la plataforma
+   se queda en texto plano y no persigue el respaldo binario**, porque un binario
+   solo restaura ese mismo router -trae sus MAC y quiere la misma versión de
+   RouterOS- mientras que un `.rsc` se importa en un repuesto. Detalles y la
+   trampa del PEM cifrado en
+   [ROUTEROS_RESPALDO_COMPLETO.md](ROUTEROS_RESPALDO_COMPLETO.md).
 
-El backup binario no sustituye al export de texto.
+Ni los certificados ni los archivos sustituyen al export de texto: lo complementan.
 
 ## Inventario
 La plataforma deberá poder registrar y consultar:
