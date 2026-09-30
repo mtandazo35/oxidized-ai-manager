@@ -87,3 +87,55 @@ def test_tabs_declared_in_the_script_match_the_buttons() -> None:
         f"La barra y TAB_NAMES no coinciden: solo botón {botones - declaradas}, "
         f"solo declaradas {declaradas - botones}"
     )
+
+
+def test_el_panel_abre_siempre_en_routers() -> None:
+    """Recargar devolvía al operador a la pestaña de la vez anterior.
+
+    `switchTab` escribe la pestaña en el hash de la URL en cada clic, así que
+    `initialTab` leyéndolo significaba abrir en Ajustes del sistema a quien
+    hubiera terminado ahí. Se entra siempre por Routers.
+    """
+    js = panel_js()
+    cuerpo = re.search(r"function initialTab\(\) \{(.*?)\n\}", js, re.S).group(1)
+
+    assert 'return "dashboard";' in cuerpo
+    assert "location.hash" not in cuerpo, (
+        "initialTab vuelve a decidir por el hash: recargar dejaría al operador "
+        "donde estaba, no en Routers"
+    )
+
+
+def test_cada_columna_ocultable_existe_en_la_cabecera_y_en_las_filas() -> None:
+    """Un `data-col` en la lista que no esté en las celdas es una casilla que
+    no oculta nada; uno en las celdas que no esté en la lista es una columna
+    que no se puede volver a mostrar."""
+    html = PANEL.read_text(encoding="utf-8")
+    js = panel_js()
+    declaradas = set(
+        re.findall(r'\{ id: "(\w+)", etiqueta:', 
+                   re.search(r"const COLUMNAS_ROUTERS = \[(.*?)\];", js, re.S).group(1))
+    )
+    tabla = re.search(r'<table id="tabla-routers">.*?</table>', html, re.S).group(0)
+    cabecera = set(re.findall(r'<th data-col="(\w+)"', tabla))
+    celdas = set(re.findall(r'<td data-col="(\w+)"', js))
+
+    assert declaradas == cabecera == celdas, (
+        f"declaradas {declaradas}, cabecera {cabecera}, celdas {celdas}"
+    )
+
+
+def test_el_colspan_de_la_tabla_de_routers_no_es_un_numero_fijo() -> None:
+    """Con columnas ocultas, un colspan fijo saca la fila de grupo de la tabla."""
+    js = panel_js()
+    render = re.search(r"function renderDevices\(\) \{(.*?)\n\}", js, re.S).group(1)
+
+    assert "columnasVisibles()" in render
+    # ni en el mensaje de tabla vacía ni en NINGUNA de las llamadas que pintan
+    # la fila de grupo: basta una con el número viejo para que esa agrupación
+    # se salga de la tabla
+    assert not re.search(r'colspan="\d+"', render)
+    fijos = re.findall(r"agruparFilas\([^;]*?,\s*(\d+)\)", render)
+    assert not fijos, f"agruparFilas con un ancho fijo: {fijos}"
+    # y las filas se repintan al vuelo, así que hay que volver a ocultarlas
+    assert "aplicarColumnas()" in render

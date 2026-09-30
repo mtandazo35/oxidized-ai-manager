@@ -92,6 +92,8 @@ curl -X POST http://127.0.0.1:8000/api/auth/change-password \
 
 En `http://127.0.0.1:8000/` hay un **panel web** con el mismo login: estado de respaldos, alta/baja de routers y cambio de clave. En `/docs` el botón **Authorize** permite usar la API de forma interactiva.
 
+El panel abre siempre en **Routers**. Esa tabla tiene nueve columnas de datos, que en un portátil obligan a leer en horizontal, así que el menú **Columnas** deja esconder las que no interesen —quien revisa respaldos no suele mirar Puerto ni Usuario—. La elección se guarda en el navegador de cada quien, no en el servidor, así que no cambia lo que ven los demás; la columna de botones no se puede ocultar.
+
 ## Inventario de routers
 
 Los equipos se administran por API (autenticada) y Oxidized los recibe automáticamente:
