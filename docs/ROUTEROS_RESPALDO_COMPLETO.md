@@ -4,10 +4,11 @@ Un respaldo que falla se ve: el equipo queda en rojo y alguien pregunta. Un
 respaldo que **se guarda incompleto y en verde** no se ve, y es el que de verdad
 duele, porque nadie lo descubre hasta que hay que restaurar.
 
-RouterOS tiene dos formas de entregar un respaldo incompleto sin que nada dé
-error. Las dos se dieron en esta plataforma y las dos están corregidas; este
-documento explica qué pasaba, cómo se arregló y cómo comprobarlo, porque son
-detalles que no se deducen leyendo el código.
+Este documento cubre tres cosas: el fallo real que dejó a un core con la mitad de
+su configuración durante meses, cómo se pide el export con secretos en cada
+versión de RouterOS —que no es igual en la 6 y en la 7, y equivocarse rompe el
+respaldo— y la verificación que se añadió para que la próxima vez no haga falta
+que alguien sospeche.
 
 ## 1. El export llega cortado a la mitad
 
@@ -25,8 +26,11 @@ Hacen falta dos condiciones **a la vez**, y por eso no afectaba a toda la flota:
 2. que haya latencia suficiente para que la ventana TCP crezca por encima de la
    ventana del canal.
 
-En LAN no se dispara nunca, aunque el config sea enorme. Contra un equipo remoto
-con un config grande —un core, típicamente— sí.
+La ventana no es un tope duro al total de bytes: se va reponiendo. El fallo
+aparece cuando el router tiene más de una ventana en vuelo, y eso depende del
+RTT. Se vio clarísimo en esta plataforma: de dos cores con export mayor de
+128 KiB, solo el remoto se cortaba. El otro entregaba 219 KB sin problema por
+tener menos latencia.
 
 Lo peor es cómo falla: MikroTik cierra el canal **limpiamente**. El `exec!` de
 net-ssh devuelve lo que alcanzó a leer, sin lanzar ninguna excepción, y Oxidized
@@ -51,51 +55,87 @@ El build falla si el parche no aplica o deja Ruby inválido, y no hace nada si l
 imagen base ya lo trae —es decir, el día que salga la versión con el arreglo, el
 parche se desactiva solo y el Dockerfile se puede borrar.
 
+Medido en producción sobre el core afectado: **135.868 → 188.537 bytes** en el
+primer respaldo tras el cambio. Eran 52 KB de configuración que se perdían en
+cada ciclo.
+
 ### Cómo comprobarlo
 
 El tamaño es la firma del bug. Un respaldo cortado por esto pesa unos 131.000
 bytes, siempre:
 
 ```sh
-docker compose exec oxidized sh -c 'cd /home/oxidized/.config/oxidized/backups.git \
-  && git ls-tree -r --long HEAD | sort -k4 -n'
+docker compose exec oxidized git -c safe.directory='*' \
+  --git-dir=/home/oxidized/.config/oxidized/backups.git ls-tree -r --long HEAD
 ```
 
 Si un equipo aparece rondando esa cifra mientras el resto varía libremente, es
-esto. Para verlo más de cerca, que un archivo termine a media línea es
-concluyente:
+esto. Que un archivo termine a media línea es concluyente:
 
 ```sh
-docker compose exec oxidized sh -c 'cd /home/oxidized/.config/oxidized/backups.git \
-  && git show HEAD:NODO | tail -3'
+docker compose exec oxidized git -c safe.directory='*' \
+  --git-dir=/home/oxidized/.config/oxidized/backups.git show HEAD:NODO | tail -3
 ```
 
-## 2. El export llega completo pero sin los secretos
+Ojo al contar líneas para comparar: el modelo **une las líneas partidas** con `\`
+que escribe RouterOS, así que el archivo guardado tiene bastante menos líneas que
+lo que se ve en la terminal del router. Para comparar, usar bytes.
 
-### Qué pasaba
+## 2. Los secretos: el export no se pide igual en la 6 y en la 7
 
-Desde **RouterOS 6.43**, `/export` oculta los datos sensibles por defecto y hay
-que pedir `show-sensitive` para que salgan. El modelo `routeros` de Oxidized solo
-lo pide cuando detecta versión 7 o superior; para todo lo demás manda `/export` a
-secas.
+### Cómo es de verdad
 
-Resultado: en toda la flota v6 los respaldos salían sin contraseñas PPPoE, sin
-PSK de wireless, sin claves IPsec ni WireGuard y sin comunidades SNMP. El archivo
-existía, tenía buen tamaño, el panel lo daba por bueno y la auditoría lo leía sin
-problemas — y no servía para restaurar nada.
+- **RouterOS 7** oculta los datos sensibles por defecto. Hay que pedir
+  `/export show-sensitive` para que salgan.
+- **RouterOS 6** los incluye en el `/export` normal, y **no acepta**
+  `show-sensitive`.
 
-### Cómo se arregló
+El modelo de Oxidized ya elige el comando según la versión que detecta, y hace
+bien. No hay nada que arreglar aquí.
 
-Con un modelo propio, [`oxidized/model/routeros.rb`](../oxidized/model/routeros.rb),
-que invierte el criterio: pide `show-sensitive` **salvo** que detecte
-positivamente una versión anterior a 6.43. Si no puede leer la versión, también
-lo pide, porque un export censurado es un daño silencioso y un argumento no
-soportado en un RouterOS antiquísimo es un fallo ruidoso, que se ve y se corrige.
+En las **dos** versiones hace falta que la cuenta de respaldo tenga la policy
+`sensitive`; sin ella el export sale censurado aunque el comando sea el correcto.
 
-De paso arregla otra cosa del modelo original: leía la versión con
-`/([0-9])/.match(version_line)[0]` sobre un valor que podía ser `nil`, así que un
-equipo que no respondiera como se espera a `/system package update print` se
-quedaba **sin ningún respaldo** por un `NoMethodError`.
+### El error que cometimos, para no repetirlo
+
+Se cambió el modelo para pedir `show-sensitive` siempre, creyendo que RouterOS
+6.43 había invertido el comportamiento también en la rama 6. Un CCR1036 con
+**6.49.21** contestó:
+
+```
+expected end of command (line 1 column 9)
+```
+
+…y ese texto de error se guardó como si fuera el respaldo del equipo: **219.903
+bytes de configuración pasaron a 7.293 bytes de error**, y el nodo siguió en
+verde. Se revirtió en minutos porque la verificación de integridad lo marcó sola.
+
+De dónde venía la confusión, que es lo que conviene recordar:
+
+- La página de [Configuration
+  Management](https://help.mikrotik.com/docs/spaces/ROS/pages/328155/Configuration+Management)
+  dice *«By default, sensitive information is hidden»*. Es cierto, pero documenta
+  **RouterOS 7**.
+- La entrada del changelog de 6.43 sobre export y datos sensibles habla de
+  `hide-sensitive`, no de cambiar el valor por defecto.
+
+La comprobación que zanja la duda es mirar un export v6 real: los secretos
+aparecen en claro, sin comillas, en el `/export` a secas.
+
+```sh
+# En un respaldo de un equipo con RouterOS 6, esto devuelve valores:
+grep -oE '[a-z-]*password=' NODO | sort | uniq -c
+```
+
+### Qué sí se cambió del modelo
+
+Una sola cosa, en [`oxidized/model/routeros.rb`](../oxidized/model/routeros.rb):
+el modelo original lee la versión con `/([0-9])/.match(version_line)[0]` sobre un
+valor que puede ser `nil`, así que un equipo que no responda a `/system package
+update print` como se espera se queda **sin ningún respaldo**, por un
+`NoMethodError`, por no haber podido leer su número de versión. Ahora una versión
+ilegible vale 0 y cae en la rama del `/export` a secas, que es un export válido en
+cualquier RouterOS: lo correcto cuando no se sabe con qué se está hablando.
 
 > **Ojo al mantenerlo.** Un modelo en `~/.config/oxidized/model/` *reemplaza* al
 > que trae Oxidized, no lo extiende. Al subir la versión de Oxidized hay que
@@ -104,30 +144,32 @@ quedaba **sin ningún respaldo** por un `NoMethodError`.
 
 ### El requisito en el router
 
-`show-sensitive` no basta por sí solo: la cuenta de respaldo necesita la policy
-`sensitive` además de `ssh,read`.
-
 ```
 /user group add name=respaldo policy=ssh,read,sensitive
 /user add name=respaldo group=respaldo address=<IP del servidor>/32 password=...
 ```
 
-Son dos condiciones independientes y las dos son obligatorias. Durante un tiempo
-la documentación de este repo afirmaba que con la policy era suficiente, que es
-lo que hizo que el problema pasara desapercibido.
+Nunca dar `write`, `api` ni `policy` a esta cuenta, y limitar el origen con
+`address=`.
 
 ## La red de seguridad: verificación de integridad
 
-Los dos fallos anteriores comparten la propiedad que los hace peligrosos: el
-respaldo se guarda y el estado queda en verde. Arreglar las causas conocidas no
-protege de la siguiente, así que el backend mide cada respaldo que entra y lo
+Todo lo anterior comparte la propiedad que lo hace peligroso: el respaldo se
+guarda y el estado queda en verde. Arreglar las causas conocidas no protege de la
+siguiente —y el episodio del `show-sensitive` demuestra que la causa siguiente
+puede ser un cambio propio—, así que el backend mide cada respaldo que entra y lo
 compara con la versión anterior del mismo equipo:
 [`backend/app/integrity.py`](../backend/app/integrity.py).
 
-Avisa cuando el respaldo llega vacío, cuando pesa justo lo que mide la ventana
-SSH, cuando encoge de forma desproporcionada, cuando desaparecen secciones que
-antes estaban, cuando no trae la cabecera con la versión y cuando los secretos
-salen censurados.
+Avisa cuando el respaldo llega vacío, cuando **no contiene ninguna sección de
+configuración** (la señal que delató el error del `show-sensitive` sin necesidad
+de comparar con nada), cuando pesa justo lo que mide la ventana SSH, cuando
+encoge de forma desproporcionada, cuando desaparecen secciones que antes estaban,
+cuando no trae la cabecera con la versión y cuando los secretos salen censurados.
+
+El encogimiento exige las dos cosas a la vez: caer por debajo del 70% y perder al
+menos 2 KB. Solo el porcentaje daba falsas alarmas en equipos con configuración
+pequeña, donde quitar tres líneas ya pasa del 30%.
 
 No bloquea ni descarta nada: un respaldo cortado también es información, y
 descartarlo dejaría al equipo sin nada. Lo que hace es dejar de mentir sobre su

@@ -119,6 +119,27 @@ def test_secretos_presentes_no_se_reportan_como_censurados() -> None:
     assert not any("censurados" in aviso for aviso in veredicto.avisos)
 
 
+def test_respuesta_de_error_guardada_como_respaldo_se_detecta_sola() -> None:
+    """Caso real: a un RouterOS 6.49.21 se le pidió `show-sensitive`.
+
+    Contestó con un error y ese texto quedó guardado como el respaldo del
+    equipo. No hace falta comparar con nada: un export sin ninguna sección de
+    configuración no es una configuración.
+    """
+    error = (
+        "#             version: 6.49.21 (long-term)\n"
+        "#          board-name: CCR1036-12G-4S\n"
+        "# Flags: U - undoable, R - redoable\n"
+        "# U nat rule changed                     write\n"
+        "expected end of command (line 1 column 9)\n"
+    )
+
+    veredicto = revisar(error)
+
+    assert veredicto.secciones == 0
+    assert any("ninguna sección" in aviso for aviso in veredicto.avisos)
+
+
 def test_export_sin_cabecera_de_version_es_sospechoso() -> None:
     sin_cabecera = "/ip address\nadd address=192.0.2.1/24\n"
 

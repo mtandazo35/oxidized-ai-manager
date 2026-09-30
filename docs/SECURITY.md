@@ -71,12 +71,11 @@ recomendado del servidor. Lea también `docs/PUBLIC_ACCESS.md`.
   - Si activa el envío a un Git remoto, **esas claves salen del servidor**: use
     un repositorio privado y un token de alcance mínimo.
   - La cuenta de respaldo del MikroTik necesita la policy `sensitive` (además
-    de `read,ssh`) para que `/export` incluya los secretos. **La policy es
-    necesaria pero no suficiente**: desde RouterOS 6.43 el export los oculta por
-    defecto y hay que pedir `show-sensitive`, que es lo que fuerza el modelo
-    propio de `oxidized/model/routeros.rb`. Con una de las dos cosas y no la
-    otra, el respaldo sale censurado sin dar ningún error
-    ([detalles](ROUTEROS_RESPALDO_COMPLETO.md)).
+    de `read,ssh`) para que `/export` incluya los secretos. Sin ella el respaldo
+    sale censurado sin dar ningún error. El comando lo elige Oxidized según la
+    versión del equipo —`show-sensitive` en RouterOS 7, `/export` a secas en la
+    6, que no acepta ese argumento—, así que **no hay que forzarlo a mano**
+    ([por qué](ROUTEROS_RESPALDO_COMPLETO.md)).
   - La API de auditoría **censura** los valores sensibles de cada evidencia
     (`password=***`); el texto completo solo se obtiene por los endpoints de
     respaldo, que exigen token de sesión.
@@ -149,11 +148,9 @@ de este repositorio. El reparto de responsabilidades es deliberado:
    /user add name=respaldo group=respaldo address=<IP del servidor>/32 password=...
    ```
 
-   `sensitive` es **obligatoria**: sin ella `/export show-sensitive` no devuelve
-   los secretos y el respaldo no sirve para restaurar. Quien manda
-   `show-sensitive` es el modelo propio de `oxidized/model/routeros.rb`, no
-   Oxidized por su cuenta. Nunca dar `write`, `api` ni `policy` a esta cuenta, y
-   limitar el origen con `address=`.
+   `sensitive` es **obligatoria**: sin ella el `/export` no devuelve los secretos
+   y el respaldo no sirve para restaurar. Nunca dar `write`, `api` ni `policy` a
+   esta cuenta, y limitar el origen con `address=`.
 4. **Respaldo antes de cambios** en configuración de producción (`tar.gz` +
    `pg_dump`).
 5. **Mantener el host actualizado** (unattended-upgrades) y las imágenes al día.

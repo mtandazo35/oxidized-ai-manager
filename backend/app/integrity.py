@@ -140,6 +140,17 @@ def revisar(
                 avisos.append(f"Desaparecieron secciones que antes estaban: {listadas}.")
 
     if routeros:
+        # Un export sin una sola sección no es una configuración. Lo típico es
+        # que el equipo haya contestado con un error y ese texto se haya
+        # guardado como si fuera el respaldo: pasó de verdad con un RouterOS 6
+        # al que se le pidió `show-sensitive`, que no soporta. Se avisa sin
+        # necesidad de una versión anterior con la que comparar.
+        if not secciones_nuevas:
+            avisos.append(
+                "El respaldo no contiene ninguna sección de configuración. "
+                "Suele ser la respuesta de error del equipo, guardada en lugar "
+                "del export."
+            )
         if not export.version:
             avisos.append(
                 "El export no trae la cabecera con la versión de RouterOS: "

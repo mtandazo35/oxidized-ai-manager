@@ -1,5 +1,5 @@
-# Modelo RouterOS propio. Copia del modelo de Oxidized 0.37.0 con dos cambios,
-# marcados abajo con «CAMBIO».
+# Modelo RouterOS propio. Copia del de Oxidized 0.37.0 con UN cambio, marcado
+# abajo con «CAMBIO».
 #
 # OJO AL MANTENERLO: un modelo en `~/.config/oxidized/model/` **reemplaza** al
 # que trae Oxidized, no lo extiende (ver `Manager#loader`). Así que al subir la
@@ -7,25 +7,26 @@
 # `lib/oxidized/model/routeros.rb` de upstream y traer lo que haya cambiado, o
 # nos quedamos sin las correcciones de modelo que publiquen.
 #
-# CAMBIO 1 — `/export show-sensitive` también en RouterOS 6.
-# Desde RouterOS 6.43 `/export` oculta los secretos por defecto y hay que pedir
-# `show-sensitive` para que salgan. El modelo de upstream solo lo pide cuando
-# detecta versión 7 o superior, así que en toda la flota v6 los respaldos salían
-# sin contraseñas PPPoE, sin PSK de wireless, sin claves IPsec ni WireGuard y
-# sin comunidades SNMP: el archivo existía, el panel lo daba por bueno y no
-# servía para restaurar nada. Aquí se invierte el criterio: se pide
-# `show-sensitive` salvo que se detecte positivamente una versión anterior a
-# 6.43. Si no se puede leer la versión también se pide, porque un `/export`
-# censurado es un daño silencioso y un argumento no soportado en un RouterOS
-# antiquísimo es un fallo ruidoso, que se ve y se corrige.
+# CAMBIO — no reventar el nodo cuando no se puede leer la versión.
+# El modelo original hace `/([0-9])/.match(version_line)[0]` sobre un valor que
+# puede ser `nil`: un equipo que no responda a `/system package update print`
+# como se espera se queda **sin ningún respaldo**, por un NoMethodError, por no
+# haber podido leer su número de versión. Aquí la versión ilegible pasa a ser 0,
+# que cae en la rama del `/export` a secas: un export válido en cualquier
+# RouterOS, que es lo que hay que hacer cuando no se sabe con qué se habla.
 #
-# CAMBIO 2 — no reventar cuando no se puede leer la versión.
-# El modelo original hacía `/([0-9])/.match(version_line)[0]` sobre un posible
-# nil, y un router que no respondiera a `/system package update print` como se
-# espera se quedaba sin ningún respaldo por un NoMethodError.
-#
-# Requisito en el router, sin el cual el CAMBIO 1 no sirve de nada: la cuenta de
-# respaldo necesita la policy `sensitive` además de `ssh,read`.
+# LO QUE **NO** HAY QUE CAMBIAR AQUÍ, y por qué (probado en producción):
+# la elección entre `/export` y `/export show-sensitive` según la versión NO es
+# un descuido de upstream, es la diferencia real entre RouterOS 6 y 7.
+#   - RouterOS 7 oculta los datos sensibles por defecto y hay que pedir
+#     `show-sensitive` para que salgan.
+#   - RouterOS 6 los incluye en el `/export` normal, y **no acepta**
+#     `show-sensitive`: contestó `expected end of command (line 1 column 9)` en
+#     un CCR con 6.49.21, y ese texto de error se guardó como si fuera el
+#     respaldo del equipo (219 KB de configuración pasaron a 7 KB de error).
+# En las dos versiones hace falta que la cuenta de respaldo tenga la policy
+# `sensitive`; sin ella el export sale censurado aunque el comando sea el
+# correcto. Detalles en docs/ROUTEROS_RESPALDO_COMPLETO.md.
 
 class RouterOS < Oxidized::Model
   using Refinements
@@ -49,9 +50,10 @@ class RouterOS < Oxidized::Model
   end
 
   cmd '/system package update print' do |cfg|
-    # CAMBIO 2: `.to_s` sobre el resultado del grep, que puede ser nil.
+    # CAMBIO: `.to_s` sobre el resultado del grep, que puede ser nil, y versión
+    # 0 cuando no hay ningún dígito que leer.
     version_line = cfg.each_line.grep(/installed-version:\s|current-version:\s/)[0].to_s
-    @ros_version_full = version_line[/\d+(?:\.\d+)*/]
+    @ros_version = version_line[/[0-9]/].to_i
     comment version_line
   end
 
@@ -64,18 +66,14 @@ class RouterOS < Oxidized::Model
   end
 
   post do
-    # CAMBIO 1: `show-sensitive` por defecto; `/export` a secas solo si se
-    # detecta una versión anterior a 6.43, que es donde MikroTik invirtió el
-    # comportamiento.
+    logger.debug "Running /export for routeros version #{@ros_version}"
     run_cmd = if vars(:remove_secret)
                 '/export hide-sensitive'
-              elsif @ros_version_full &&
-                    Gem::Version.new(@ros_version_full) < Gem::Version.new('6.43')
-                '/export'
-              else
+              elsif @ros_version >= 7
                 '/export show-sensitive'
+              else
+                '/export'
               end
-    logger.debug "Running #{run_cmd} for routeros version #{@ros_version_full.inspect}"
     cmd run_cmd do |cfg|
       cfg.gsub! /\\\r?\n\s+/, '' # strip new line
       cfg.gsub! "# inactive time\r\n", '' # Remove time based system comment

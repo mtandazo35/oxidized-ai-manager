@@ -19,12 +19,11 @@ crash:
   directory: /home/oxidized/.config/oxidized/crashes
   hostnames: false
 # Sin `remove_secret`: los respaldos deben incluir las claves para ser
-# restaurables. Hacen falta dos cosas más, y sin ellas el export sale censurado
-# aunque aquí no se pida censurarlo:
-#   1. que la cuenta de respaldo del MikroTik tenga la policy `sensitive`, y
-#   2. que el comando sea `/export show-sensitive`, que es lo que fuerza el
-#      modelo propio de oxidized/model/routeros.rb (el de Oxidized solo lo pide
-#      en RouterOS 7, y desde 6.43 el export oculta los secretos por defecto).
+# restaurables. Hace falta además que la cuenta de respaldo del MikroTik tenga la
+# policy `sensitive`, o el export sale censurado aunque aquí no se pida
+# censurarlo. El comando lo elige el modelo según la versión del equipo
+# (`show-sensitive` en RouterOS 7, `/export` a secas en la 6, que no acepta ese
+# argumento): ver docs/ROUTEROS_RESPALDO_COMPLETO.md antes de tocarlo.
 extensions:
   oxidized-web:
     load: true
