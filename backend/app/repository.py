@@ -444,24 +444,33 @@ class BackupEventRepository:
         )
 
     async def status(self, nodes: list[str] | None = None) -> list[dict[str, Any]]:
-        """`nodes=None` es "todos"; una lista vacía no devuelve nada."""
+        """`nodes=None` es "todos"; una lista vacía no devuelve nada.
+
+        Trae de paso los avisos de integridad del último respaldo, para que el
+        panel no necesite una segunda consulta: un nodo puede estar en
+        `node_success` y tener el respaldo cortado.
+        """
         if nodes is not None and not nodes:
             return []
         rows = await self._pool.fetch(
             """
-            SELECT node,
-                   (array_agg(event ORDER BY created_at DESC)
-                       FILTER (WHERE event <> 'post_store'))[1] AS last_event,
-                   max(created_at) FILTER (WHERE event <> 'post_store')
+            SELECT e.node AS node,
+                   (array_agg(e.event ORDER BY e.created_at DESC)
+                       FILTER (WHERE e.event <> 'post_store'))[1] AS last_event,
+                   max(e.created_at) FILTER (WHERE e.event <> 'post_store')
                        AS last_event_at,
-                   max(created_at) FILTER (WHERE event = 'node_success')
+                   max(e.created_at) FILTER (WHERE e.event = 'node_success')
                        AS last_success_at,
-                   (array_agg(commit_ref ORDER BY created_at DESC)
-                       FILTER (WHERE commit_ref <> ''))[1] AS last_commit
-            FROM backup_events
-            WHERE ($1::text[] IS NULL OR node = ANY($1))
-            GROUP BY node
-            ORDER BY node
+                   (array_agg(e.commit_ref ORDER BY e.created_at DESC)
+                       FILTER (WHERE e.commit_ref <> ''))[1] AS last_commit,
+                   COALESCE(i.warnings, '{}') AS warnings,
+                   COALESCE(i.bytes, 0) AS bytes,
+                   COALESCE(i.lines, 0) AS lines
+            FROM backup_events e
+            LEFT JOIN backup_integrity i ON i.node = e.node
+            WHERE ($1::text[] IS NULL OR e.node = ANY($1))
+            GROUP BY e.node, i.warnings, i.bytes, i.lines
+            ORDER BY e.node
             """,
             nodes,
         )
@@ -482,6 +491,46 @@ class BackupEventRepository:
             nodes,
         )
         return [dict(row) for row in rows]
+
+
+class BackupIntegrityRepository:
+    """Veredicto de integridad del último respaldo de cada equipo."""
+
+    def __init__(self, pool: asyncpg.Pool) -> None:
+        self._pool = pool
+
+    async def record(
+        self,
+        node: str,
+        commit_ref: str,
+        bytes_: int,
+        lines: int,
+        sections: int,
+        warnings: list[str],
+    ) -> None:
+        await self._pool.execute(
+            """
+            INSERT INTO backup_integrity
+                (node, commit_ref, bytes, lines, sections, warnings, checked_at)
+            VALUES ($1, $2, $3, $4, $5, $6, now())
+            ON CONFLICT (node) DO UPDATE SET
+                commit_ref = EXCLUDED.commit_ref,
+                bytes = EXCLUDED.bytes,
+                lines = EXCLUDED.lines,
+                sections = EXCLUDED.sections,
+                warnings = EXCLUDED.warnings,
+                checked_at = now()
+            """,
+            node,
+            commit_ref,
+            bytes_,
+            lines,
+            sections,
+            warnings,
+        )
+
+    async def forget(self, node: str) -> None:
+        await self._pool.execute("DELETE FROM backup_integrity WHERE node = $1", node)
 
 
 class DuplicateUserError(Exception):

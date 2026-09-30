@@ -5,8 +5,13 @@ model: routeros
 interval: 31536000
 debug: false
 threads: 1
-timeout: 20
-timelimit: 60
+# `timeout` es el límite de conexión SSH: un equipo inalcanzable falla ahí, así
+# que subirlo poco. `timelimit` es el techo de la sesión completa, y un core con
+# un export de cientos de kilobytes por un enlace lento no cabía en 60 s: al
+# saltar, Oxidized marca el nodo como fallido y no guarda nada (ver job.rb), o
+# sea que el respaldo de ese equipo simplemente no se hacía.
+timeout: 30
+timelimit: 240
 retries: 1
 prompt: !ruby/regexp /^([\w.@-]+[#>]\s?)$/
 pid: /tmp/oxidized.pid
@@ -14,8 +19,12 @@ crash:
   directory: /home/oxidized/.config/oxidized/crashes
   hostnames: false
 # Sin `remove_secret`: los respaldos deben incluir las claves para ser
-# restaurables (`/export` completo, no `hide-sensitive`). Requiere que el
-# usuario de respaldo del MikroTik tenga la policy `sensitive`.
+# restaurables. Hacen falta dos cosas más, y sin ellas el export sale censurado
+# aunque aquí no se pida censurarlo:
+#   1. que la cuenta de respaldo del MikroTik tenga la policy `sensitive`, y
+#   2. que el comando sea `/export show-sensitive`, que es lo que fuerza el
+#      modelo propio de oxidized/model/routeros.rb (el de Oxidized solo lo pide
+#      en RouterOS 7, y desde 6.43 el export oculta los secretos por defecto).
 extensions:
   oxidized-web:
     load: true

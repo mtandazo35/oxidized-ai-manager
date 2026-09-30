@@ -5,7 +5,8 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 
 from .auth import require_admin
 from .config import get_settings
-from .gitrepo import GitRepoError, NotFoundInRepoError, show_config
+from .gitrepo import GitRepoError, NotFoundInRepoError, list_versions, show_config
+from .integrity import revisar
 from .metadata import parse_routeros_metadata
 from .schemas import BackupEventIn, OxidizedNode
 
@@ -22,6 +23,36 @@ PLACEHOLDER_NODE = {
     "username": "",
     "password": "",
 }
+
+
+async def _revisar_integridad(request: Request, node: str, config_text: str) -> None:
+    """Guarda el veredicto de integridad del respaldo que acaba de entrar.
+
+    No propaga errores a propósito: llegados aquí el respaldo ya está commiteado
+    y el evento ya quedó registrado, así que perder el veredicto es preferible a
+    devolverle un 500 a Oxidized, que daría el nodo por fallido y lo reintentaría
+    sin necesidad.
+    """
+    settings = get_settings()
+    repo = settings.oxidized_backup_repo
+    try:
+        device = await request.app.state.devices.get_device_by_name(node)
+        modelo = (device or {}).get("model") or "routeros"
+        versiones = await list_versions(repo, node, 2)
+        anterior = None
+        if len(versiones) > 1:
+            anterior = await show_config(repo, node, versiones[1]["commit"])
+        veredicto = revisar(config_text, anterior, routeros=modelo == "routeros")
+        await request.app.state.backup_integrity.record(
+            node,
+            versiones[0]["commit"] if versiones else "",
+            veredicto.tamano,
+            veredicto.lineas,
+            veredicto.secciones,
+            list(veredicto.avisos),
+        )
+    except (GitRepoError, NotFoundInRepoError, OSError, ValueError, KeyError):
+        return
 
 
 def _require_token(x_oxidized_token: str) -> None:
@@ -78,6 +109,7 @@ async def oxidized_event(
         meta = parse_routeros_metadata(config_text)
         if meta:
             await request.app.state.devices.update_metadata(payload.node, meta)
+        await _revisar_integridad(request, payload.node, config_text)
 
 
 @router.post(

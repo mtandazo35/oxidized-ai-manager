@@ -173,6 +173,12 @@ class FakeBackupEventRepository:
                     "last_event_at": visible[-1]["created_at"] if visible else None,
                     "last_success_at": successes[-1]["created_at"] if successes else None,
                     "last_commit": commits[-1]["commit_ref"] if commits else None,
+                    # El repositorio real trae estas tres columnas del LEFT JOIN
+                    # con `backup_integrity`; aquí van en su valor neutro para
+                    # que la forma de la respuesta sea la misma.
+                    "warnings": [],
+                    "bytes": 0,
+                    "lines": 0,
                 }
             )
         return result
@@ -189,6 +195,33 @@ class FakeBackupEventRepository:
             and (nodes is None or e["node"] in nodes)
         ]
         return list(reversed(events))[:limit]
+
+
+class FakeBackupIntegrityRepository:
+    """In-memory stand-in matching BackupIntegrityRepository's public contract."""
+
+    def __init__(self) -> None:
+        self.veredictos: dict[str, dict[str, Any]] = {}
+
+    async def record(
+        self,
+        node: str,
+        commit_ref: str,
+        bytes_: int,
+        lines: int,
+        sections: int,
+        warnings: list[str],
+    ) -> None:
+        self.veredictos[node] = {
+            "commit_ref": commit_ref,
+            "bytes": bytes_,
+            "lines": lines,
+            "sections": sections,
+            "warnings": list(warnings),
+        }
+
+    async def forget(self, node: str) -> None:
+        self.veredictos.pop(node, None)
 
 
 class FakeSettingsRepository:
@@ -492,6 +525,15 @@ def backup_event_repository() -> FakeBackupEventRepository:
 
     repository = FakeBackupEventRepository()
     main_module.app.state.backup_events = repository
+    return repository
+
+
+@pytest.fixture(autouse=True)
+def backup_integrity_repository() -> FakeBackupIntegrityRepository:
+    from app import main as main_module
+
+    repository = FakeBackupIntegrityRepository()
+    main_module.app.state.backup_integrity = repository
     return repository
 
 

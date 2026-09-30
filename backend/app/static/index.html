@@ -85,6 +85,10 @@
   .badge.fail { background: var(--fail-bg); color: var(--fail-ink); }
   .badge.off { background: var(--off-bg); color: var(--off-ink); }
   .badge.run { background: var(--warn-bg); color: var(--warn-ink); animation: pulse 1.2s infinite; }
+  /* Respaldo guardado pero sospechoso: en verde y con aviso a la vez. */
+  button.badge.warn { background: var(--warn-bg); color: var(--warn-ink);
+    border: 0; cursor: pointer; font-family: inherit; margin-left: 6px; }
+  button.badge.warn:hover { filter: brightness(.94); }
   /* Verde sólido: hay algo que hacer. El verde suave de `ok` se reserva para
      «todo en orden», y así los dos estados no se confunden. */
   .badge.nuevo { background: #15803d; color: #fff; }
@@ -530,6 +534,19 @@
       <ul class="change-list" id="hist-list" style="max-height:60vh;border-radius:8px;border-top:1px solid var(--border)">
         <li class="muted">Cargando…</li>
       </ul>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="avisos-overlay" hidden>
+  <div class="card mwide">
+    <div class="modal-head">
+      <h1 id="avisos-titulo">Revisar este respaldo</h1>
+      <button type="button" class="ghost" data-cerrar="avisos-overlay">Cerrar</button>
+    </div>
+    <div class="modal-body">
+      <p class="muted" id="avisos-medidas"></p>
+      <ul id="avisos-lista" style="margin:0;padding-left:20px;line-height:1.55"></ul>
     </div>
   </div>
 </div>
@@ -1152,8 +1169,9 @@ function renderStatus() {
 
   const fila = (name) => {
         const ev = evByNode[name];
+        const avisos = (ev && ev.warnings) || [];
         return `<tr>
-          <td>${esc(name)}</td>
+          <td>${esc(name)}${avisos.length ? `<button type="button" class="badge warn" onclick="verAvisos('${esc(name)}')" title="El respaldo se guardó, pero puede estar incompleto">⚠ ${avisos.length}</button>` : ""}</td>
           <td>${currentStateBadge(name, oxByNode)}</td>
           <td>${ev && ev.last_event ? `<span class="badge ${ev.last_event === "node_success" ? "ok" : "fail"}">${esc(ev.last_event)}</span>` : '<span class="muted">—</span>'}</td>
           <td>${fmtDate(ev && ev.last_event_at)}</td>
@@ -2648,6 +2666,24 @@ setInterval(comprobarActualizacion, INTERVALO_AVISO_MS);
 
 // Descarga directa del último respaldo, sin abrir el historial. Pensado para
 // las cuentas de solo lectura, que no tienen los botones de operación.
+// Un respaldo puede estar en `node_success` y no servir: cortado a media
+// descarga o con los secretos censurados. Estos son los avisos que lo dicen.
+window.verAvisos = (node) => {
+  const ev = statusCache.evByNode[node];
+  const avisos = (ev && ev.warnings) || [];
+  $("avisos-titulo").textContent = "Revisar el respaldo de " + node;
+  const medidas = [];
+  if (ev && ev.bytes) medidas.push(ev.bytes.toLocaleString("es-EC") + " bytes");
+  if (ev && ev.lines) medidas.push(ev.lines.toLocaleString("es-EC") + " líneas");
+  $("avisos-medidas").textContent = medidas.length
+    ? "Último respaldo medido: " + medidas.join(" · ")
+    : "";
+  $("avisos-lista").innerHTML = avisos.length
+    ? avisos.map((aviso) => `<li>${esc(aviso)}</li>`).join("")
+    : '<li class="muted">Sin avisos.</li>';
+  $("avisos-overlay").hidden = false;
+};
+
 window.descargarUltimo = async (node, destino = "device-msg") => {
   try {
     const versiones = await api(

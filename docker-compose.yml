@@ -54,15 +54,30 @@ services:
       - >-
         cp /seed/config /target/config &&
         sed -i "s|__OXIDIZED_SOURCE_TOKEN__|$$OXIDIZED_SOURCE_TOKEN|" /target/config &&
-        mkdir -p /target/configs /target/crashes &&
+        mkdir -p /target/configs /target/crashes /target/model &&
+        cp /seed/model/routeros.rb /target/model/routeros.rb &&
         chown -R 30000:30000 /target &&
         chmod o+x /target
     volumes:
       - ./oxidized/config:/seed/config:ro
+      # Modelo propio: Oxidized lo busca en `<raíz>/model/` y desde ahí
+      # reemplaza al que trae el gem. Ver oxidized/model/routeros.rb.
+      - ./oxidized/model:/seed/model:ro
       - oxidized_data:/target
 
   oxidized:
-    image: ${OXIDIZED_IMAGE:-oxidized/oxidized:0.37.0}
+    # Imagen propia: la oficial trunca los respaldos de RouterOS grandes contra
+    # equipos remotos. El motivo completo está en oxidized/Dockerfile.
+    #
+    # `OXIDIZED_IMAGE` sigue siendo la imagen **base** de upstream, igual que
+    # antes. La nuestra lleva un nombre distinto a propósito: si se construyera
+    # sobre el mismo tag, la imagen parcheada quedaría etiquetada con el nombre
+    # de la oficial y ya no se sabría cuál es cuál.
+    image: ${OXIDIZED_LOCAL_IMAGE:-oxidized-ai-manager/oxidized:0.37.0-ros}
+    build:
+      context: ./oxidized
+      args:
+        OXIDIZED_BASE_IMAGE: ${OXIDIZED_IMAGE:-oxidized/oxidized:0.37.0}
     restart: unless-stopped
     init: true
     security_opt:

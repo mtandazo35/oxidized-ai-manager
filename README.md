@@ -162,6 +162,12 @@ de Oxidized.
 La cuenta de respaldo del MikroTik necesita `policy=ssh,read,sensitive`; sin
 `sensitive` el `/export` sale censurado y el respaldo no sirve para restaurar.
 
+RouterOS tiene además dos maneras de entregar un respaldo incompleto sin que nada
+dé error —el export cortado a la mitad por el servidor SSH del router, y los
+secretos censurados en la 6—, las dos corregidas aquí. Merece la pena leerlo
+antes de dudar de un respaldo:
+[docs/ROUTEROS_RESPALDO_COMPLETO.md](docs/ROUTEROS_RESPALDO_COMPLETO.md).
+
 El nombre del equipo se ajusta solo: «Router Sucursal Norte» se guarda como
 «Router-Sucursal-Norte», porque ese nombre es el del archivo dentro del
 repositorio de respaldos.
@@ -226,6 +232,7 @@ Las pruebas usan dobles para las dependencias; no necesitan contenedores ni rout
 - [Bitácora y control de acceso](docs/ACTIVITY_LOG.md)
 - [Exposición con Nginx Proxy Manager](docs/PUBLIC_ACCESS.md)
 - [Respaldo y restauración](docs/BACKUP_RESTORE.md)
+- [Respaldos de RouterOS completos (truncamiento y secretos)](docs/ROUTEROS_RESPALDO_COMPLETO.md)
 - [Actualizaciones desde el panel](docs/UPDATES.md)
 - [Seguridad](docs/SECURITY.md)
 - [Detalles de la Fase 1](docs/PHASE1.md)

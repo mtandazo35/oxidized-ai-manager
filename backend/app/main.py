@@ -24,6 +24,7 @@ from .repository import (
     AccessRepository,
     ActivityRepository,
     BackupEventRepository,
+    BackupIntegrityRepository,
     DeviceRepository,
     SettingsRepository,
     UserRepository,
@@ -45,6 +46,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     devices = DeviceRepository(pool)
     app.state.devices = devices
     app.state.backup_events = BackupEventRepository(pool)
+    app.state.backup_integrity = BackupIntegrityRepository(pool)
     app.state.activity = ActivityRepository(pool)
     app.state.access = AccessRepository(pool)
     app_settings = SettingsRepository(pool)

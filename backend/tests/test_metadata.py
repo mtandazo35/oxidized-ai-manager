@@ -84,3 +84,32 @@ async def test_success_event_updates_device_metadata(
     assert device["identity"] == "CORE-QUEVEDO"
     assert device["ros_version"] == "7.23.2 (stable)"
     assert device["board"] == "CHR QEMU Standard PC"
+
+
+async def test_success_event_records_backup_integrity(
+    auth_headers, metadata_repo, backup_integrity_repository
+) -> None:
+    """El mismo evento que actualiza metadatos deja medido el respaldo.
+
+    Sin esto, un respaldo cortado o censurado queda indistinguible de uno bueno:
+    ambos son `node_success`.
+    """
+    transport = ASGITransport(app=main_module.app)
+    async with AsyncClient(transport=transport, base_url="http://test") as api:
+        await api.post(
+            "/api/devices",
+            headers=auth_headers,
+            json={"name": "rb-lab-01", "address": "192.0.2.1"},
+        )
+        await api.post(
+            "/api/oxidized/events",
+            headers=TOKEN_HEADER,
+            json={"node": "rb-lab-01", "event": "node_success"},
+        )
+
+    veredicto = backup_integrity_repository.veredictos["rb-lab-01"]
+    assert veredicto["bytes"] == len(ROUTEROS_EXPORT.encode())
+    assert veredicto["lines"] == len(ROUTEROS_EXPORT.splitlines())
+    assert veredicto["sections"] == 2
+    assert veredicto["commit_ref"]
+    assert veredicto["warnings"] == []

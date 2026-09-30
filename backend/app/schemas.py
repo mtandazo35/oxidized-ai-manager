@@ -169,6 +169,11 @@ class BackupStatusOut(BaseModel):
     last_event_at: datetime | None
     last_success_at: datetime | None
     last_commit: str | None
+    # Un nodo puede estar en `node_success` y tener el respaldo cortado o
+    # censurado; estos avisos son lo que distingue «se guardó» de «sirve».
+    warnings: list[str] = []
+    bytes: int = 0
+    lines: int = 0
 
 
 class AuditEvidence(BaseModel):

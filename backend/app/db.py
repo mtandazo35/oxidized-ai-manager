@@ -56,6 +56,19 @@ CREATE TABLE IF NOT EXISTS backup_events (
 CREATE INDEX IF NOT EXISTS backup_events_node_idx
     ON backup_events (node, created_at DESC);
 
+-- Integridad del último respaldo de cada equipo: un respaldo cortado se guarda
+-- igual que uno bueno y sin esto queda en verde. Una fila por nodo, se sobre-
+-- escribe en cada recolección.
+CREATE TABLE IF NOT EXISTS backup_integrity (
+    node TEXT PRIMARY KEY,
+    commit_ref TEXT NOT NULL DEFAULT '',
+    bytes INTEGER NOT NULL DEFAULT 0,
+    lines INTEGER NOT NULL DEFAULT 0,
+    sections INTEGER NOT NULL DEFAULT 0,
+    warnings TEXT[] NOT NULL DEFAULT '{}',
+    checked_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 -- Bitácora: qué pasó, cuándo, quién y desde dónde.
 CREATE TABLE IF NOT EXISTS activity_log (
     id BIGSERIAL PRIMARY KEY,
