@@ -241,6 +241,19 @@
     padding: 7px 12px; border-bottom: 1px solid var(--border-strong); }
   .grupo-fila:hover td { background: var(--surface-2); }
   .grupo-fila .cuenta { color: var(--ink-muted); font-weight: 500; }
+  /* menu de columnas: un <details> hace de desplegable sin JS de apertura */
+  .col-menu { position: relative; }
+  .col-menu > summary { cursor: pointer; list-style: none; font-size: .85rem;
+    padding: 6px 10px; border: 1px solid var(--border, #d6dbe3); border-radius: 6px; }
+  .col-menu > summary::-webkit-details-marker { display: none; }
+  .col-menu > summary::after { content: " ▾"; }
+  .col-menu-panel { position: absolute; right: 0; z-index: 30; margin-top: 4px;
+    min-width: 170px; padding: 8px; display: flex; flex-direction: column; gap: 4px;
+    background: var(--card, #fff); border: 1px solid var(--border, #d6dbe3);
+    border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.18); }
+  .col-menu-panel label { display: flex; align-items: center; gap: 6px;
+    font-size: .85rem; white-space: nowrap; cursor: pointer; }
+  #tabla-routers [data-col][hidden] { display: none; }
   .table-tools { display: flex; align-items: center; gap: 8px;
     flex-wrap: wrap; margin: 0 0 10px; }
   .table-tools > input[type=search] { margin-left: auto; }
@@ -395,10 +408,20 @@
         <input id="filter-text" type="search" placeholder="🔍 Buscar…" title="Filtra por nombre, identity, IP, puerto, plataforma, versión, usuario o grupo" style="width:200px;padding:6px 10px;font-size:.85rem">
         <select id="filter-group" style="font-size:.85rem"><option value="">Todas las empresas</option></select>
         <select id="group-by" style="font-size:.85rem" title="Agrupa las filas"><option value="">Sin agrupar</option><option value="group_name">Por empresa</option><option value="estado">Por estado actual</option></select>
+        <details class="col-menu" id="menu-columnas" title="Elige qué columnas ver">
+          <summary>Columnas</summary>
+          <div class="col-menu-panel" id="col-menu-panel"></div>
+        </details>
       </div>
       <p class="msg" id="device-msg"></p>
-      <table>
-        <thead><tr><th>Nombre</th><th>Identity</th><th>Grupo</th><th>Dirección</th><th>Puerto</th><th>Plataforma</th><th>Versión</th><th>Usuario</th><th>Estado</th><th></th></tr></thead>
+      <table id="tabla-routers">
+        <thead><tr>
+          <th data-col="name">Nombre</th><th data-col="identity">Identity</th>
+          <th data-col="group_name">Grupo</th><th data-col="address">Dirección</th>
+          <th data-col="port">Puerto</th><th data-col="model">Plataforma</th>
+          <th data-col="ros_version">Versión</th><th data-col="username">Usuario</th>
+          <th data-col="enabled">Estado</th><th></th>
+        </tr></thead>
         <tbody id="devices-body"></tbody>
       </table>
     </div>
@@ -465,6 +488,12 @@
         <input id="audit-filter" type="search" placeholder="🔍 Buscar…"
           title="Filtra por nombre, identity, empresa o versión"
           style="width:190px;padding:6px 10px;font-size:.85rem">
+        <select id="filter-group-audit" style="font-size:.85rem"><option value="">Todas las empresas</option></select>
+        <select id="group-by-audit" style="font-size:.85rem" title="Agrupa las filas">
+          <option value="">Sin agrupar</option>
+          <option value="group_name">Por empresa</option>
+          <option value="level">Por riesgo</option>
+        </select>
         <span id="audit-totals" class="muted"></span>
       </div>
       <p class="msg" id="audit-msg"></p>
@@ -1097,7 +1126,7 @@ function deviceMatchesFilter(device, sufijo = "") {
 }
 
 function updateGroupOptions() {
-  ["-estado", ""].forEach(rellenarGrupos);
+  ["-estado", "-audit", ""].forEach(rellenarGrupos);
 }
 
 function rellenarGrupos(sufijo) {
@@ -1207,18 +1236,73 @@ function startFastPoll() {
   }, 5000);
 }
 
+// ---- columnas que se pueden ocultar en la tabla de routers ----
+// Nueve columnas de datos no caben comodas en un portatil, y cada operador
+// mira lo suyo: quien revisa respaldos no necesita Puerto ni Usuario. La
+// columna de botones no se puede ocultar, por eso no esta en la lista.
+const COLUMNAS_ROUTERS = [
+  { id: "name", etiqueta: "Nombre" },
+  { id: "identity", etiqueta: "Identity" },
+  { id: "group_name", etiqueta: "Grupo" },
+  { id: "address", etiqueta: "Dirección" },
+  { id: "port", etiqueta: "Puerto" },
+  { id: "model", etiqueta: "Plataforma" },
+  { id: "ros_version", etiqueta: "Versión" },
+  { id: "username", etiqueta: "Usuario" },
+  { id: "enabled", etiqueta: "Estado" },
+];
+const COLUMNAS_CLAVE = "oxm_cols_routers";
+
+function columnasOcultas() {
+  try {
+    const guardado = JSON.parse(localStorage.getItem(COLUMNAS_CLAVE) || "[]");
+    const validas = COLUMNAS_ROUTERS.map((c) => c.id);
+    // se filtra contra la lista real: una columna renombrada en una version
+    // posterior dejaria oculta una columna que ya no existe
+    return new Set(guardado.filter((id) => validas.includes(id)));
+  } catch (e) { return new Set(); }
+}
+
+// +1 por la columna de botones, que nunca se oculta
+function columnasVisibles() {
+  return COLUMNAS_ROUTERS.length - columnasOcultas().size + 1;
+}
+
+function aplicarColumnas() {
+  const ocultas = columnasOcultas();
+  document.querySelectorAll("#tabla-routers [data-col]").forEach((celda) => {
+    celda.hidden = ocultas.has(celda.dataset.col);
+  });
+}
+
+function pintarMenuColumnas() {
+  const ocultas = columnasOcultas();
+  $("col-menu-panel").innerHTML = COLUMNAS_ROUTERS.map((c) => `
+    <label><input type="checkbox" data-columna="${c.id}"
+      ${ocultas.has(c.id) ? "" : "checked"}> ${esc(c.etiqueta)}</label>`).join("") +
+    '<button type="button" class="ghost mini" id="col-todas">Mostrar todas</button>';
+}
+
+function guardarColumnas(ocultas) {
+  try {
+    localStorage.setItem(COLUMNAS_CLAVE, JSON.stringify([...ocultas]));
+  } catch (e) {}   // modo privado: la eleccion vale para esta sesion y ya
+  aplicarColumnas();
+  renderDevices();
+}
+
 function renderDevices() {
   const rows = allDevices.filter((d) => deviceMatchesFilter(d));
   const fila = (d) => `<tr>
-        <td>${esc(d.name)}</td>
-        <td>${d.identity ? esc(d.identity) : '<span class="muted">—</span>'}</td>
-        <td ${perms.can_write ? `style="cursor:pointer" title="Clic para editar" onclick="editGroup(${d.id}, '${esc(d.group_name || "")}')"` : ""}>${d.group_name ? esc(d.group_name) : `<span class="muted">—${perms.can_write ? " ✎" : ""}</span>`}</td>
-        <td>${esc(d.address)}</td>
-        <td>${esc(d.port)}</td>
-        <td class="muted">${esc(d.model || "routeros")}</td>
-        <td title="${esc(d.board)}">${d.ros_version ? esc(d.ros_version) : '<span class="muted">—</span>'}</td>
-        <td>${esc(d.username)}</td>
-        <td><span class="badge ${d.enabled ? "ok" : "off"}">${d.enabled ? "activo" : "pausado"}</span></td>
+        <td data-col="name">${esc(d.name)}</td>
+        <td data-col="identity">${d.identity ? esc(d.identity) : '<span class="muted">—</span>'}</td>
+        <td data-col="group_name" ${perms.can_write ? `style="cursor:pointer" title="Clic para editar" onclick="editGroup(${d.id}, '${esc(d.group_name || "")}')"` : ""}>${d.group_name ? esc(d.group_name) : `<span class="muted">—${perms.can_write ? " ✎" : ""}</span>`}</td>
+        <td data-col="address">${esc(d.address)}</td>
+        <td data-col="port">${esc(d.port)}</td>
+        <td data-col="model" class="muted">${esc(d.model || "routeros")}</td>
+        <td data-col="ros_version" title="${esc(d.board)}">${d.ros_version ? esc(d.ros_version) : '<span class="muted">—</span>'}</td>
+        <td data-col="username">${esc(d.username)}</td>
+        <td data-col="enabled"><span class="badge ${d.enabled ? "ok" : "off"}">${d.enabled ? "activo" : "pausado"}</span></td>
         <td style="text-align:right">${perms.can_write ? `
           <button class="ghost mini" onclick="backupNow(${d.id})">Respaldar</button>
           <button class="ghost mini" onclick="openEdit(${d.id})">Editar</button>
@@ -1228,13 +1312,15 @@ function renderDevices() {
             title="Descargar la última configuración respaldada">⬇ Último respaldo</button>`}</td>
       </tr>`;
   const agrupar = $("group-by").value;
+  const anchas = columnasVisibles();
   $("devices-body").innerHTML = !rows.length
-    ? '<tr><td colspan="10" class="muted">Sin routers que coincidan.</td></tr>'
+    ? `<tr><td colspan="${anchas}" class="muted">Sin routers que coincidan.</td></tr>`
     : agrupar === "group_name"
-      ? agruparFilas(rows, (d) => d.group_name, fila, 10)
+      ? agruparFilas(rows, (d) => d.group_name, fila, anchas)
       : agrupar === "estado"
-        ? agruparFilas(rows, (d) => estadoDe(d.name), fila, 10)
+        ? agruparFilas(rows, (d) => estadoDe(d.name), fila, anchas)
         : rows.map(fila).join("");
+  aplicarColumnas();   // las filas se acaban de crear: hay que ocultarlas otra vez
 }
 
 let editDeviceId = null;
@@ -1876,6 +1962,8 @@ const SEV_COLOR = {
 let auditRows = [];
 
 function auditMatches(row) {
+  const empresa = $("filter-group-audit").value;
+  if (empresa && (row.group_name || "") !== empresa) return false;
   const query = $("audit-filter").value.trim().toLowerCase();
   if (!query) return true;
   return [row.node, row.identity, row.group_name, row.ros_version]
@@ -1884,8 +1972,7 @@ function auditMatches(row) {
 
 function renderAudit() {
   const rows = auditRows.filter(auditMatches);
-  $("audit-body").innerHTML = rows.length
-    ? rows.map((row) => `
+  const fila = (row) => `
       <tr>
         <td>${esc(row.node)}${row.identity && row.identity !== row.node
           ? ` <span class="muted">${esc(row.identity)}</span>` : ""}</td>
@@ -1901,15 +1988,24 @@ function renderAudit() {
         <td>${row.counts.low || 0}</td>
         <td>${row.error ? "" :
           `<button type="button" class="ghost mini" onclick="showFindings('${row.node}')">hallazgos</button>`}</td>
-      </tr>`).join("")
-    : '<tr><td colspan="10" class="muted">Sin equipos que coincidan.</td></tr>';
-  const risky = auditRows.filter(
+      </tr>`;
+  const agrupar = $("group-by-audit").value;
+  $("audit-body").innerHTML = !rows.length
+    ? '<tr><td colspan="10" class="muted">Sin equipos que coincidan.</td></tr>'
+    : agrupar === "group_name"
+      ? agruparFilas(rows, (row) => row.group_name, fila, 10)
+      : agrupar === "level"
+        ? agruparFilas(rows, (row) => SEV_LABEL[row.level] || row.level, fila, 10)
+        : rows.map(fila).join("");
+  const risky = rows.filter(
     (row) => row.level === "critical" || row.level === "high"
   ).length;
-  const pending = auditRows.filter((row) => row.error).length;
+  const pending = rows.filter((row) => row.error).length;
+  const filtrando = rows.length !== auditRows.length;
   $("audit-totals").textContent = auditRows.length
-    ? `${auditRows.length} equipos · ${risky} con riesgo alto o crítico` +
-      (pending ? ` · ${pending} sin respaldo` : "")
+    ? `${rows.length} equipos · ${risky} con riesgo alto o crítico` +
+      (pending ? ` · ${pending} sin respaldo` : "") +
+      (filtrando ? ` (de ${auditRows.length})` : "")
     : "";
 }
 
@@ -1964,6 +2060,8 @@ window.showFindings = async (node) => {
 
 $("btn-audit-refresh").addEventListener("click", loadAudit);
 $("audit-filter").addEventListener("input", renderAudit);
+$("filter-group-audit").addEventListener("change", renderAudit);
+$("group-by-audit").addEventListener("change", renderAudit);
 $("btn-close-findings").addEventListener("click", () => {
   $("findings-overlay").hidden = true;
 });
@@ -2707,9 +2805,35 @@ window.descargarUltimo = async (node, destino = "device-msg") => {
 };
 
 function initialTab() {
-  const fromHash = location.hash.slice(1);
-  return TAB_NAMES.includes(fromHash) ? fromHash : "dashboard";
+  // Siempre se entra por Routers. Antes se recuperaba la pestana del hash, que
+  // switchTab actualiza en cada clic: recargar dejaba al operador donde estaba
+  // la vez anterior (a menudo en Ajustes del sistema) en vez de en la lista.
+  return "dashboard";
 }
+$("col-menu-panel").addEventListener("change", (evento) => {
+  const casilla = evento.target.closest("[data-columna]");
+  if (!casilla) return;
+  const ocultas = columnasOcultas();
+  if (casilla.checked) ocultas.delete(casilla.dataset.columna);
+  else ocultas.add(casilla.dataset.columna);
+  guardarColumnas(ocultas);
+});
+
+$("col-menu-panel").addEventListener("click", (evento) => {
+  if (evento.target.id !== "col-todas") return;
+  guardarColumnas(new Set());
+  pintarMenuColumnas();
+});
+
+// cerrar el menu al hacer clic fuera: un <details> abierto tapa la tabla
+document.addEventListener("click", (evento) => {
+  const menu = $("menu-columnas");
+  if (menu && menu.open && !menu.contains(evento.target)) menu.open = false;
+});
+
+pintarMenuColumnas();
+aplicarColumnas();
+
 $("tab-btn-dashboard").addEventListener("click", () => switchTab("dashboard"));
 $("tab-btn-estado").addEventListener("click", () => switchTab("estado"));
 $("tab-btn-audit").addEventListener("click", () => switchTab("audit"));
