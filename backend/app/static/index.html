@@ -488,6 +488,12 @@
         <input id="audit-filter" type="search" placeholder="🔍 Buscar…"
           title="Filtra por nombre, identity, empresa o versión"
           style="width:190px;padding:6px 10px;font-size:.85rem">
+        <select id="filter-group-audit" style="font-size:.85rem"><option value="">Todas las empresas</option></select>
+        <select id="group-by-audit" style="font-size:.85rem" title="Agrupa las filas">
+          <option value="">Sin agrupar</option>
+          <option value="group_name">Por empresa</option>
+          <option value="level">Por riesgo</option>
+        </select>
         <span id="audit-totals" class="muted"></span>
       </div>
       <p class="msg" id="audit-msg"></p>
@@ -1120,7 +1126,7 @@ function deviceMatchesFilter(device, sufijo = "") {
 }
 
 function updateGroupOptions() {
-  ["-estado", ""].forEach(rellenarGrupos);
+  ["-estado", "-audit", ""].forEach(rellenarGrupos);
 }
 
 function rellenarGrupos(sufijo) {
@@ -1956,6 +1962,8 @@ const SEV_COLOR = {
 let auditRows = [];
 
 function auditMatches(row) {
+  const empresa = $("filter-group-audit").value;
+  if (empresa && (row.group_name || "") !== empresa) return false;
   const query = $("audit-filter").value.trim().toLowerCase();
   if (!query) return true;
   return [row.node, row.identity, row.group_name, row.ros_version]
@@ -1964,8 +1972,7 @@ function auditMatches(row) {
 
 function renderAudit() {
   const rows = auditRows.filter(auditMatches);
-  $("audit-body").innerHTML = rows.length
-    ? rows.map((row) => `
+  const fila = (row) => `
       <tr>
         <td>${esc(row.node)}${row.identity && row.identity !== row.node
           ? ` <span class="muted">${esc(row.identity)}</span>` : ""}</td>
@@ -1981,15 +1988,24 @@ function renderAudit() {
         <td>${row.counts.low || 0}</td>
         <td>${row.error ? "" :
           `<button type="button" class="ghost mini" onclick="showFindings('${row.node}')">hallazgos</button>`}</td>
-      </tr>`).join("")
-    : '<tr><td colspan="10" class="muted">Sin equipos que coincidan.</td></tr>';
-  const risky = auditRows.filter(
+      </tr>`;
+  const agrupar = $("group-by-audit").value;
+  $("audit-body").innerHTML = !rows.length
+    ? '<tr><td colspan="10" class="muted">Sin equipos que coincidan.</td></tr>'
+    : agrupar === "group_name"
+      ? agruparFilas(rows, (row) => row.group_name, fila, 10)
+      : agrupar === "level"
+        ? agruparFilas(rows, (row) => SEV_LABEL[row.level] || row.level, fila, 10)
+        : rows.map(fila).join("");
+  const risky = rows.filter(
     (row) => row.level === "critical" || row.level === "high"
   ).length;
-  const pending = auditRows.filter((row) => row.error).length;
+  const pending = rows.filter((row) => row.error).length;
+  const filtrando = rows.length !== auditRows.length;
   $("audit-totals").textContent = auditRows.length
-    ? `${auditRows.length} equipos · ${risky} con riesgo alto o crítico` +
-      (pending ? ` · ${pending} sin respaldo` : "")
+    ? `${rows.length} equipos · ${risky} con riesgo alto o crítico` +
+      (pending ? ` · ${pending} sin respaldo` : "") +
+      (filtrando ? ` (de ${auditRows.length})` : "")
     : "";
 }
 
@@ -2044,6 +2060,8 @@ window.showFindings = async (node) => {
 
 $("btn-audit-refresh").addEventListener("click", loadAudit);
 $("audit-filter").addEventListener("input", renderAudit);
+$("filter-group-audit").addEventListener("change", renderAudit);
+$("group-by-audit").addEventListener("change", renderAudit);
 $("btn-close-findings").addEventListener("click", () => {
   $("findings-overlay").hidden = true;
 });

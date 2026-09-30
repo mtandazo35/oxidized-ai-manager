@@ -139,3 +139,38 @@ def test_el_colspan_de_la_tabla_de_routers_no_es_un_numero_fijo() -> None:
     assert not fijos, f"agruparFilas con un ancho fijo: {fijos}"
     # y las filas se repintan al vuelo, así que hay que volver a ocultarlas
     assert "aplicarColumnas()" in render
+
+
+def test_auditoria_filtra_por_empresa_y_agrupa_como_routers() -> None:
+    """La lista sale entera y quien lleva tres ISP tenía que leerla de arriba
+    abajo: Auditoría necesitaba los mismos filtros que Routers, no solo el
+    buscador. El select de empresas lo llena `rellenarGrupos`, que trabaja por
+    sufijo, así que el sufijo nuevo tiene que estar en `updateGroupOptions` o
+    la lista de empresas se queda vacía."""
+    html = PANEL.read_text(encoding="utf-8")
+    js = panel_js()
+    auditoria = re.search(r'<div id="tab-audit".*?</table>', html, re.S).group(0)
+
+    assert 'id="filter-group-audit"' in auditoria
+    assert 'id="group-by-audit"' in auditoria
+    sufijos = re.search(r"function updateGroupOptions\(\) \{(.*?)\n\}", js, re.S).group(1)
+    assert '"-audit"' in sufijos, "el select de empresas de Auditoría no se llena"
+    assert 'filter-group-audit' in js and 'group-by-audit' in js
+
+    # y los dos repintan: un filtro que no reacciona es peor que no tenerlo
+    for control in ("filter-group-audit", "group-by-audit"):
+        assert re.search(
+            rf'\$\("{control}"\)\.addEventListener\("change", renderAudit\)', js
+        ), f"{control} no repinta la tabla"
+
+
+def test_los_totales_de_auditoria_cuentan_lo_que_se_ve() -> None:
+    """Con un filtro puesto, «85 equipos» al lado de tres filas no dice nada."""
+    js = panel_js()
+    render = re.search(r"function renderAudit\(\) \{(.*?)\n\}", js, re.S).group(1)
+    totales = render[render.index("audit-totals"):]
+
+    assert "rows.length" in totales
+    assert re.search(r"const risky = rows\.filter", render), (
+        "el recuento de riesgo sigue mirando el inventario entero"
+    )

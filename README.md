@@ -129,7 +129,7 @@ curl -H "Authorization: Bearer $TOKEN" 'http://127.0.0.1:8000/api/audit/node?nod
 curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/api/audit/rules            # catálogo de reglas
 ```
 
-En el panel están en la pestaña **Auditoría**. Detalles, reglas y criterios en
+En el panel están en la pestaña **Auditoría**, con los mismos filtros que la lista de routers: buscador, empresa y agrupado (por empresa o por riesgo). Los totales de la derecha cuentan lo que se está viendo, y entre paréntesis el inventario completo cuando hay un filtro puesto. Detalles, reglas y criterios en
 [docs/PHASE4.md](docs/PHASE4.md).
 
 > Los respaldos incluyen las claves de los equipos para ser restaurables. La
