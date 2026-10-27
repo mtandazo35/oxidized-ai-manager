@@ -414,6 +414,39 @@
   th.orden-asc::after { content: "▲"; @apply text-accent-text opacity-100; }
   th.orden-desc::after { content: "▼"; @apply text-accent-text opacity-100; }
 
+  /* Anchos ajustables: el asa vive en el borde derecho de cada cabecera y
+     dibuja el separador entre columnas. Con anchos guardados la tabla pasa a
+     diseño fijo y el texto que no cabe se corta con «…». */
+  thead th { @apply relative; }
+  .col-asa { @apply absolute top-0 right-0 z-2 h-full w-2.5 cursor-col-resize touch-none; }
+  .col-asa::after {
+    content: ""; @apply absolute top-1/4 right-1 h-1/2 w-px transition-colors;
+    background: var(--border-strong);
+  }
+  thead th:hover .col-asa::after { background: var(--ink-muted); }
+  .col-asa:hover::after, .redimensionando .col-asa:hover::after { @apply top-0 h-full w-0.5; background: var(--accent); }
+  .anchos-fijos { table-layout: fixed; }
+  .anchos-fijos th, .anchos-fijos td { @apply overflow-hidden text-ellipsis; }
+  .anchos-fijos th:last-child, .anchos-fijos td:last-child { @apply overflow-visible; text-overflow: clip; }
+  .redimensionando, .redimensionando * { @apply cursor-col-resize! select-none; }
+
+  /* Carga masiva: botón de archivo propio y aviso de archivo listo. */
+  .archivo-carga { @apply flex flex-wrap items-center gap-3; }
+  .boton-archivo {
+    @apply inline-flex cursor-pointer items-center gap-2 rounded-md border border-line-strong bg-surface-solid px-3 py-2
+      text-sm font-medium text-ink-soft hover:text-ink;
+  }
+  [data-theme=dark] .boton-archivo { background-color: var(--surface-2); }
+  .boton-archivo:hover { border-color: var(--accent); background: var(--accent-soft); }
+  #bulk-file:focus-visible + span, .boton-archivo:focus-within { outline: 2px solid var(--accent); }
+  .boton-archivo svg, .archivo-icono svg { @apply size-4.5 fill-none stroke-current; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .archivo-listo {
+    @apply mt-3 flex items-center gap-3 rounded-md border px-4 py-3;
+    border-color: var(--ok-ink); background: var(--ok-bg);
+  }
+  .archivo-icono { @apply grid size-9 flex-none place-items-center rounded-md; color: var(--ok-ink); background: var(--surface-solid); }
+  .archivo-listo strong { @apply block truncate; }
+
   /* Paginador bajo cada tabla. */
   .paginador {
     @apply sticky left-0 mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-3 text-[13px];

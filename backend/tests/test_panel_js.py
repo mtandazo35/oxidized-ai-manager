@@ -326,3 +326,31 @@ def test_las_preferencias_de_tabla_se_guardan() -> None:
     for preferencia in ("porPagina:", "agrupar:", "empresa:", "sentido:"):
         assert preferencia in js, f"no se guarda {preferencia}"
     assert "leerPrefs(tabla).empresa" in js, "la empresa guardada no se recupera"
+
+
+def test_la_carga_masiva_vive_en_ajustes_y_no_vuelca_el_archivo() -> None:
+    """La carga masiva pasó a Ajustes del sistema (también para operadores,
+    que solo ven esa tarjeta) y el archivo elegido ya no se copia en el
+    cuadro de texto: se anuncia como listo para cargar."""
+    html = PANEL.read_text(encoding="utf-8")
+    js = panel_js()
+
+    assert 'id="tab-btn-import"' not in html and 'id="tab-import"' not in html
+    assert 'data-seccion="carga"' in html and 'id="sec-carga"' in html
+    assert re.search(r'if \(tab === "system"\) return perms\.can_write;', js)
+    assert 'querySelectorAll(".hub-item[data-solo-admin]")' in js
+    for seccion in ("version", "seguridad", "actividad", "config", "cuentas"):
+        assert re.search(rf'data-seccion="{seccion}" data-solo-admin', html), seccion
+    archivo = re.search(r'\$\("bulk-file"\)\.addEventListener\("change".*?\n\}\);', js, re.S).group(0)
+    assert 'bulk-text").value =' not in archivo, "el archivo vuelve a copiarse en el textarea"
+    assert "archivoListo(" in archivo
+
+
+def test_los_anchos_de_columna_se_pueden_ajustar_y_se_guardan() -> None:
+    js = panel_js()
+
+    assert "prepararAnchos(idTabla)" in js
+    assert "guardarPrefs(TABLA_DE[idTabla], { anchos })" in js
+    assert "suprimirClicOrden" in js, "soltar el asa no debe ordenar la columna"
+    aplicar = re.search(r"function aplicarColumnas\(\) \{(.*?)\n\}", js, re.S).group(1)
+    assert 'aplicarAnchos("tabla-routers")' in aplicar
