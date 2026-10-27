@@ -430,16 +430,17 @@
   .anchos-fijos th:last-child, .anchos-fijos td:last-child { @apply overflow-visible; text-overflow: clip; }
   .redimensionando, .redimensionando * { @apply cursor-col-resize! select-none; }
 
-  /* Carga masiva: botón de archivo propio y aviso de archivo listo. */
-  .archivo-carga { @apply flex flex-wrap items-center gap-3; }
-  .boton-archivo {
-    @apply inline-flex cursor-pointer items-center gap-2 rounded-md border border-line-strong bg-surface-solid px-3 py-2
-      text-sm font-medium text-ink-soft hover:text-ink;
+  /* Carga masiva: zona para soltar o elegir el archivo, y aviso de listo. */
+  .zona-archivo {
+    @apply flex cursor-pointer items-center gap-4 rounded-md border-2 border-dashed border-line-strong px-5 py-6
+      transition-colors;
+    background: var(--surface-2);
   }
-  [data-theme=dark] .boton-archivo { background-color: var(--surface-2); }
-  .boton-archivo:hover { border-color: var(--accent); background: var(--accent-soft); }
-  #bulk-file:focus-visible + span, .boton-archivo:focus-within { outline: 2px solid var(--accent); }
-  .boton-archivo svg, .archivo-icono svg { @apply size-4.5 fill-none stroke-current; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .zona-archivo:hover, .zona-archivo.encima { border-color: var(--accent); background: var(--accent-soft); }
+  #bulk-file:focus-visible + .zona-archivo { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .zona-icono { @apply grid size-11 flex-none place-items-center rounded-md bg-surface-solid text-accent-text; }
+  .zona-texto strong { @apply block text-sm text-ink; }
+  .zona-icono svg, .archivo-icono svg { @apply size-5 fill-none stroke-current; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
   .archivo-listo {
     @apply mt-3 flex items-center gap-3 rounded-md border px-4 py-3;
     border-color: var(--ok-ink); background: var(--ok-bg);

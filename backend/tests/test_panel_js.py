@@ -341,9 +341,11 @@ def test_la_carga_masiva_vive_en_ajustes_y_no_vuelca_el_archivo() -> None:
     assert 'querySelectorAll(".hub-item[data-solo-admin]")' in js
     for seccion in ("version", "seguridad", "actividad", "config", "cuentas"):
         assert re.search(rf'data-seccion="{seccion}" data-solo-admin', html), seccion
-    archivo = re.search(r'\$\("bulk-file"\)\.addEventListener\("change".*?\n\}\);', js, re.S).group(0)
-    assert 'bulk-text").value =' not in archivo, "el archivo vuelve a copiarse en el textarea"
-    assert "archivoListo(" in archivo
+    # Solo por archivo: no hay cuadro de texto donde volcarlo ni donde pegar.
+    assert 'id="bulk-text"' not in html and "bulk-text" not in js
+    lectura = re.search(r"async function leerArchivoCarga\(file\) \{(.*?)\n\}", js, re.S).group(1)
+    assert "archivoListo(" in lectura
+    assert re.search(r'\$\("bulk-zona"\)\.addEventListener\("drop"', js), "falta soltar el archivo"
 
 
 def test_los_anchos_de_columna_se_pueden_ajustar_y_se_guardan() -> None:
