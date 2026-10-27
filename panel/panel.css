@@ -406,6 +406,27 @@
   .col-menu-panel button { @apply mt-1; }
   #tabla-routers [data-col][hidden] { display: none; }
 
+  /* Cabeceras ordenables: clic para ordenar; la flecha dice el sentido. */
+  th[data-orden] { @apply cursor-pointer select-none hover:text-ink; }
+  th[data-orden]::after { content: "↕"; @apply ml-1 inline-block text-[10px] opacity-0 transition-opacity; }
+  th[data-orden]:hover::after { @apply opacity-50; }
+  th.orden-asc, th.orden-desc { @apply text-ink; }
+  th.orden-asc::after { content: "▲"; @apply text-accent-text opacity-100; }
+  th.orden-desc::after { content: "▼"; @apply text-accent-text opacity-100; }
+
+  /* Paginador bajo cada tabla. */
+  .paginador {
+    @apply sticky left-0 mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-3 text-[13px];
+  }
+  .pag-controles { @apply flex flex-wrap items-center gap-3; }
+  .pag-tamano { @apply flex items-center gap-2; }
+  .pag-tamano select { @apply py-1 pr-7 pl-2 text-[13px]; }
+  .pag-botones { @apply flex items-center gap-1; }
+  .pag-botones button.mini { @apply min-w-8 justify-center tabular-nums; }
+  .pag-botones button.actual,
+  .pag-botones button.actual:disabled { @apply cursor-default border-accent opacity-100; background: var(--accent-soft); color: var(--ink); }
+  .pag-hueco { @apply px-1; }
+
   /* Cabecera de grupo dentro de la tabla, al estilo de Winbox. */
   .grupo-fila td {
     @apply border-b border-line-strong px-3 py-1.5 text-xs font-semibold tracking-wide text-ink uppercase;

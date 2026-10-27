@@ -298,3 +298,31 @@ def test_cambiar_la_clave_guarda_el_token_nuevo() -> None:
     form = re.search(r'\$\("pass-form"\)\.addEventListener\("submit".*?\n\}\);', js, re.S).group(0)
 
     assert "access_token" in form and 'localStorage.setItem("oxm_token"' in form
+
+
+def test_las_tablas_grandes_se_paginan_y_ordenan() -> None:
+    """Con cientos de equipos, pintar todas las filas en cada refresco hacía
+    lento el panel. Cada tabla pinta solo su página."""
+    html = PANEL.read_text(encoding="utf-8")
+    js = panel_js()
+    for funcion, tabla in (("renderDevices", "routers"), ("renderStatus", "estado"),
+                           ("renderAudit", "audit")):
+        cuerpo = re.search(rf"function {funcion}\(\) \{{(.*?)\n\}}", js, re.S).group(1)
+        assert f'paginar("{tabla}", ordenar("{tabla}"' in cuerpo, f"{funcion} no pagina"
+        assert f'id="pag-{tabla}"' in html, f"falta el paginador de {tabla}"
+    # toda cabecera ordenable tiene su clave de orden
+    claves = re.search(r"const CLAVES_ORDEN = \{(.*?)\n\};", js, re.S).group(1)
+    for id_tabla in ("tabla-routers", "tabla-estado", "tabla-audit"):
+        tabla = re.search(rf'<table id="{id_tabla}">.*?</table>', html, re.S).group(0)
+        for orden in re.findall(r'data-orden="(\w+)"', tabla):
+            assert f"{orden}:" in claves, f"{id_tabla}: no se puede ordenar por {orden}"
+
+
+def test_las_preferencias_de_tabla_se_guardan() -> None:
+    """Filas por página, orden, empresa y agrupado sobreviven a recargar."""
+    js = panel_js()
+
+    assert 'const PREFS_CLAVE = "oxm_tablas"' in js
+    for preferencia in ("porPagina:", "agrupar:", "empresa:", "sentido:"):
+        assert preferencia in js, f"no se guarda {preferencia}"
+    assert "leerPrefs(tabla).empresa" in js, "la empresa guardada no se recupera"

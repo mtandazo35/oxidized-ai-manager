@@ -18,7 +18,7 @@ async def test_root_serves_panel() -> None:
 
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/html")
-    assert "Oxidized AI Manager" in response.text
+    assert "<title>MikroTik Backup</title>" in response.text
 
 
 async def test_liveness_does_not_require_dependencies() -> None:

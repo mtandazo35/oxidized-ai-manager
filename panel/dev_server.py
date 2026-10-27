@@ -191,6 +191,24 @@ async def sembrar(app) -> None:
         for j, evento in enumerate(events._events[-2:]):
             evento["created_at"] = ahora - timedelta(minutes=17 * i + 5 * j)
 
+    # Equipos de relleno para probar la paginación con una flota grande:
+    #   PANEL_DEMO_EQUIPOS=200 python panel/dev_server.py
+    empresas = ["AMG", "Accessnet", "Cafanet", "CalcetaTV", "Covirnet", "DHT-FIBER",
+                "FASTTEL", "Fiberhome", "Fiberplus", "Flashnet", "Globalnet", "Interlive"]
+    extra = int(os.environ.get("PANEL_DEMO_EQUIPOS", "0") or 0)
+    for n in range(extra):
+        nombre = f"rb-{empresas[n % len(empresas)].lower()}-{n:03d}"
+        await devices.create_device({
+            "name": nombre, "address": f"10.{n // 250}.{n % 250}.1", "port": 2232,
+            "model": "routeros", "username": "oxidized-ro", "password": "x",
+            "enabled": n % 9 != 0, "group_name": empresas[n % len(empresas)],
+            "backup_interval_minutes": 0, "identity": nombre.upper(),
+            "ros_version": ["6.49.21 (long-term)", "7.24.2 (stable)"][n % 2], "board": "",
+            "history_since": None,
+        })
+        if n % 4:
+            await events.record_event(nombre, "node_success", f"{n:04x}e91b4d8f0")
+
     app.state.devices = devices
     app.state.backup_events = events
     app.state.backup_integrity = FakeBackupIntegrityRepository()
