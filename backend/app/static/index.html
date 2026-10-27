@@ -2490,6 +2490,22 @@ function switchTab(tab) {
   if (tab === "audit") loadAudit();
 }
 
+// Pinta la lista selectiva de routers según la empresa elegida en el
+// desplegable ("" = Todos). Así "cargar la info por empresa" muestra solo los
+// equipos de esa empresa; con "Todos" se ven todos.
+function renderBulkDevices() {
+  const group = $("bulk-run-group").value;
+  const enabled = allDevices
+    .filter((d) => d.enabled)
+    .filter((d) => !group || (d.group_name || "") === group);
+  $("bulk-run-devices").innerHTML = enabled.length
+    ? enabled.map((d) => `<label style="display:flex;gap:6px;align-items:center">
+        <input type="checkbox" class="bulk-run-check" value="${d.id}">
+        ${esc(d.name)}${d.group_name ? ` <span class="muted">(${esc(d.group_name)})</span>` : ""}
+      </label>`).join("")
+    : '<span class="muted">Sin routers activos en esta empresa.</span>';
+}
+
 async function loadBulkRun() {
   try {
     const devices = await api("/api/devices");
@@ -2498,15 +2514,11 @@ async function loadBulkRun() {
     const groups = [...new Set(
       enabled.map((d) => d.group_name).filter(Boolean)
     )].sort();
-    $("bulk-run-group").innerHTML = groups.length
-      ? groups.map((g) => `<option value="${esc(g)}">${esc(g)}</option>`).join("")
-      : '<option value="">(sin grupos definidos)</option>';
-    $("bulk-run-devices").innerHTML = enabled.length
-      ? enabled.map((d) => `<label style="display:flex;gap:6px;align-items:center">
-          <input type="checkbox" class="bulk-run-check" value="${d.id}">
-          ${esc(d.name)}${d.group_name ? ` <span class="muted">(${esc(d.group_name)})</span>` : ""}
-        </label>`).join("")
-      : '<span class="muted">Sin routers activos.</span>';
+    // "Todos" primero y seleccionado por defecto, para no arrancar sesgado a
+    // la primera empresa de la lista.
+    $("bulk-run-group").innerHTML = '<option value="">Todos</option>' +
+      groups.map((g) => `<option value="${esc(g)}">${esc(g)}</option>`).join("");
+    renderBulkDevices();
   } catch (e) {}
 }
 
@@ -2542,9 +2554,16 @@ $("btn-bulk-all").addEventListener("click", async () => {
     "Se encola el respaldo de todos los routers activos.", "Encolar"))
     runBulkBackup({ scope: "all" });
 });
-$("btn-bulk-run-group").addEventListener("click", () => {
+$("bulk-run-group").addEventListener("change", renderBulkDevices);
+$("btn-bulk-run-group").addEventListener("click", async () => {
   const group = $("bulk-run-group").value;
-  if (!group) { setMsg("bulk-run-msg", "No hay grupos definidos.", false); return; }
+  // "Todos" (valor vacío) respalda la flota entera, como el botón de arriba.
+  if (!group) {
+    if (await preguntar("Respaldar todo",
+      "Se encola el respaldo de todos los routers activos.", "Encolar"))
+      runBulkBackup({ scope: "all" });
+    return;
+  }
   runBulkBackup({ scope: "group", group });
 });
 $("btn-bulk-run-selected").addEventListener("click", () => {
