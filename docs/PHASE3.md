@@ -12,6 +12,13 @@
   - `GET /api/backups/status` — último evento, último éxito y último commit
     por equipo.
   - `GET /api/backups/events?node=&limit=` — historial de eventos.
+- Historial por dueño: todo se indexa por nombre de nodo, así que cada
+  equipo guarda `history_since` (alta, cambio de nombre o de empresa) y los
+  endpoints de versiones, diff, configuración, eventos y estado ignoran lo
+  anterior. Al borrar un equipo se purgan sus eventos e integridad; git no se
+  purga. Detalle en `docs/MULTITENANT.md`.
+- Si git falla, la API responde 502 con un mensaje genérico; el error de git
+  (que trae rutas del servidor) solo va al log.
 - Los eventos del nodo `phase1-placeholder` se descartan: con el inventario
   vacío ese marcador falla su recolección horaria por diseño y no debe
   ensuciar el estado.

@@ -148,3 +148,76 @@ def test_mask_remote_url_variants() -> None:
     assert mask_remote_url("https://u:tok@host/r.git") == "https://u:***@host/r.git"
     assert mask_remote_url("https://host/r.git") == "https://host/r.git"
     assert mask_remote_url("") == ""
+
+
+def test_mask_remote_url_hides_bare_tokens() -> None:
+    """Regresión: `https://TOKEN@host` (sin usuario) salía sin ocultar."""
+    assert (
+        mask_remote_url("https://ghp_abc123@github.com/u/r.git")
+        == "https://***@github.com/u/r.git"
+    )
+    assert mask_remote_url("ssh://git@host/r.git") == "ssh://git@host/r.git"
+    assert mask_remote_url("git@github.com:u/r.git") == "git@github.com:u/r.git"
+
+
+async def test_http_remote_is_rejected(auth_headers) -> None:
+    async with client() as api:
+        response = await api.put(
+            "/api/settings",
+            headers=auth_headers,
+            json={
+                "backup_interval_minutes": 60,
+                "git_remote_enabled": False,
+                "git_remote_url": "http://user:tok@git.example.com/r.git",
+            },
+        )
+
+    assert response.status_code == 422
+    assert "https://" in response.json()["detail"]
+
+
+async def test_masked_url_with_other_host_does_not_reuse_token(
+    auth_headers, settings_repository
+) -> None:
+    """Regresión: bastaba con que la URL tuviera `:***@` para reutilizar el
+    token guardado, aunque el servidor fuera otro."""
+    await settings_repository.set_many(
+        {"git_remote_url": "https://user:sekrit@github.com/u/backups.git"}
+    )
+    async with client() as api:
+        response = await api.put(
+            "/api/settings",
+            headers=auth_headers,
+            json={
+                "backup_interval_minutes": 60,
+                "git_remote_enabled": True,
+                "git_remote_url": "https://user:***@atacante.example/u/backups.git",
+            },
+        )
+
+    assert response.status_code == 422
+    stored = await settings_repository.get_all()
+    assert stored["git_remote_url"] == "https://user:sekrit@github.com/u/backups.git"
+
+
+async def test_masked_bare_token_url_keeps_stored_secret(
+    auth_headers, settings_repository
+) -> None:
+    await settings_repository.set_many(
+        {"git_remote_url": "https://ghp_abc@github.com/u/backups.git"}
+    )
+    async with client() as api:
+        response = await api.put(
+            "/api/settings",
+            headers=auth_headers,
+            json={
+                "backup_interval_minutes": 60,
+                "git_remote_enabled": True,
+                "git_remote_url": "https://***@github.com/u/backups.git",
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json()["git_remote_url"] == "https://***@github.com/u/backups.git"
+    stored = await settings_repository.get_all()
+    assert stored["git_remote_url"] == "https://ghp_abc@github.com/u/backups.git"

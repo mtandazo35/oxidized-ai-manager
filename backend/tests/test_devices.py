@@ -97,6 +97,30 @@ async def test_duplicate_name_returns_409(auth_headers) -> None:
 
     assert first.status_code == 201
     assert second.status_code == 409
+    # El administrador ve todas las empresas: a él sí se le dice la causa.
+    assert second.json()["detail"] == "Ya existe un equipo con ese nombre."
+
+
+async def test_non_admin_duplicate_gets_a_neutral_message(make_user) -> None:
+    """Mismo texto que cuando el nombre es de otra empresa (ver
+    test_multitenant.py): no confirma a quién pertenece."""
+    headers = make_user("op-a", role="operador", group_name="EmpresaA")
+    async with client(headers) as api:
+        await api.post("/api/devices", json=DEVICE)
+        second = await api.post("/api/devices", json=DEVICE)
+
+    assert second.status_code == 409
+    assert second.json()["detail"] == "Ese nombre no está disponible; elija otro."
+
+
+@pytest.mark.parametrize("method", ["get", "patch", "delete"])
+async def test_missing_device_message_is_in_spanish(auth_headers, method) -> None:
+    async with client(auth_headers) as api:
+        kwargs = {"json": {"address": "192.0.2.1"}} if method == "patch" else {}
+        response = await getattr(api, method)("/api/devices/999", **kwargs)
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Equipo no encontrado."
 
 
 async def test_a_path_like_name_cannot_escape_the_repository(auth_headers) -> None:

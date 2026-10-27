@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
@@ -16,6 +17,7 @@ from .devices import router as devices_router
 from .health import backup_freshness, check_dependencies
 from .middleware import (
     ActivityLogMiddleware,
+    BodySizeLimitMiddleware,
     LoginRateLimitMiddleware,
     SecurityHeadersMiddleware,
 )
@@ -37,6 +39,7 @@ from .users_api import router as users_router
 
 
 settings = get_settings()
+log = logging.getLogger("oxidized-ai-manager")
 
 
 @asynccontextmanager
@@ -84,12 +87,16 @@ app = FastAPI(
     openapi_url="/openapi.json" if _docs_enabled else None,
 )
 
-# El orden importa: las cabeceras se añaden a *toda* respuesta, incluida la
-# que devuelve el limitador con 429.
-# El orden de registro es inverso al de ejecución: la bitácora se añade
-# primero para que envuelva a las demás y vea el código de estado final.
-app.add_middleware(ActivityLogMiddleware)
+# En Starlette el ÚLTIMO middleware añadido es el más externo. De fuera a
+# dentro queda:
+#   1. SecurityHeaders — cabeceras en toda respuesta, incluidos 413, 429 y 500.
+#   2. ActivityLog     — envuelve al limitador, así un login frenado con 429
+#                        queda en la bitácora.
+#   3. BodySizeLimit   — corta los cuerpos de más de 8 MB antes de leerlos.
+#   4. LoginRateLimit  — límite de intentos de login por IP.
 app.add_middleware(LoginRateLimitMiddleware)
+app.add_middleware(BodySizeLimitMiddleware)
+app.add_middleware(ActivityLogMiddleware)
 app.add_middleware(SecurityHeadersMiddleware, enable_hsts=settings.app_enable_hsts)
 
 app.include_router(access_router)
@@ -135,7 +142,16 @@ async def backups_health() -> JSONResponse:
     `backup_staleness_factor` veces su intervalo, para que el monitor alerte
     sin necesidad de credenciales. No revela nombres de equipos.
     """
-    summary = await backup_freshness(app, settings)
+    try:
+        summary = await backup_freshness(app, settings)
+    except Exception:
+        # Sin base no se puede afirmar que los respaldos estén al día: para el
+        # monitor eso es "no disponible" (503), no un fallo del backend (500).
+        log.warning("No se pudo calcular la frescura de los respaldos", exc_info=True)
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={"status": "error", "detail": "No se pudo consultar la base."},
+        )
     return JSONResponse(
         status_code=status.HTTP_200_OK
         if summary["status"] == "ok"

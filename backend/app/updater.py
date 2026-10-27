@@ -52,6 +52,7 @@ async def _git(*args: str, timeout: int = 30) -> str:
         stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout)
     except asyncio.TimeoutError:
         process.kill()
+        await process.wait()   # sin esto el proceso queda zombi
         raise UpdaterError("git tardó demasiado")
     if process.returncode != 0:
         raise UpdaterError(stderr.decode(errors="replace").strip()[-300:] or "git falló")

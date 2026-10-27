@@ -11,11 +11,20 @@ from .config import Settings
 
 log = logging.getLogger("oxidized-ai-manager.scheduler")
 
-CREDENTIAL_PATTERN = re.compile(r"(https?://[^/:@]+):[^@]+@")
+# Credenciales embebidas en una URL HTTP(S): `usuario:clave@` o solo `TOKEN@`
+# (así se escriben los tokens de GitHub y GitLab). Ambas formas se ocultan.
+CREDENTIAL_PATTERN = re.compile(r"(https?://)([^/:@\s]+)(:[^@\s]*)?@")
+
+
+def _ocultar(match: re.Match) -> str:
+    esquema, usuario, clave = match.group(1), match.group(2), match.group(3)
+    if clave is None:
+        return f"{esquema}***@"
+    return f"{esquema}{usuario}:***@"
 
 
 def mask_remote_url(url: str) -> str:
-    return CREDENTIAL_PATTERN.sub(r"\1:***@", url)
+    return CREDENTIAL_PATTERN.sub(_ocultar, url)
 
 
 async def trigger_node_backup(oxidized_url: str, node: str) -> None:
@@ -98,6 +107,8 @@ async def push_backups(repo_path: str, remote_url: str) -> tuple[bool, str]:
         _, stderr = await asyncio.wait_for(process.communicate(), timeout=120)
     except asyncio.TimeoutError:
         process.kill()
+        # Sin esperar al proceso muerto queda un zombi por cada timeout.
+        await process.wait()
         return False, "timeout de git push"
     if process.returncode == 0:
         return True, "ok"

@@ -1,3 +1,6 @@
+import datetime as dt
+import logging
+
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
@@ -22,6 +25,19 @@ COMMIT_QUERY_PATTERN = r"^[0-9a-f]{6,40}$"
 
 router = APIRouter(prefix="/api/backups", tags=["backups"])
 
+log = logging.getLogger("oxidized-ai-manager.backups")
+
+# Lo que ve el cliente cuando git falla. El detalle (rutas internas del
+# servidor) va solo al log.
+REPO_ERROR_DETAIL = "No se pudo leer el repositorio de respaldos."
+
+
+def repo_error(error: Exception) -> HTTPException:
+    log.warning("Error leyendo el repositorio de respaldos: %s", error)
+    return HTTPException(
+        status_code=status.HTTP_502_BAD_GATEWAY, detail=REPO_ERROR_DETAIL
+    )
+
 
 async def _allowed_nodes(request: Request, user: CurrentUser) -> list[str] | None:
     """Nombres de nodo visibles, o `None` si el usuario ve todo."""
@@ -31,19 +47,27 @@ async def _allowed_nodes(request: Request, user: CurrentUser) -> list[str] | Non
     return [device["name"] for device in devices]
 
 
-async def _authorize_node(request: Request, user: CurrentUser, node: str) -> None:
+async def _authorize_node(
+    request: Request, user: CurrentUser, node: str
+) -> dt.datetime | None:
     """Rechaza con 404 un nodo que no pertenece a la empresa del usuario.
 
     Se responde 404 y no 403 a propósito: un 403 confirmaría que ese equipo
     existe en otra empresa.
+
+    Devuelve desde cuándo es visible el historial del nodo (`history_since`):
+    el nombre pudo ser antes de otro equipo, de esta u otra empresa, y lo
+    anterior a esa fecha no le pertenece a quien pregunta. `None` = todo.
     """
-    if user.scope is None:
-        return
     device = await request.app.state.devices.get_device_by_name(node, user.scope)
     if device is None:
+        if user.scope is None:
+            # El admin puede consultar nodos que ya no están en el inventario.
+            return None
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Equipo no encontrado."
         )
+    return device.get("history_since")
 
 
 @router.post("/run", status_code=status.HTTP_202_ACCEPTED)
@@ -139,17 +163,16 @@ async def backup_versions(
     limit: int = Query(default=20, ge=1, le=100),
     user: CurrentUser = Depends(current_user),
 ) -> list[dict]:
-    await _authorize_node(request, user, node)
+    since = await _authorize_node(request, user, node)
     settings = get_settings()
     try:
-        return await list_versions(settings.oxidized_backup_repo, node, limit)
+        return await list_versions(
+            settings.oxidized_backup_repo, node, limit, since=since
+        )
     except NotFoundInRepoError:
         return []
     except GitRepoError as error:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"No se pudo leer el repositorio de respaldos: {error}",
-        )
+        raise repo_error(error)
 
 
 @router.get("/diff")
@@ -159,20 +182,19 @@ async def backup_diff(
     commit: str = Query(pattern=COMMIT_QUERY_PATTERN),
     user: CurrentUser = Depends(current_user),
 ) -> dict:
-    await _authorize_node(request, user, node)
+    since = await _authorize_node(request, user, node)
     settings = get_settings()
     try:
-        diff = await show_diff(settings.oxidized_backup_repo, node, commit)
+        diff = await show_diff(
+            settings.oxidized_backup_repo, node, commit, since=since
+        )
     except NotFoundInRepoError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Versión no encontrada.",
         )
     except GitRepoError as error:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"No se pudo leer el repositorio de respaldos: {error}",
-        )
+        raise repo_error(error)
     return {"node": node, "commit": commit, "diff": diff}
 
 
@@ -183,18 +205,17 @@ async def backup_config(
     commit: str = Query(pattern=COMMIT_QUERY_PATTERN),
     user: CurrentUser = Depends(current_user),
 ) -> dict:
-    await _authorize_node(request, user, node)
+    since = await _authorize_node(request, user, node)
     settings = get_settings()
     try:
-        content = await show_config(settings.oxidized_backup_repo, node, commit)
+        content = await show_config(
+            settings.oxidized_backup_repo, node, commit, since=since
+        )
     except NotFoundInRepoError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Versión no encontrada.",
         )
     except GitRepoError as error:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"No se pudo leer el repositorio de respaldos: {error}",
-        )
+        raise repo_error(error)
     return {"node": node, "commit": commit, "config": content}

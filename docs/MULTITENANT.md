@@ -56,6 +56,42 @@ todo**. Es la dirección correcta para equivocarse y hay una prueba que lo fija.
 El rol y la empresa se leen de la base en **cada** petición, no del token: un
 cambio de rol aplica de inmediato y no espera a que caduque el JWT (8 h).
 
+## Nombres de equipo reutilizados
+
+El historial de respaldos se indexa por **nombre** de equipo: el archivo en
+`backups.git`, las filas de `backup_events` y el veredicto de
+`backup_integrity`. Si un nombre pasa a otro equipo —se borra y otra empresa da
+de alta uno igual, alguien renombra el suyo a un nombre que ya se usó, o el
+administrador mueve el equipo de empresa—, lo anterior es del dueño previo y
+contiene sus claves.
+
+- Cada equipo tiene `history_since`: se fija al darlo de alta y se renueva al
+  cambiarle el nombre o la empresa. Versiones, diff, configuración, eventos,
+  estado, integridad y auditoría ignoran lo anterior a esa fecha. Pedir un
+  commit viejo por su hash responde **404**, igual que uno inexistente.
+- El primer diff tras el corte se muestra como archivo nuevo, sin las líneas
+  que quitó respecto a la versión del dueño anterior.
+- Al borrar un equipo se borran también sus filas de `backup_events` y
+  `backup_integrity`. El historial git no se puede purgar (el repositorio es de
+  Oxidized y está montado de solo lectura): por eso existe `history_since`.
+- Los equipos que ya existían antes de la columna quedan con `NULL` y conservan
+  todo su historial.
+
+Consecuencia aceptada: dar de alta de nuevo un equipo borrado por error, o
+moverlo de empresa, oculta también su propio historial previo, incluso al
+administrador desde el panel. Los commits siguen en `backups.git`.
+
+### Riesgo residual: el 409 por nombre repetido
+
+El nombre es único en todo el sistema (es el nombre del archivo en git), así
+que dar de alta o renombrar con un nombre que ya usa otra empresa responde
+**409**. A un no administrador se le contesta lo mismo tanto si el nombre es
+suyo como si es ajeno («Ese nombre no está disponible; elija otro.»), sin
+mencionar empresas. Aun así, el 409 revela que el nombre está ocupado en algún
+sitio: se acepta, porque los nombres no llevan secretos y evitarlo exigiría
+nombres de archivo por empresa en el repositorio de Oxidized. El administrador
+recibe el mensaje preciso («Ya existe un equipo con ese nombre.»).
+
 ## Gestión de cuentas
 
 Pestaña **Usuarios** (solo administrador) o la API:

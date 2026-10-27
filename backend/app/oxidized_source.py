@@ -9,6 +9,7 @@ from .gitrepo import GitRepoError, NotFoundInRepoError, list_versions, show_conf
 from .integrity import revisar
 from .metadata import parse_routeros_metadata
 from .schemas import BackupEventIn, OxidizedNode
+from .secrets_box import ClaveIlegibleError
 
 
 router = APIRouter(prefix="/api/oxidized", tags=["oxidized"])
@@ -38,10 +39,14 @@ async def _revisar_integridad(request: Request, node: str, config_text: str) -> 
     try:
         device = await request.app.state.devices.get_device_by_name(node)
         modelo = (device or {}).get("model") or "routeros"
-        versiones = await list_versions(repo, node, 2)
+        # Solo se compara con versiones de este mismo equipo: si el nombre se
+        # reutilizó, lo anterior a `history_since` es de otro dueño y daría
+        # avisos falsos («se encogió»…) calculados contra su configuración.
+        desde = (device or {}).get("history_since")
+        versiones = await list_versions(repo, node, 2, since=desde)
         anterior = None
         if len(versiones) > 1:
-            anterior = await show_config(repo, node, versiones[1]["commit"])
+            anterior = await show_config(repo, node, versiones[1]["commit"], since=desde)
         veredicto = revisar(config_text, anterior, routeros=modelo == "routeros")
         await request.app.state.backup_integrity.record(
             node,
@@ -57,10 +62,15 @@ async def _revisar_integridad(request: Request, node: str, config_text: str) -> 
 
 def _require_token(x_oxidized_token: str) -> None:
     settings = get_settings()
-    if not secrets.compare_digest(x_oxidized_token, settings.oxidized_source_token):
+    # En bytes: `compare_digest` con un `str` no ASCII lanza TypeError, y una
+    # cabecera con un acento acababa en 500 en lugar de 401.
+    if not secrets.compare_digest(
+        x_oxidized_token.encode("utf-8", "surrogateescape"),
+        settings.oxidized_source_token.encode("utf-8"),
+    ):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or missing source token.",
+            detail="Token de origen ausente o no válido.",
         )
 
 
@@ -70,7 +80,16 @@ async def oxidized_nodes(
     x_oxidized_token: str = Header(default=""),
 ) -> list[dict]:
     _require_token(x_oxidized_token)
-    devices = await request.app.state.devices.list_oxidized_nodes()
+    try:
+        devices = await request.app.state.devices.list_oxidized_nodes()
+    except ClaveIlegibleError:
+        # Mejor que Oxidized no reciba inventario a que reciba el cifrado como
+        # si fuera la clave e intente entrar con él en cada router.
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="No se pueden descifrar las claves de los equipos: "
+            "APP_SECRET_KEY no es la que las cifró.",
+        )
     if not devices:
         return [PLACEHOLDER_NODE]
     return [
@@ -128,6 +147,6 @@ async def reload_oxidized() -> dict:
     except httpx.HTTPError:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Oxidized did not accept the reload request.",
+            detail="Oxidized no aceptó la orden de recarga.",
         )
     return {"status": "reloaded"}

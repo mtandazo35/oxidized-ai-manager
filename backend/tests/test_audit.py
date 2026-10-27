@@ -134,7 +134,7 @@ async def test_audit_node_rejects_invalid_commit(auth_headers, audit_repo) -> No
 
 
 async def test_summary_covers_the_inventory_and_sorts_by_risk(
-    auth_headers, audit_repo
+    auth_headers, audit_repo, device_repository
 ) -> None:
     async with client() as api:
         for name in ("rb-endurecido", "rb-descuidado", "rb-sin-respaldo"):
@@ -143,6 +143,10 @@ async def test_summary_covers_the_inventory_and_sorts_by_risk(
                 headers=auth_headers,
                 json={"name": name, "address": "192.0.2.1", "group_name": "EmpresaA"},
             )
+        # Los respaldos del repositorio de prueba son anteriores al alta; el
+        # equipo se da por existente desde antes (como uno ya migrado).
+        for device in device_repository._devices.values():
+            device["history_since"] = None
         response = await api.get("/api/audit/summary", headers=auth_headers)
 
     assert response.status_code == 200

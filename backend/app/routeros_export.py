@@ -95,8 +95,16 @@ def _tokenize(body: str) -> list[str]:
     current = ""
     quoted = False
     depth = 0
+    escaped = False
     for char in body:
-        if char == '"':
+        if escaped:
+            # `\"` dentro de comillas es una comilla literal, no el cierre.
+            current += char
+            escaped = False
+        elif char == "\\" and quoted:
+            current += char
+            escaped = True
+        elif char == '"':
             quoted = not quoted
             current += char
         elif char == "[" and not quoted:
@@ -180,24 +188,52 @@ SENSITIVE_KEYS = (
     "secret",
     "passphrase",
     "pre-shared-key",
+    "preshared-key",
     "psk",
     "private-key",
     "auth-password",
     "priv-password",
     "wpa-pre-shared-key",
     "wpa2-pre-shared-key",
+    "tcp-md5-key",
+    "auth-key",
+    "authentication-key",
 )
+
+# Valor entre comillas con escapes (`"ab\"cd efg"`), o sin comillas hasta el
+# primer espacio no escapado. Con `"[^"]*"` la cola tras `\"` quedaba a la vista.
+_VALUE = r'("(?:[^"\\]|\\.)*"?|(?:\\.|\S)*)'
 
 SENSITIVE_PATTERN = re.compile(
     r"(?i)\b([\w.-]*(?:" + "|".join(re.escape(key) for key in SENSITIVE_KEYS) + r"))="
-    r'("[^"]*"|\S*)'
+    + _VALUE
 )
 
+# En `/snmp community` el secreto es el propio `name=`. La comunidad `public`
+# se deja a la vista: es la de fábrica y es justo lo que señala la auditoría.
+SNMP_COMMUNITY_SECTION = "/snmp community"
+SNMP_NAME_PATTERN = re.compile(r"(?i)(?<![\w.-])(name)=" + _VALUE)
 
-def redact_secrets(text: str) -> str:
+
+def _redact_snmp_names(text: str) -> str:
+    def replace(match: re.Match) -> str:
+        value = match.group(2)
+        if value.strip('"').lower() == "public":
+            return match.group(0)
+        return f"{match.group(1)}=***"
+
+    return SNMP_NAME_PATTERN.sub(replace, text)
+
+
+def redact_secrets(text: str, section: str = "") -> str:
     """Enmascara valores sensibles de una línea de export.
 
     Los respaldos incluyen las claves a propósito (deben ser restaurables), así
     que cualquier evidencia que salga hacia la API o el panel pasa por aquí.
+    `section` es la sección de la línea, para los secretos que solo lo son por
+    contexto (el `name=` de una comunidad SNMP).
     """
-    return SENSITIVE_PATTERN.sub(lambda m: f"{m.group(1)}=***", text)
+    redacted = SENSITIVE_PATTERN.sub(lambda m: f"{m.group(1)}=***", text)
+    if section == SNMP_COMMUNITY_SECTION or SNMP_COMMUNITY_SECTION in redacted:
+        redacted = _redact_snmp_names(redacted)
+    return redacted

@@ -113,23 +113,63 @@ def _service_is_enabled(export: Export, service: str) -> tuple[bool, Stanza | No
 
 
 def _input_filters(export: Export) -> list[Stanza]:
+    """Reglas activas de la cadena `input`: una deshabilitada no filtra nada."""
     return [
         stanza
         for stanza in export.section("/ip firewall filter")
-        if stanza.command == "add" and stanza.get("chain") == "input"
+        if stanza.command == "add"
+        and stanza.get("chain") == "input"
+        and not stanza.is_true("disabled")
     ]
 
 
 # Condiciones que estrechan una regla: si aparece alguna, el descarte NO cubre
 # todo lo demás. `connection-state=invalid` es el ejemplo típico: descarta
-# basura, no cierra la cadena.
+# basura, no cierra la cadena. `protocol` no está aquí porque se evalúa aparte
+# (un descarte de TCP sí cubre un servicio TCP). Ante la duda, una condición
+# cuenta como restricción: es preferible avisar de más que dar por cerrada una
+# cadena que no lo está.
 NARROWING = (
     "dst-port",
+    "src-port",
+    "port",
     "connection-state",
+    "connection-type",
+    "connection-mark",
+    "connection-nat-state",
+    "connection-limit",
+    "connection-bytes",
+    "connection-rate",
+    "packet-mark",
+    "routing-mark",
     "src-address",
     "src-address-list",
+    "src-address-type",
+    "src-mac-address",
     "dst-address",
     "dst-address-list",
+    "dst-address-type",
+    "dst-limit",
+    "limit",
+    "nth",
+    "random",
+    "per-connection-classifier",
+    "psd",
+    "tcp-flags",
+    "tcp-mss",
+    "icmp-options",
+    "ipsec-policy",
+    "packet-size",
+    "fragment",
+    "ipv4-options",
+    "ttl",
+    "dscp",
+    "priority",
+    "ingress-priority",
+    "time",
+    "hotspot",
+    "in-bridge-port",
+    "in-bridge-port-list",
     "content",
     "layer7-protocol",
     "tls-host",
@@ -143,12 +183,21 @@ def _is_catch_all_drop(stanza: Stanza, protocol: str = "") -> bool:
     Se admite acotar por interfaz (`in-interface`, `in-interface-list=WAN`):
     para juzgar si un servicio queda expuesto a Internet, un descarte en la
     WAN cuenta igual que uno global.
+
+    Sin `protocol` se pregunta si cierra la cadena entera: un descarte con
+    `protocol=icmp` no la cierra. Con `protocol` se pregunta si cubre ese
+    protocolo: vale el descarte sin protocolo o con el mismo.
     """
+    if stanza.is_true("disabled"):
+        return False
     if stanza.get("action") not in ("drop", "reject"):
         return False
     if any(clave in stanza.params for clave in NARROWING):
         return False
-    return stanza.get("protocol") in ("", protocol) or not protocol
+    rule_protocol = stanza.get("protocol")
+    if not rule_protocol:
+        return True
+    return bool(protocol) and rule_protocol == protocol
 
 
 def _drops_input_port(export: Export, port: str, protocol: str) -> bool:
@@ -162,6 +211,10 @@ def _drops_input_port(export: Export, port: str, protocol: str) -> bool:
         if not ports:
             continue
         if stanza.get("protocol") not in ("", protocol):
+            continue
+        # Un descarte del puerto solo para ciertos orígenes (o con cualquier
+        # otra condición) no lo cierra para el resto.
+        if any(clave in stanza.params for clave in NARROWING if clave != "dst-port"):
             continue
         if port in {chunk.strip() for chunk in ports.replace("-", ",").split(",")}:
             return True
@@ -512,14 +565,15 @@ def _is_internal_peer(address: str) -> bool:
     (iBGP, el enlace con la matriz). Exigirle filtros como a un tránsito de
     Internet genera un aviso grave donde no hay un riesgo equivalente.
     """
+    # RouterOS 7 escribe el vecino con prefijo (`remote.address=10.0.0.1/32`),
+    # y puede ser un rango para vecinos dinámicos: se acepta red o dirección.
     try:
-        ip = ipaddress.ip_address(address.strip())
+        network = ipaddress.ip_network(address.strip(), strict=False)
     except ValueError:
         return False
     return any(
-        ip in ipaddress.ip_network(rango)
-        for rango in INTERNAL_RANGES
-        if ipaddress.ip_network(rango).version == ip.version
+        network.version == rango.version and network.subnet_of(rango)
+        for rango in map(ipaddress.ip_network, INTERNAL_RANGES)
     )
 
 
@@ -821,6 +875,9 @@ def risk_level(counts: dict[str, int]) -> str:
 def audit_config(config_text: str) -> dict:
     """Audita el texto de un respaldo y devuelve hallazgos con evidencia."""
     export = parse_export(config_text)
+    # Sección de cada línea: hay secretos que solo lo son por contexto, como
+    # el `name=` de una comunidad SNMP.
+    sections = {stanza.line: stanza.section for stanza in export.stanzas}
     findings = []
     counts = {severity: 0 for severity in SEVERITY_ORDER}
     for rule in RULES:
@@ -839,7 +896,12 @@ def audit_config(config_text: str) -> dict:
                 # Los respaldos contienen las claves de los equipos a
                 # propósito: nada que salga por la API va sin censurar.
                 "evidence": [
-                    {"detail": redact_secrets(item.detail), "line": item.line}
+                    {
+                        "detail": redact_secrets(
+                            item.detail, sections.get(item.line, "")
+                        ),
+                        "line": item.line,
+                    }
                     for item in evidence
                 ],
             }

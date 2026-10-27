@@ -36,6 +36,22 @@ def _repository(request: Request) -> DeviceRepository:
     return request.app.state.devices
 
 
+def _duplicate_name(user: CurrentUser) -> HTTPException:
+    """409 por nombre repetido.
+
+    El nombre es único en todo el sistema (es el nombre del archivo en
+    `backups.git`), así que choca también con equipos de otras empresas. A un
+    no administrador se le da el mismo mensaje en ambos casos, para no
+    confirmar que el nombre lo usa otra empresa. Riesgo residual aceptado: el
+    409 sigue diciendo que el nombre está ocupado (ver docs/MULTITENANT.md).
+    """
+    if user.is_admin:
+        detail = "Ya existe un equipo con ese nombre."
+    else:
+        detail = "Ese nombre no está disponible; elija otro."
+    return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail)
+
+
 def _check_group(user: CurrentUser, group: str) -> str:
     """Empresa con la que se guarda un equipo.
 
@@ -71,10 +87,7 @@ async def create_device(
     try:
         device = await _repository(request).create_device(data)
     except DuplicateDeviceError:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="A device with this name already exists.",
-        )
+        raise _duplicate_name(user)
     # El primer respaldo se encola en segundo plano: la respuesta no debe
     # esperar a que Oxidized recargue el inventario y contacte al equipo.
     if device["enabled"]:
@@ -127,7 +140,7 @@ async def get_device(
 ) -> dict:
     device = await _repository(request).get_device(device_id, user.scope)
     if device is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found.")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Equipo no encontrado.")
     return device
 
 
@@ -147,12 +160,9 @@ async def update_device(
             device_id, data, user.scope
         )
     except DuplicateDeviceError:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="A device with this name already exists.",
-        )
+        raise _duplicate_name(user)
     if device is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found.")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Equipo no encontrado.")
     # Cambiar dirección, puerto, credenciales, plataforma o el estado de pausa
     # no sirve de nada si Oxidized sigue con la lista anterior.
     background.add_task(refresh_inventory, get_settings().oxidized_url)
@@ -168,7 +178,7 @@ async def delete_device(
 ) -> None:
     deleted = await _repository(request).delete_device(device_id, user.scope)
     if not deleted:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found.")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Equipo no encontrado.")
     background.add_task(refresh_inventory, get_settings().oxidized_url)
 
 
@@ -295,7 +305,7 @@ async def backup_now(
 ) -> dict:
     device = await _repository(request).get_device(device_id, user.scope)
     if device is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found.")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Equipo no encontrado.")
     try:
         await trigger_node_backup(get_settings().oxidized_url, device["name"])
     except httpx.HTTPError:

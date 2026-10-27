@@ -26,12 +26,16 @@ async def add_device(api, auth_headers, name: str, **extra):
 
 
 def age(repository, name: str, minutes: int) -> None:
-    """Envejece la fecha de alta de un equipo en el repositorio de prueba."""
+    """Envejece la fecha de alta de un equipo en el repositorio de prueba.
+
+    También `history_since`: si no, los eventos envejecidos quedarían antes
+    del alta y se ocultarían como historial de un dueño anterior del nombre.
+    """
     for device in repository._devices.values():
         if device["name"] == name:
-            device["created_at"] = dt.datetime.now(dt.timezone.utc) - dt.timedelta(
-                minutes=minutes
-            )
+            fecha = dt.datetime.now(dt.timezone.utc) - dt.timedelta(minutes=minutes)
+            device["created_at"] = fecha
+            device["history_since"] = fecha
 
 
 async def test_no_devices_is_healthy() -> None:
@@ -99,6 +103,7 @@ async def test_old_success_triggers_the_alert(
 ) -> None:
     async with client() as api:
         await add_device(api, auth_headers, "rb-atrasado")
+        age(device_repository, "rb-atrasado", 24 * 60)
         await backup_event_repository.record_event("rb-atrasado", "node_success", "a")
         backup_event_repository._events[0]["created_at"] = dt.datetime.now(
             dt.timezone.utc
@@ -181,3 +186,17 @@ async def test_backups_health_is_cached_too(auth_headers, device_repository) -> 
         segunda = await api.get("/health/backups")
 
     assert primera.json() == segunda.json()
+
+
+async def test_database_failure_returns_503(device_repository, monkeypatch) -> None:
+    """Regresión: sin base, /health/backups devolvía 500."""
+
+    async def caida(*args, **kwargs):
+        raise OSError("sin conexión")
+
+    monkeypatch.setattr(device_repository, "list_devices", caida)
+    async with client() as api:
+        response = await api.get("/health/backups")
+
+    assert response.status_code == 503
+    assert response.json()["status"] == "error"

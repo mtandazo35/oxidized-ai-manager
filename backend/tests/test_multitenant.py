@@ -448,3 +448,308 @@ async def test_only_admin_sees_every_company_in_the_matrix(auth_headers) -> None
     alcance = {r["name"]: r["scope"] for r in body["roles"]}
     assert alcance["admin"] == "todas las empresas"
     assert alcance["lector"] == "solo su empresa"
+
+
+# --- Reutilización de nombres entre empresas -------------------------------
+#
+# El historial git, `backup_events` y `backup_integrity` se indexan por nombre
+# de nodo. Si un nombre pasa de un equipo a otro (borrado y alta, cambio de
+# nombre o cambio de empresa), lo anterior es del dueño previo y no puede
+# verlo el actual: ahí estaban las claves de los routers de otra empresa.
+
+
+import datetime as _dt  # noqa: E402
+import os as _os  # noqa: E402
+import subprocess as _subprocess  # noqa: E402
+
+from app.config import get_settings as _get_settings  # noqa: E402
+
+SECRETO_A = "ClaveSecretaDeEmpresaA"
+
+
+@pytest.fixture
+def shared_repo(tmp_path):
+    """Repositorio de respaldos compartido, como el de Oxidized."""
+    repo = str(tmp_path / "backups")
+    _subprocess.run(["git", "init", "-q", repo], check=True, capture_output=True)
+    original = _get_settings().oxidized_backup_repo
+    _get_settings().oxidized_backup_repo = repo
+
+    def commit(node: str, content: str, offset_seconds: int) -> str:
+        """Respalda `node` con fecha relativa a ahora; devuelve el commit."""
+        (tmp_path / "backups" / node).write_text(content)
+        fecha = int(_dt.datetime.now(_dt.timezone.utc).timestamp()) + offset_seconds
+        env = {
+            **_os.environ,
+            "GIT_AUTHOR_DATE": f"@{fecha} +0000",
+            "GIT_COMMITTER_DATE": f"@{fecha} +0000",
+        }
+        base = ["git", "-C", repo, "-c", "user.name=t", "-c", "user.email=t@t"]
+        _subprocess.run([*base, "add", node], check=True, capture_output=True, env=env)
+        _subprocess.run(
+            [*base, "commit", "-q", "-m", f"update /{node}"],
+            check=True,
+            capture_output=True,
+            env=env,
+        )
+        return _subprocess.run(
+            [*base, "rev-parse", "HEAD"], check=True, capture_output=True, text=True
+        ).stdout.strip()
+
+    yield commit
+    _get_settings().oxidized_backup_repo = original
+
+
+def _export_de(empresa: str, secreto: str) -> str:
+    return (
+        "# oct/01/2026 08:00:00 by RouterOS 7.23.2\n"
+        "/system identity\n"
+        f"set name=router-{empresa}\n"
+        "/user\n"
+        f'add name=respaldo group=full password="{secreto}"\n'
+    )
+
+
+def _envejecer_eventos(backup_event_repository, node: str) -> None:
+    """Los eventos del dueño anterior son, por definición, del pasado."""
+    for evento in backup_event_repository._events:
+        if evento["node"] == node:
+            evento["created_at"] -= _dt.timedelta(minutes=10)
+
+
+async def _nada_del_dueno_anterior(
+    api, node: str, commit_ajeno: str, lector: dict, auditor: dict
+) -> dict:
+    """Recorre todo lo que expone historial de un nodo y lo devuelve."""
+    respuestas = {
+        "versions": await api.get(
+            "/api/backups/versions", params={"node": node}, headers=lector
+        ),
+        "config_ajena": await api.get(
+            "/api/backups/config",
+            params={"node": node, "commit": commit_ajeno},
+            headers=lector,
+        ),
+        "diff_ajeno": await api.get(
+            "/api/backups/diff",
+            params={"node": node, "commit": commit_ajeno},
+            headers=lector,
+        ),
+        "events": await api.get(
+            "/api/backups/events", params={"node": node}, headers=lector
+        ),
+        "status": await api.get("/api/backups/status", headers=lector),
+        "audit_ajena": await api.get(
+            "/api/audit/node",
+            params={"node": node, "commit": commit_ajeno},
+            headers=auditor,
+        ),
+        "audit_head": await api.get(
+            "/api/audit/node", params={"node": node}, headers=auditor
+        ),
+        "summary": await api.get("/api/audit/summary", headers=auditor),
+    }
+    assert respuestas["versions"].status_code == 200
+    assert respuestas["config_ajena"].status_code == 404
+    assert respuestas["diff_ajeno"].status_code == 404
+    assert respuestas["audit_ajena"].status_code == 404
+    assert respuestas["events"].status_code == 200
+    for nombre, respuesta in respuestas.items():
+        assert SECRETO_A not in respuesta.text, nombre
+        assert "router-a" not in respuesta.text, nombre
+        if nombre not in ("config_ajena", "diff_ajeno", "audit_ajena"):
+            # En los 404 el hash es el que mandó el propio cliente.
+            assert commit_ajeno not in respuesta.text, nombre
+    return respuestas
+
+
+async def test_a_reused_name_does_not_inherit_another_company_history(
+    auth_headers, make_user, shared_repo, backup_event_repository,
+    backup_integrity_repository,
+) -> None:
+    op_a = make_user("op-a", role="operador", group_name="EmpresaA")
+    op_b = make_user("op-b", role="operador", group_name="EmpresaB")
+    lector_b = make_user("lector-b", role="lector", group_name="EmpresaB")
+    auditor_b = make_user("auditor-b", role="auditor", group_name="EmpresaB")
+
+    async with client() as api:
+        alta_a = await api.post(
+            "/api/devices",
+            headers=op_a,
+            json={"name": "core-01", "address": "192.0.2.10"},
+        )
+        commit_a = shared_repo("core-01", _export_de("a", SECRETO_A), -3600)
+        await backup_event_repository.record_event("core-01", "node_success", commit_a)
+        await backup_integrity_repository.record(
+            "core-01", commit_a, 100, 5, 2, ["aviso de A"]
+        )
+        borrado = await api.delete(f"/api/devices/{alta_a.json()['id']}", headers=op_a)
+        assert borrado.status_code == 204
+        # El borrado purga lo que sí es purgable: eventos e integridad.
+        assert backup_event_repository._events == []
+        assert "core-01" not in backup_integrity_repository.veredictos
+
+        alta_b = await api.post(
+            "/api/devices",
+            headers=op_b,
+            json={"name": "core-01", "address": "192.0.2.20"},
+        )
+        assert alta_b.status_code == 201
+
+        # Sin respaldo propio todavía: nada, ni siquiera el último de A.
+        antes = await _nada_del_dueno_anterior(
+            api, "core-01", commit_a, lector_b, auditor_b
+        )
+        assert antes["versions"].json() == []
+        assert antes["events"].json() == []
+        assert antes["audit_head"].status_code == 404
+        assert antes["summary"].json()[0]["error"] == "sin respaldo todavía"
+
+        # Primer respaldo de B: se ve, y su diff no enseña lo que había de A.
+        commit_b = shared_repo("core-01", _export_de("b", "ClaveDeB"), 60)
+        await backup_event_repository.record_event("core-01", "node_success", commit_b)
+        despues = await _nada_del_dueno_anterior(
+            api, "core-01", commit_a, lector_b, auditor_b
+        )
+        assert [v["commit"] for v in despues["versions"].json()] == [commit_b]
+        assert despues["audit_head"].status_code == 200
+        assert [e["commit_ref"] for e in despues["events"].json()] == [commit_b]
+        assert despues["status"].json()[0]["last_commit"] == commit_b
+
+        config_b = await api.get(
+            "/api/backups/config",
+            params={"node": "core-01", "commit": commit_b},
+            headers=lector_b,
+        )
+        diff_b = await api.get(
+            "/api/backups/diff",
+            params={"node": "core-01", "commit": commit_b},
+            headers=lector_b,
+        )
+
+    assert config_b.status_code == 200
+    assert "ClaveDeB" in config_b.json()["config"]
+    assert diff_b.status_code == 200
+    assert "router-b" in diff_b.json()["diff"]
+    assert "router-a" not in diff_b.json()["diff"]
+    assert SECRETO_A not in diff_b.text
+
+
+async def test_renaming_into_an_old_name_does_not_inherit_its_history(
+    auth_headers, make_user, shared_repo, backup_event_repository
+) -> None:
+    op_a = make_user("op-a", role="operador", group_name="EmpresaA")
+    op_b = make_user("op-b", role="operador", group_name="EmpresaB")
+    lector_b = make_user("lector-b", role="lector", group_name="EmpresaB")
+    auditor_b = make_user("auditor-b", role="auditor", group_name="EmpresaB")
+
+    async with client() as api:
+        alta_a = await api.post(
+            "/api/devices", headers=op_a, json={"name": "rb-viejo", "address": "192.0.2.1"}
+        )
+        alta_b = await api.post(
+            "/api/devices", headers=op_b, json={"name": "rb-b", "address": "192.0.2.2"}
+        )
+        commit_a = shared_repo("rb-viejo", _export_de("a", SECRETO_A), -3600)
+        await backup_event_repository.record_event("rb-viejo", "node_success", commit_a)
+        _envejecer_eventos(backup_event_repository, "rb-viejo")
+
+        # A se cambia de nombre; lo de `rb-viejo` queda en git y en eventos.
+        renombre_a = await api.patch(
+            f"/api/devices/{alta_a.json()['id']}", headers=op_a, json={"name": "rb-nuevo"}
+        )
+        assert renombre_a.status_code == 200
+        renombre_b = await api.patch(
+            f"/api/devices/{alta_b.json()['id']}", headers=op_b, json={"name": "rb-viejo"}
+        )
+        assert renombre_b.status_code == 200
+
+        respuestas = await _nada_del_dueno_anterior(
+            api, "rb-viejo", commit_a, lector_b, auditor_b
+        )
+
+    assert respuestas["versions"].json() == []
+    assert respuestas["events"].json() == []
+    assert respuestas["audit_head"].status_code == 404
+    assert respuestas["status"].json() == []
+
+
+async def test_moving_a_device_to_another_company_hides_its_past(
+    auth_headers, make_user, shared_repo, backup_event_repository
+) -> None:
+    lector_b = make_user("lector-b", role="lector", group_name="EmpresaB")
+    auditor_b = make_user("auditor-b", role="auditor", group_name="EmpresaB")
+
+    async with client() as api:
+        alta = await api.post(
+            "/api/devices",
+            headers=auth_headers,
+            json={"name": "rb-mudanza", "address": "192.0.2.1", "group_name": "EmpresaA"},
+        )
+        commit_a = shared_repo("rb-mudanza", _export_de("a", SECRETO_A), -3600)
+        await backup_event_repository.record_event("rb-mudanza", "node_success", commit_a)
+        _envejecer_eventos(backup_event_repository, "rb-mudanza")
+
+        movido = await api.patch(
+            f"/api/devices/{alta.json()['id']}",
+            headers=auth_headers,
+            json={"group_name": "EmpresaB"},
+        )
+        assert movido.status_code == 200
+
+        respuestas = await _nada_del_dueno_anterior(
+            api, "rb-mudanza", commit_a, lector_b, auditor_b
+        )
+
+    assert respuestas["versions"].json() == []
+    assert respuestas["events"].json() == []
+    assert respuestas["status"].json() == []
+
+
+async def test_editing_other_fields_keeps_the_history(
+    auth_headers, make_user, shared_repo, device_repository
+) -> None:
+    """Cambiar la IP o reenviar la misma empresa no es un cambio de dueño."""
+    op_a = make_user("op-a", role="operador", group_name="EmpresaA")
+
+    async with client() as api:
+        alta = await api.post(
+            "/api/devices", headers=op_a, json={"name": "rb-fijo", "address": "192.0.2.1"}
+        )
+        commit = shared_repo("rb-fijo", _export_de("a", "x"), 60)
+        antes = device_repository.history_since("rb-fijo")
+        await api.patch(
+            f"/api/devices/{alta.json()['id']}",
+            headers=op_a,
+            json={"address": "192.0.2.99", "group_name": "EmpresaA"},
+        )
+        versiones = await api.get(
+            "/api/backups/versions", params={"node": "rb-fijo"}, headers=op_a
+        )
+
+    assert device_repository.history_since("rb-fijo") == antes
+    assert [v["commit"] for v in versiones.json()] == [commit]
+
+
+async def test_duplicate_name_does_not_reveal_other_companies(
+    inventory, make_user
+) -> None:
+    """El 409 por un nombre de otra empresa es idéntico al de uno propio."""
+    op_a = make_user("op-a", role="operador", group_name="EmpresaA")
+
+    async with client() as api:
+        propio = await api.post(
+            "/api/devices", headers=op_a, json={"name": "rb-alfa", "address": "192.0.2.5"}
+        )
+        ajeno = await api.post(
+            "/api/devices", headers=op_a, json={"name": "rb-beta", "address": "192.0.2.5"}
+        )
+        renombre = await api.patch(
+            f"/api/devices/{inventory['alfa']['id']}",
+            headers=op_a,
+            json={"name": "rb-beta"},
+        )
+
+    assert propio.status_code == ajeno.status_code == renombre.status_code == 409
+    assert propio.json() == ajeno.json() == renombre.json()
+    assert "empresa" not in ajeno.json()["detail"].lower()

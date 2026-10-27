@@ -118,3 +118,114 @@ async def test_bad_commit_format_rejected(auth_headers, backup_repo) -> None:
         )
 
     assert response.status_code == 422
+
+
+async def test_a_git_timeout_reaps_the_process(monkeypatch) -> None:
+    """Tras `kill()` hay que esperar al proceso: si no, queda un zombi."""
+    import asyncio
+
+    from app import gitrepo
+
+    class ProcesoColgado:
+        returncode = None
+
+        def __init__(self) -> None:
+            self.killed = False
+            self.waited = False
+
+        async def communicate(self):
+            await asyncio.sleep(3600)
+
+        def kill(self) -> None:
+            self.killed = True
+
+        async def wait(self) -> int:
+            self.waited = True
+            return -9
+
+    proceso = ProcesoColgado()
+
+    async def fake_exec(*args, **kwargs):
+        return proceso
+
+    async def fake_wait_for(awaitable, timeout):
+        awaitable.close()
+        raise asyncio.TimeoutError
+
+    monkeypatch.setattr(gitrepo.asyncio, "create_subprocess_exec", fake_exec)
+    monkeypatch.setattr(gitrepo.asyncio, "wait_for", fake_wait_for)
+
+    with pytest.raises(gitrepo.GitRepoError):
+        await gitrepo._git("/repo", "log")
+
+    assert proceso.killed and proceso.waited
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/api/backups/versions?node=rb-lab-01",
+        "/api/backups/diff?node=rb-lab-01&commit=abc123",
+        "/api/backups/config?node=rb-lab-01&commit=abc123",
+        "/api/audit/node?node=rb-lab-01",
+    ],
+)
+async def test_git_errors_do_not_leak_server_paths(
+    auth_headers, monkeypatch, path
+) -> None:
+    from app import gitrepo
+
+    async def fallo(*args, **kwargs):
+        raise gitrepo.GitRepoError(
+            "fatal: not a git repository: '/var/lib/oxidized/backups.git'"
+        )
+
+    monkeypatch.setattr(gitrepo, "_git", fallo)
+
+    async with client(auth_headers) as api:
+        response = await api.get(path)
+
+    assert response.status_code == 502
+    assert response.json()["detail"] == "No se pudo leer el repositorio de respaldos."
+    assert "/var/lib" not in response.text
+
+
+async def test_audit_summary_does_not_leak_git_errors(
+    auth_headers, monkeypatch
+) -> None:
+    from app import gitrepo
+
+    async def fallo(*args, **kwargs):
+        raise gitrepo.GitRepoError("fatal: '/var/lib/oxidized/backups.git'")
+
+    monkeypatch.setattr(gitrepo, "_git", fallo)
+
+    async with client(auth_headers) as api:
+        await api.post(
+            "/api/devices", json={"name": "rb-lab-01", "address": "192.0.2.1"}
+        )
+        response = await api.get("/api/audit/summary")
+
+    assert response.status_code == 200
+    assert "/var/lib" not in response.text
+    assert response.json()[0]["error"] == "no se pudo leer el respaldo"
+
+
+async def test_versions_before_history_since_are_hidden(backup_repo) -> None:
+    """Llamada directa: lo anterior a `since` no sale, ni por versión ni por HEAD."""
+    import datetime as dt
+
+    from app import gitrepo
+
+    futuro = dt.datetime.now(dt.timezone.utc) + dt.timedelta(hours=1)
+    pasado = dt.datetime.now(dt.timezone.utc) - dt.timedelta(hours=1)
+
+    assert await gitrepo.list_versions(backup_repo, "rb-lab-01", 10, since=futuro) == []
+    assert len(await gitrepo.list_versions(backup_repo, "rb-lab-01", 10, since=pasado)) == 2
+    with pytest.raises(gitrepo.NotFoundInRepoError):
+        await gitrepo.show_config(backup_repo, "rb-lab-01", "HEAD", since=futuro)
+    with pytest.raises(gitrepo.NotFoundInRepoError):
+        await gitrepo.show_diff(backup_repo, "rb-lab-01", "HEAD", since=futuro)
+    assert "ssh port=2222" in await gitrepo.show_config(
+        backup_repo, "rb-lab-01", "HEAD", since=pasado
+    )

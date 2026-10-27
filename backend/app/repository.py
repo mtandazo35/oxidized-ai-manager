@@ -3,7 +3,12 @@ from typing import Any
 import asyncpg
 
 from .config import get_settings
-from .secrets_box import decrypt_secret, encrypt_secret, looks_encrypted
+from .secrets_box import (
+    ClaveIlegibleError,
+    decrypt_secret,
+    encrypt_secret,
+    looks_encrypted,
+)
 
 
 class DuplicateDeviceError(Exception):
@@ -12,7 +17,8 @@ class DuplicateDeviceError(Exception):
 
 PUBLIC_COLUMNS = (
     "id, name, address, port, model, username, enabled, group_name, "
-    "backup_interval_minutes, identity, ros_version, board, created_at, updated_at"
+    "backup_interval_minutes, identity, ros_version, board, history_since, "
+    "created_at, updated_at"
 )
 
 METADATA_FIELDS = ("identity", "ros_version", "board")
@@ -95,8 +101,8 @@ class DeviceRepository:
             row = await self._pool.fetchrow(
                 "INSERT INTO devices "
                 "(name, address, port, model, username, password, enabled, "
-                "group_name, backup_interval_minutes) "
-                f"VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) "
+                "group_name, backup_interval_minutes, history_since) "
+                f"VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, now()) "
                 f"RETURNING {PUBLIC_COLUMNS}",
                 data["name"],
                 data["address"],
@@ -115,20 +121,39 @@ class DeviceRepository:
     async def update_device(
         self, device_id: int, data: dict[str, Any], group: str | None = None
     ) -> dict[str, Any] | None:
-        if group is not None and await self.get_device(device_id, group) is None:
-            return None
         if not data:
             return await self.get_device(device_id, group)
         if "password" in data:
             data = {**data, "password": encrypt_secret(self._key, data["password"])}
         assignments = []
         values: list[Any] = []
+        positions: dict[str, int] = {}
         for position, (column, value) in enumerate(data.items(), start=2):
             assignments.append(f"{column} = ${position}")
             values.append(value)
+            positions[column] = position
+        # Cambiar de nombre o de empresa corta el historial visible: lo que
+        # quedó bajo el nombre nuevo, o lo que vio la empresa anterior, no es
+        # del dueño actual. En el SET las columnas valen lo de antes del UPDATE.
+        changed = [
+            f"{column} IS DISTINCT FROM ${positions[column]}"
+            for column in ("name", "group_name")
+            if column in positions
+        ]
+        if changed:
+            assignments.append(
+                f"history_since = CASE WHEN {' OR '.join(changed)} "
+                "THEN now() ELSE history_since END"
+            )
+        # El filtro de empresa va en el propio UPDATE y no en una consulta
+        # previa: entre ambas el equipo podría cambiar de empresa.
+        where = "id = $1"
+        if group is not None:
+            values.append(group)
+            where += f" AND group_name = ${len(values) + 1}"
         query = (
             f"UPDATE devices SET {', '.join(assignments)}, updated_at = now() "
-            f"WHERE id = $1 RETURNING {PUBLIC_COLUMNS}"
+            f"WHERE {where} RETURNING {PUBLIC_COLUMNS}"
         )
         try:
             row = await self._pool.fetchrow(query, device_id, *values)
@@ -151,17 +176,36 @@ class DeviceRepository:
         )
 
     async def delete_device(self, device_id: int, group: str | None = None) -> bool:
-        if group is None:
-            result = await self._pool.execute(
-                "DELETE FROM devices WHERE id = $1", device_id
-            )
-        else:
-            result = await self._pool.execute(
-                "DELETE FROM devices WHERE id = $1 AND group_name = $2",
-                device_id,
-                group,
-            )
-        return result == "DELETE 1"
+        """Borra el equipo y sus eventos y veredicto de integridad.
+
+        Esas filas se indexan por nombre: si quedaran, el próximo equipo con
+        ese nombre (quizá de otra empresa) las heredaría. El historial git no
+        se puede purgar (el repositorio es de Oxidized y está montado de solo
+        lectura); para eso está `history_since`.
+        """
+        async with self._pool.acquire() as connection:
+            async with connection.transaction():
+                if group is None:
+                    name = await connection.fetchval(
+                        "DELETE FROM devices WHERE id = $1 RETURNING name",
+                        device_id,
+                    )
+                else:
+                    name = await connection.fetchval(
+                        "DELETE FROM devices WHERE id = $1 AND group_name = $2 "
+                        "RETURNING name",
+                        device_id,
+                        group,
+                    )
+                if name is None:
+                    return False
+                await connection.execute(
+                    "DELETE FROM backup_events WHERE node = $1", name
+                )
+                await connection.execute(
+                    "DELETE FROM backup_integrity WHERE node = $1", name
+                )
+        return True
 
     async def list_oxidized_nodes(self) -> list[dict[str, Any]]:
         rows = await self._pool.fetch(
@@ -409,13 +453,26 @@ class SettingsRepository:
         rows = await self._pool.fetch("SELECT key, value FROM settings")
         stored = {
             row["key"]: (
-                decrypt_secret(self._key, row["value"])
+                self._descifrar(row["value"])
                 if row["key"] in ENCRYPTED_SETTINGS
                 else row["value"]
             )
             for row in rows
         }
         return {**SETTINGS_DEFAULTS, **stored}
+
+    def _descifrar(self, value: str) -> str:
+        """Un ajuste cifrado con otra llave se ve vacío, sin tocar la base.
+
+        `get_all` se consulta en cada petición (también en el login): lanzar
+        aquí dejaría todo el panel caído. El valor guardado no se modifica, así
+        que restaurar la llave anterior lo recupera; `secrets_box` ya deja el
+        error en el registro.
+        """
+        try:
+            return decrypt_secret(self._key, value)
+        except ClaveIlegibleError:
+            return ""
 
     async def set_many(self, values: dict[str, str]) -> None:
         async with self._pool.acquire() as connection:
@@ -467,8 +524,13 @@ class BackupEventRepository:
                    COALESCE(i.bytes, 0) AS bytes,
                    COALESCE(i.lines, 0) AS lines
             FROM backup_events e
+            LEFT JOIN devices d ON d.name = e.node
             LEFT JOIN backup_integrity i ON i.node = e.node
+                AND (d.history_since IS NULL OR i.checked_at >= d.history_since)
             WHERE ($1::text[] IS NULL OR e.node = ANY($1))
+              -- Lo anterior al alta (o al último cambio de nombre o empresa)
+              -- pertenece al dueño anterior del nombre.
+              AND (d.history_since IS NULL OR e.created_at >= d.history_since)
             GROUP BY e.node, i.warnings, i.bytes, i.lines
             ORDER BY e.node
             """,
@@ -482,10 +544,13 @@ class BackupEventRepository:
         if nodes is not None and not nodes:
             return []
         rows = await self._pool.fetch(
-            "SELECT id, node, event, commit_ref, created_at FROM backup_events "
-            "WHERE ($1::text IS NULL OR node = $1) "
-            "AND ($3::text[] IS NULL OR node = ANY($3)) "
-            "ORDER BY created_at DESC LIMIT $2",
+            "SELECT e.id, e.node, e.event, e.commit_ref, e.created_at "
+            "FROM backup_events e LEFT JOIN devices d ON d.name = e.node "
+            "WHERE ($1::text IS NULL OR e.node = $1) "
+            "AND ($3::text[] IS NULL OR e.node = ANY($3)) "
+            # Solo el historial del dueño actual del nombre.
+            "AND (d.history_since IS NULL OR e.created_at >= d.history_since) "
+            "ORDER BY e.created_at DESC LIMIT $2",
             node,
             limit,
             nodes,
@@ -557,7 +622,7 @@ class UserRepository:
     async def get_by_username(self, username: str) -> dict[str, Any] | None:
         row = await self._pool.fetchrow(
             "SELECT id, username, password_hash, must_change_password, "
-            "role, group_name FROM users WHERE username = $1",
+            "role, group_name, token_version FROM users WHERE username = $1",
             username,
         )
         return dict(row) if row else None
@@ -624,7 +689,16 @@ class UserRepository:
     async def update_password(self, username: str, password_hash: str) -> None:
         await self._pool.execute(
             "UPDATE users SET password_hash = $2, must_change_password = FALSE, "
+            "token_version = token_version + 1, "
             "updated_at = now() WHERE username = $1",
             username,
             password_hash,
+        )
+
+    async def bump_token_version(self, username: str) -> int | None:
+        """Invalida todas las sesiones abiertas de la cuenta."""
+        return await self._pool.fetchval(
+            "UPDATE users SET token_version = token_version + 1, "
+            "updated_at = now() WHERE username = $1 RETURNING token_version",
+            username,
         )

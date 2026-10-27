@@ -6,6 +6,8 @@ propone escrituras. El repositorio está montado de solo lectura en el backend.
 """
 
 import asyncio
+import datetime as dt
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
@@ -14,6 +16,8 @@ from .auth import CurrentUser, require_audit
 from .config import get_settings
 from .gitrepo import GitRepoError, NotFoundInRepoError, show_config
 from .schemas import DEVICE_NAME_PATTERN, AuditReport, AuditSummaryRow
+
+log = logging.getLogger("oxidized-ai-manager.audit")
 
 # Límite de auditorías en paralelo: cada una lanza un `git show`, y el resumen
 # recorre todo el inventario.
@@ -34,8 +38,11 @@ async def audit_rules() -> dict:
     return {"rules": rule_catalog()}
 
 
-async def _audit_node(repo_path: str, node: str, commit: str) -> dict:
-    config_text = await show_config(repo_path, node, commit)
+async def _audit_node(
+    repo_path: str, node: str, commit: str, since: dt.datetime | None = None
+) -> dict:
+    # `since` oculta los respaldos del dueño anterior del nombre del nodo.
+    config_text = await show_config(repo_path, node, commit, since=since)
     report = audit_config(config_text)
     return {"node": node, "commit": commit, **report}
 
@@ -47,26 +54,30 @@ async def audit_node(
     commit: str = Query(default="HEAD", pattern=COMMIT_QUERY_PATTERN),
     user: CurrentUser = Depends(require_audit),
 ) -> dict:
-    if user.scope is not None:
-        device = await request.app.state.devices.get_device_by_name(node, user.scope)
-        if device is None:
-            # 404 y no 403: un 403 confirmaría que el equipo existe en otra
-            # empresa.
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Equipo no encontrado."
-            )
+    device = await request.app.state.devices.get_device_by_name(node, user.scope)
+    if device is None and user.scope is not None:
+        # 404 y no 403: un 403 confirmaría que el equipo existe en otra
+        # empresa.
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Equipo no encontrado."
+        )
+    since = device.get("history_since") if device else None
     settings = get_settings()
     try:
-        return await _audit_node(settings.oxidized_backup_repo, node, commit)
+        return await _audit_node(
+            settings.oxidized_backup_repo, node, commit, since=since
+        )
     except NotFoundInRepoError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="No hay respaldo de ese equipo en esa versión.",
         )
     except GitRepoError as error:
+        # El detalle de git trae rutas internas: al log, no al cliente.
+        log.warning("Error leyendo el repositorio de respaldos: %s", error)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"No se pudo leer el repositorio de respaldos: {error}",
+            detail="No se pudo leer el repositorio de respaldos.",
         )
 
 
@@ -93,12 +104,16 @@ async def audit_summary(
         async with semaphore:
             try:
                 report = await _audit_node(
-                    settings.oxidized_backup_repo, device["name"], "HEAD"
+                    settings.oxidized_backup_repo,
+                    device["name"],
+                    "HEAD",
+                    since=device.get("history_since"),
                 )
             except NotFoundInRepoError:
                 return {**base, "error": "sin respaldo todavía"}
             except (GitRepoError, OSError) as error:
-                return {**base, "error": str(error)[:200]}
+                log.warning("Auditoría de %s fallida: %s", device["name"], error)
+                return {**base, "error": "no se pudo leer el respaldo"}
         return {
             **base,
             "score": report["score"],

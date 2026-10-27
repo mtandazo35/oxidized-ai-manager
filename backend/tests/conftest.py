@@ -35,6 +35,15 @@ class FakeDeviceRepository:
     def __init__(self) -> None:
         self._devices: dict[int, dict[str, Any]] = {}
         self._next_id = 1
+        # Repositorios de eventos e integridad que se purgan al borrar un
+        # equipo, como hace el DELETE real en la misma transacción.
+        self.linked: list[Any] = []
+
+    def history_since(self, name: str) -> datetime | None:
+        for device in self._devices.values():
+            if device["name"] == name:
+                return device.get("history_since")
+        return None
 
     @staticmethod
     def _public(device: dict[str, Any]) -> dict[str, Any]:
@@ -77,6 +86,9 @@ class FakeDeviceRepository:
             "identity": "",
             "ros_version": "",
             "board": "",
+            # El real siempre usa now(); aquí se deja sobrescribir para sembrar
+            # equipos "anteriores a la columna" (NULL), como panel/dev_server.py.
+            "history_since": now,
             **data,
             "created_at": now,
             "updated_at": now,
@@ -97,8 +109,14 @@ class FakeDeviceRepository:
             for other_id, other in self._devices.items()
         ):
             raise DuplicateDeviceError(new_name)
+        now = datetime.now(timezone.utc)
+        if any(
+            column in data and data[column] != device.get(column, "")
+            for column in ("name", "group_name")
+        ):
+            device["history_since"] = now
         device.update(data)
-        device["updated_at"] = datetime.now(timezone.utc)
+        device["updated_at"] = now
         return self._public(device)
 
     async def update_metadata(self, name: str, meta: dict[str, Any]) -> None:
@@ -113,6 +131,8 @@ class FakeDeviceRepository:
         if device is None or not self._in_group(device, group):
             return False
         del self._devices[device_id]
+        for repository in self.linked:
+            repository.purge_node(device["name"])
         return True
 
     async def list_oxidized_nodes(self) -> list[dict[str, Any]]:
@@ -136,9 +156,23 @@ class FakeDeviceRepository:
 class FakeBackupEventRepository:
     """In-memory stand-in matching BackupEventRepository's public contract."""
 
-    def __init__(self) -> None:
+    def __init__(self, devices: FakeDeviceRepository | None = None) -> None:
         self._events: list[dict[str, Any]] = []
         self._next_id = 1
+        # Con el inventario enlazado se aplica `history_since` como el JOIN
+        # real con `devices`; sin él (panel/dev_server.py) no se filtra.
+        self._devices = devices
+        if devices is not None:
+            devices.linked.append(self)
+
+    def purge_node(self, node: str) -> None:
+        self._events = [e for e in self._events if e["node"] != node]
+
+    def _visible(self, event: dict[str, Any]) -> bool:
+        if self._devices is None:
+            return True
+        since = self._devices.history_since(event["node"])
+        return since is None or event["created_at"] >= since
 
     async def record_event(self, node: str, event: str, commit_ref: str) -> None:
         self._events.append(
@@ -158,6 +192,8 @@ class FakeBackupEventRepository:
         nodes: dict[str, list[dict[str, Any]]] = {}
         for event in self._events:
             if nodes_filter is not None and event["node"] not in nodes_filter:
+                continue
+            if not self._visible(event):
                 continue
             nodes.setdefault(event["node"], []).append(event)
         result = []
@@ -193,6 +229,7 @@ class FakeBackupEventRepository:
             for e in self._events
             if (node is None or e["node"] == node)
             and (nodes is None or e["node"] in nodes)
+            and self._visible(e)
         ]
         return list(reversed(events))[:limit]
 
@@ -200,8 +237,13 @@ class FakeBackupEventRepository:
 class FakeBackupIntegrityRepository:
     """In-memory stand-in matching BackupIntegrityRepository's public contract."""
 
-    def __init__(self) -> None:
+    def __init__(self, devices: FakeDeviceRepository | None = None) -> None:
         self.veredictos: dict[str, dict[str, Any]] = {}
+        if devices is not None:
+            devices.linked.append(self)
+
+    def purge_node(self, node: str) -> None:
+        self.veredictos.pop(node, None)
 
     async def record(
         self,
@@ -304,6 +346,14 @@ class FakeUserRepository:
     async def update_password(self, username: str, password_hash: str) -> None:
         self._users[username]["password_hash"] = password_hash
         self._users[username]["must_change_password"] = False
+        await self.bump_token_version(username)
+
+    async def bump_token_version(self, username: str) -> int | None:
+        user = self._users.get(username)
+        if user is None:
+            return None
+        user["token_version"] = int(user.get("token_version") or 0) + 1
+        return user["token_version"]
 
 
 class FakeActivityRepository:
@@ -520,19 +570,19 @@ def device_repository() -> FakeDeviceRepository:
 
 
 @pytest.fixture(autouse=True)
-def backup_event_repository() -> FakeBackupEventRepository:
+def backup_event_repository(device_repository) -> FakeBackupEventRepository:
     from app import main as main_module
 
-    repository = FakeBackupEventRepository()
+    repository = FakeBackupEventRepository(device_repository)
     main_module.app.state.backup_events = repository
     return repository
 
 
 @pytest.fixture(autouse=True)
-def backup_integrity_repository() -> FakeBackupIntegrityRepository:
+def backup_integrity_repository(device_repository) -> FakeBackupIntegrityRepository:
     from app import main as main_module
 
-    repository = FakeBackupIntegrityRepository()
+    repository = FakeBackupIntegrityRepository(device_repository)
     main_module.app.state.backup_integrity = repository
     return repository
 

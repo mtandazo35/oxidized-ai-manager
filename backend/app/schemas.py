@@ -150,7 +150,7 @@ class BulkBackupRequest(BaseModel):
 
 
 class BackupEventIn(BaseModel):
-    node: str = Field(min_length=1, max_length=128)
+    node: str = Field(min_length=1, max_length=128, pattern=DEVICE_NAME_PATTERN)
     event: Literal["node_success", "node_fail", "post_store"]
     commit: str = Field(default="", max_length=64)
 

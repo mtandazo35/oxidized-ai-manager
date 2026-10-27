@@ -22,8 +22,9 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'admin';
 ALTER TABLE users ALTER COLUMN role SET DEFAULT 'lector';
 -- Empresa a la que pertenece la cuenta; vacío = todas (solo para admin).
 ALTER TABLE users ADD COLUMN IF NOT EXISTS group_name TEXT NOT NULL DEFAULT '';
-
-CREATE INDEX IF NOT EXISTS devices_group_idx ON devices (group_name);
+-- Versión de sesión: subirla revoca todos los tokens emitidos antes (cambio
+-- de clave, restablecimiento por un administrador, cierre de sesión).
+ALTER TABLE users ADD COLUMN IF NOT EXISTS token_version INTEGER NOT NULL DEFAULT 0;
 
 CREATE TABLE IF NOT EXISTS devices (
     id SERIAL PRIMARY KEY,
@@ -44,6 +45,15 @@ ALTER TABLE devices ADD COLUMN IF NOT EXISTS ros_version TEXT NOT NULL DEFAULT '
 ALTER TABLE devices ADD COLUMN IF NOT EXISTS board TEXT NOT NULL DEFAULT '';
 ALTER TABLE devices ADD COLUMN IF NOT EXISTS group_name TEXT NOT NULL DEFAULT '';
 ALTER TABLE devices ADD COLUMN IF NOT EXISTS backup_interval_minutes INTEGER NOT NULL DEFAULT 0;
+-- Desde cuándo el historial de respaldos (git, eventos, integridad) es de
+-- este equipo. Ese historial se indexa por nombre: si el nombre fue antes de
+-- otro equipo, quizá de otra empresa, lo anterior no se muestra. Sin default:
+-- los equipos que ya existían quedan en NULL y conservan todo su historial.
+ALTER TABLE devices ADD COLUMN IF NOT EXISTS history_since TIMESTAMPTZ;
+
+-- Después del ALTER que crea group_name: en una base anterior al multi-tenant
+-- la columna todavía no existe, y en una base vacía ni siquiera la tabla.
+CREATE INDEX IF NOT EXISTS devices_group_idx ON devices (group_name);
 
 CREATE TABLE IF NOT EXISTS backup_events (
     id SERIAL PRIMARY KEY,

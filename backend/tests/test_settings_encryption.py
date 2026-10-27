@@ -103,3 +103,21 @@ async def test_empty_url_needs_no_migration() -> None:
     pool = FakePool({"git_remote_url": ""})
 
     assert await SettingsRepository(pool).encrypt_legacy_settings() == 0
+
+
+async def test_url_encrypted_with_another_key_reads_empty_and_is_left_intact(
+    key,
+) -> None:
+    """Regresión: tras rotar APP_SECRET_KEY el token viejo se leía como texto
+    plano y la migración del arranque lo cifraba encima, sin vuelta atrás."""
+    from app.secrets_box import encrypt_secret
+
+    viejo = encrypt_secret("llave-anterior-0123456789abcdef0123456789", REMOTE_WITH_TOKEN)
+    pool = FakePool({"git_remote_url": viejo})
+    repository = SettingsRepository(pool)
+
+    assert await repository.encrypt_legacy_settings() == 0
+    values = await repository.get_all()
+
+    assert values["git_remote_url"] == ""
+    assert pool.rows["git_remote_url"] == viejo

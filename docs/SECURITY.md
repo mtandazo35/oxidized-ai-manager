@@ -21,14 +21,31 @@ recomendado del servidor. Lea también `docs/PUBLIC_ACCESS.md`.
   **inactividad** (60 min): el token dura eso y el panel solo lo renueva
   mientras se use. Si nadie toca nada, nadie renueva y el servidor deja de
   aceptarlo — la caducidad no depende de que el navegador colabore.
+- Cada token lleva la **versión de sesión** de la cuenta. Cambiar la clave,
+  que un administrador la restablezca o le cambie el rol, y `POST
+  /api/auth/logout` suben esa versión: **todas** las sesiones abiertas de la
+  cuenta dejan de valer al instante, sin esperar a que caduquen.
+- Una cuenta con cambio de clave pendiente solo puede usar `/api/auth/me`,
+  `change-password`, `refresh` y `logout`; el resto de la API responde 403.
+  Se aplica en el servidor, no solo en el panel.
+- `APP_SECRET_KEY` y `OXIDIZED_SOURCE_TOKEN` con el valor de `.env.example`
+  (`CHANGE_ME…`), o una `APP_SECRET_KEY` de menos de 32 caracteres, impiden
+  arrancar el backend.
 - Tres controles antes de comprobar siquiera la contraseña, en este orden:
   **lista de IPs permitidas** (desactivada por defecto), **bloqueo de IP** por
   fallos acumulados y **bloqueo de cuenta** (8 fallos → 15 min). Los dos
   bloqueos viven en PostgreSQL, no en memoria: los de memoria se borraban en
   cada reinicio, que es justo lo que provoca un ataque sostenido.
-- Las IPs de confianza (`127.0.0.1` y las de la lista) **nunca se
-  autobloquean**: si no, atacar desde la red de gestión dejaría fuera al
-  operador. Y la API **impide activar la lista sin incluirse uno mismo**.
+- Con la lista activada, se exige en **cada petición autenticada**, no solo en
+  el login: un token robado no sirve desde fuera de las redes permitidas.
+- Las IPs de confianza (`127.0.0.1` y, con la lista activada, las de la
+  lista) **nunca se autobloquean** y tampoco las frena el bloqueo de cuenta:
+  si no, un atacante externo podría dejar fuera al administrador fallando su
+  clave a propósito. Y la API **impide activar la lista sin incluirse uno
+  mismo**.
+- Un usuario inexistente cuesta lo mismo que uno real (se compara contra un
+  hash bcrypt de relleno), así el tiempo de respuesta no revela qué cuentas
+  existen.
 - Lo complementa el **rate limit por IP** (5/min en `/api/auth/login`), este sí
   en memoria porque frena el ritmo de peticiones, no los fallos de credenciales.
 - **Bitácora** de toda petición que cambia algo, con cuenta, IP, acción y
@@ -106,7 +123,9 @@ recomendado del servidor. Lea también `docs/PUBLIC_ACCESS.md`.
 - `/docs` y `/openapi.json` deshabilitados salvo `APP_ENV=development`.
 - Parámetros de las consultas a Git (nombre de nodo, hash de commit) validados
   con patrón estricto; no se construye ninguna shell.
-- Límite de tamaño de cuerpo (8 MB) y de filas en importaciones.
+- Límite de tamaño de cuerpo de **8 MB en la propia aplicación** (413), tanto
+  con `Content-Length` como en cuerpos enviados por trozos, y de filas en
+  importaciones.
 
 ### Cabeceras y transporte (proxy externo)
 El panel se publica con un **Nginx Proxy Manager externo**, que no forma parte
@@ -116,7 +135,12 @@ de este repositorio. El reparto de responsabilidades es deliberado:
   `X-Content-Type-Options`, `Referrer-Policy: no-referrer`,
   `Permissions-Policy` y `Cross-Origin-Opener-Policy` en cada respuesta, y
   aplica un **rate limit de login de 5/min por IP**. Vive aquí porque es lo
-  primero que se pierde cuando alguien recrea un proxy host en NPM.
+  primero que se pierde cuando alguien recrea un proxy host en NPM. Las
+  cabeceras salen también en los 413, 429 y 500.
+- La CSP **no permite scripts en línea arbitrarios**: autoriza cada bloque
+  `<script>` del panel por su hash SHA-256 (calculado al vuelo a partir de
+  `index.html`), así que un script inyectado o un atributo `onclick=` no se
+  ejecuta. Los estilos sí mantienen `'unsafe-inline'`.
 - **HSTS** lo emite la aplicación solo sobre HTTPS y solo con
   `APP_ENABLE_HSTS=true`: anunciarlo antes de tener un certificado de confianza
   deja al navegador clavado en HTTPS para ese host.
@@ -184,7 +208,10 @@ En un despliegue real, además de lo anterior:
   `DELETE FROM users;` + reiniciar el backend re-siembra desde `.env`.
 - **`APP_SECRET_KEY` comprometida**: rótela, reinicie, y vuelva a guardar las
   claves de los routers **y la URL del Git remoto** (el cifrado de ambas
-  depende de ella). No hay recifrado automático: es un cambio manual.
+  depende de ella). No hay recifrado automático: es un cambio manual. Un
+  valor cifrado con la llave anterior **no se toca**: Oxidized recibe un 503
+  en lugar del cifrado como clave, la URL del remoto se ve vacía y el registro
+  lo avisa; restaurar la llave anterior lo recupera.
 - **Token de Git filtrado**: revóquelo en el proveedor y configure uno nuevo.
 
 ## Qué NO hacer

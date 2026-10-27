@@ -1,3 +1,5 @@
+import pytest
+
 from app.routeros_export import parse_export, redact_secrets, version_tuple
 
 
@@ -81,3 +83,56 @@ def test_redact_secrets_covers_prefixed_keys() -> None:
     assert "abc" not in redacted
     assert "xyz" not in redacted
     assert "mode=dynamic-keys" in redacted
+
+
+@pytest.mark.parametrize(
+    "linea",
+    [
+        "add interface=wg0 public-key=PUB preshared-key=SECRETO allowed-address=10.0.0.2/32",
+        "add name=transito remote.address=198.51.100.1 tcp-md5-key=SECRETO",
+        "add name=v3 auth-key=SECRETO",
+        "set [ find ] authentication-key=SECRETO",
+        "set private-key=SECRETO listen-port=13231",
+        "set wpa-pre-shared-key=SECRETO wpa2-pre-shared-key=SECRETO",
+    ],
+)
+def test_redact_secrets_covers_routing_and_vpn_keys(linea) -> None:
+    redacted = redact_secrets(linea)
+
+    assert "SECRETO" not in redacted
+    assert "***" in redacted
+
+
+def test_redact_secrets_handles_escaped_quotes() -> None:
+    """Con `"[^"]*"` la cola tras `\\"` quedaba a la vista."""
+    linea = r'add name=respaldo password="ab\"cd efg" group=full'
+
+    assert redact_secrets(linea) == "add name=respaldo password=*** group=full"
+
+
+def test_redact_secrets_handles_escaped_spaces_without_quotes() -> None:
+    assert redact_secrets(r"set secret=ab\ cd mtu=1400") == "set secret=*** mtu=1400"
+
+
+def test_snmp_community_names_are_secrets() -> None:
+    linea = "add addresses=10.0.0.0/8 name=ComunidadSecreta"
+
+    assert "ComunidadSecreta" not in redact_secrets(linea, "/snmp community")
+    assert "ComunidadSecreta" not in redact_secrets(f"/snmp community: {linea}")
+    # Fuera de esa sección `name=` es solo un nombre.
+    assert "respaldo" in redact_secrets("add name=respaldo group=full", "/user")
+
+
+def test_the_factory_snmp_community_stays_visible() -> None:
+    """`public` no es un secreto: es justo lo que señala la auditoría."""
+    linea = "set [ find default=yes ] name=public"
+
+    assert redact_secrets(linea, "/snmp community") == linea
+
+
+def test_parser_keeps_escaped_quotes_inside_a_value() -> None:
+    export = parse_export('/user\nadd name=x password="ab\\"cd efg" group=full\n')
+    stanza = export.section("/user")[0]
+
+    assert stanza.get("group") == "full"
+    assert stanza.get("name") == "x"

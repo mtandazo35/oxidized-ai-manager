@@ -1,3 +1,5 @@
+import pytest
+
 from app.audit_rules import RULES, audit_config, rule_catalog, risk_level, risk_score
 
 
@@ -332,3 +334,121 @@ def test_a_wan_only_drop_still_counts_as_protection() -> None:
     )
 
     assert "ROS-SEC-007" not in rule_ids(audit_config(config))
+
+
+# --- Falsos negativos y positivos señalados en QA ---------------------------
+
+DNS_ABIERTO = "/ip dns\nset allow-remote-requests=yes\n/ip firewall filter\n"
+
+
+def test_a_protocol_specific_drop_does_not_close_the_chain() -> None:
+    """Descartar solo ICMP no cierra la cadena: el API sigue alcanzable."""
+    config = CADENA_ABIERTA + "add action=drop chain=input protocol=icmp\n"
+
+    assert severidad_de(config, "ROS-SEC-004") == "high"
+
+
+def test_a_drop_of_another_protocol_does_not_cover_dns() -> None:
+    config = DNS_ABIERTO + "add action=drop chain=input protocol=tcp\n"
+
+    assert "ROS-SEC-007" in rule_ids(audit_config(config))
+
+
+def test_a_drop_of_the_same_protocol_covers_dns() -> None:
+    config = DNS_ABIERTO + "add action=drop chain=input protocol=udp\n"
+
+    assert "ROS-SEC-007" not in rule_ids(audit_config(config))
+
+
+@pytest.mark.parametrize(
+    "condicion",
+    [
+        "connection-limit=10,32",
+        "limit=10,5:packet",
+        "dst-limit=10,5,src-address",
+        "src-mac-address=00:11:22:33:44:55",
+        "tcp-flags=syn",
+        "src-port=1024-65535",
+        "port=53",
+        "connection-type=ftp",
+        "ipsec-policy=in,none",
+        "packet-size=0-100",
+        "time=0s-8h,mon",
+        "hotspot=auth",
+        "psd=21,3s,3,1",
+        "nth=2,1",
+        "random=50",
+        "per-connection-classifier=src-address:2/0",
+        "src-address-type=unicast",
+        "dst-address-type=broadcast",
+        "icmp-options=8:0",
+        "connection-mark=marca",
+        "packet-mark=marca",
+        "routing-mark=marca",
+        "in-bridge-port=ether2",
+    ],
+)
+def test_a_narrowed_drop_is_not_a_catch_all(condicion) -> None:
+    config = DNS_ABIERTO + f"add action=drop chain=input {condicion}\n"
+
+    assert "ROS-SEC-007" in rule_ids(audit_config(config))
+    assert severidad_de(
+        CADENA_ABIERTA + f"add action=drop chain=input {condicion}\n", "ROS-SEC-004"
+    ) == "high"
+
+
+def test_a_disabled_drop_protects_nothing() -> None:
+    config = (
+        DNS_ABIERTO
+        + "add action=drop chain=input disabled=yes\n"
+        + "add action=drop chain=input protocol=udp dst-port=53 disabled=yes\n"
+    )
+
+    assert "ROS-SEC-007" in rule_ids(audit_config(config))
+
+
+def test_a_port_drop_only_for_some_sources_does_not_close_the_port() -> None:
+    config = (
+        DNS_ABIERTO
+        + "add action=drop chain=input protocol=udp dst-port=53 src-address=192.0.2.9\n"
+    )
+
+    assert "ROS-SEC-007" in rule_ids(audit_config(config))
+
+
+def test_a_plain_port_drop_still_closes_the_port() -> None:
+    config = DNS_ABIERTO + "add action=drop chain=input protocol=udp dst-port=53\n"
+
+    assert "ROS-SEC-007" not in rule_ids(audit_config(config))
+
+
+def test_a_routeros7_neighbor_with_prefix_is_recognized_as_internal() -> None:
+    """RouterOS 7 escribe `remote.address=10.0.0.1/32`: sigue siendo interno."""
+    config = (
+        "/routing bgp connection\n"
+        "add name=matriz remote.address=10.0.0.1/32 remote.as=65000 local.role=ibgp\n"
+    )
+    found = rule_ids(audit_config(config))
+
+    assert "ROS-BGP-003" in found
+    assert not {"ROS-BGP-001", "ROS-BGP-002"} & found
+
+
+def test_a_routeros7_public_neighbor_with_prefix_is_still_serious() -> None:
+    config = (
+        "/routing bgp connection\n"
+        "add name=transito remote.address=198.51.100.1/32 remote.as=64500\n"
+    )
+    found = rule_ids(audit_config(config))
+
+    assert {"ROS-BGP-001", "ROS-BGP-002"} <= found
+    assert "ROS-BGP-003" not in found
+
+
+def test_a_neighbor_range_that_leaves_the_internal_block_is_not_internal() -> None:
+    config = (
+        "/routing bgp connection\n"
+        "add name=dinamico remote.address=0.0.0.0/0 remote.as=64500\n"
+    )
+
+    assert "ROS-BGP-001" in rule_ids(audit_config(config))

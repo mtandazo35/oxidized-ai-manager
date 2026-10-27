@@ -13,7 +13,11 @@ los mismos hallazgos, que es el criterio de aceptación de la fase.
 - `app/routeros_export.py` — parser léxico de `/export`: une líneas partidas
   con `\`, respeta comillas y expresiones `[ find ... ]`, y expone las stanzas
   por sección (`/ip service`, `/ip firewall filter`…). Incluye
-  `redact_secrets()`, que enmascara claves, PSK y comunidades.
+  `redact_secrets()`, que enmascara claves, PSK (`pre-shared-key`,
+  `preshared-key`), claves de enrutamiento (`tcp-md5-key`, `auth-key`,
+  `authentication-key`), `private-key` y el `name=` de `/snmp community`
+  (salvo `public`, que es justo el hallazgo). Respeta comillas con escapes
+  (`"ab\"cd"`).
 - `app/audit_rules.py` — catálogo de reglas y motor. Cada regla declara id,
   categoría, severidad, título y recomendación, y devuelve la evidencia que la
   dispara. Agrupadas por agente lógico del roadmap:
@@ -55,7 +59,16 @@ versión mínima soportada (`MIN_SUPPORTED_VERSION`).
 
 BGP: sesiones sin filtro de entrada y sin filtro de salida (sintaxis de
 RouterOS 7 `input.filter` / `output.filter-chain` y la heredada
-`in-filter` / `out-filter`).
+`in-filter` / `out-filter`). El vecino se acepta con prefijo
+(`remote.address=10.0.0.1/32`, como lo escribe RouterOS 7) para clasificarlo
+como interno o externo.
+
+Firewall: un descarte solo «cierra» la cadena `input` si no tiene
+condiciones que lo acoten (`NARROWING`: puertos, direcciones, marcas,
+límites, `connection-limit`, `tcp-flags`, `time`…) y si no se restringe a otro
+protocolo (un `drop protocol=icmp` no cierra nada). Las reglas con
+`disabled=yes` no cuentan, y un descarte de puerto acotado por origen no cierra
+ese puerto para el resto.
 
 ### Sobre los valores por defecto de `/export`
 
@@ -78,6 +91,11 @@ evidencia (líneas del export, censuradas) y la recomendación de cada regla.
 Los respaldos incluyen las claves de los equipos a propósito —deben ser
 restaurables—, así que **toda** la evidencia que sale por la API pasa por
 `redact_secrets()`. Ver `docs/SECURITY.md`.
+
+La auditoría solo mira respaldos posteriores a `history_since` del equipo
+(ver `docs/MULTITENANT.md`): un nombre reutilizado no audita la configuración
+del dueño anterior. Los errores de git se registran en el log y al cliente le
+llega un mensaje genérico.
 
 ## Criterio de aceptación
 

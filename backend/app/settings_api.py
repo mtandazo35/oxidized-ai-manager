@@ -14,7 +14,9 @@ router = APIRouter(
     dependencies=[Depends(require_admin)],
 )
 
-ALLOWED_URL_PREFIXES = ("https://", "http://", "ssh://", "git@")
+# Sin `http://`: el token viajaría en claro junto con todas las
+# configuraciones de los routers.
+ALLOWED_URL_PREFIXES = ("https://", "ssh://", "git@")
 
 
 async def _settings_out(request: Request) -> dict:
@@ -53,7 +55,16 @@ async def get_settings_view(request: Request) -> dict:
 async def update_settings_view(request: Request, payload: SettingsUpdate) -> dict:
     stored = await request.app.state.settings.get_all()
     url = payload.git_remote_url.strip()
-    if ":***@" in url:
+    if "***" in url:
+        # El panel recibe la URL con el token oculto y la devuelve tal cual si
+        # nadie la toca. Solo entonces se conserva la guardada: si cambió el
+        # servidor o la ruta, reutilizar el token lo enviaría a otro destino.
+        if url != mask_remote_url(stored["git_remote_url"]):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="Cambió la URL del remoto: escriba de nuevo el token "
+                "completo en lugar de ***.",
+            )
         url = stored["git_remote_url"]
     if url and not url.startswith(ALLOWED_URL_PREFIXES):
         raise HTTPException(

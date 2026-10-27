@@ -14,24 +14,37 @@ interpretar ninguna cabecera `X-Forwarded-*`: duplicar esa lógica sería
 duplicar la decisión de en quién confiar.
 """
 
+import base64
+import hashlib
+import json
 import logging
 import re
 import time
+from pathlib import Path
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from .config import get_settings
 from .security import decode_access_token
 
 log = logging.getLogger("oxidized-ai-manager.actividad")
 
-# El panel es una SPA de un solo archivo con estilos y scripts en línea, de ahí
-# los `unsafe-inline`. No carga nada de terceros: ni CDN, ni fuentes externas.
-CONTENT_SECURITY_POLICY = (
+log_errores = logging.getLogger("oxidized-ai-manager.errores")
+
+# El panel es una SPA de un solo archivo con sus scripts en línea. La CSP no
+# permite `'unsafe-inline'` para scripts: autoriza cada bloque <script> por su
+# hash SHA-256, así que un script inyectado (o un atributo `onclick=`) no se
+# ejecuta aunque llegue al DOM. Los estilos sí llevan `'unsafe-inline'`: el
+# panel usa atributos `style=` y un estilo inyectado no ejecuta código. No se
+# carga nada de terceros: ni CDN, ni fuentes externas.
+PANEL_FILE = Path(__file__).parent / "static" / "index.html"
+
+CSP_TEMPLATE = (
     "default-src 'self'; "
-    "script-src 'self' 'unsafe-inline'; "
+    "script-src 'self'{hashes}; "
     "style-src 'self' 'unsafe-inline'; "
     "img-src 'self' data:; "
     "connect-src 'self'; "
@@ -41,8 +54,42 @@ CONTENT_SECURITY_POLICY = (
     "object-src 'none'"
 )
 
+# Bloques <script> sin `src`: su contenido exacto es lo que el navegador hashea.
+_INLINE_SCRIPT = re.compile(
+    r"<script(?![^>]*\bsrc\s*=)[^>]*>(.*?)</script\s*>", re.DOTALL | re.IGNORECASE
+)
+
+# (mtime, política). Se recalcula cuando el archivo cambia: en desarrollo se
+# edita el panel sin reiniciar el backend y la CSP tiene que seguirle.
+_csp_cache: tuple[float, str] | None = None
+
+
+def inline_script_hashes(html: str) -> list[str]:
+    return [
+        "'sha256-"
+        + base64.b64encode(hashlib.sha256(body.encode("utf-8")).digest()).decode()
+        + "'"
+        for body in _INLINE_SCRIPT.findall(html)
+    ]
+
+
+def content_security_policy() -> str:
+    global _csp_cache
+    try:
+        mtime = PANEL_FILE.stat().st_mtime
+    except OSError:
+        return CSP_TEMPLATE.format(hashes="")
+    if _csp_cache is None or _csp_cache[0] != mtime:
+        try:
+            html = PANEL_FILE.read_text(encoding="utf-8")
+        except OSError:
+            return CSP_TEMPLATE.format(hashes="")
+        hashes = "".join(f" {h}" for h in dict.fromkeys(inline_script_hashes(html)))
+        _csp_cache = (mtime, CSP_TEMPLATE.format(hashes=hashes))
+    return _csp_cache[1]
+
+
 SECURITY_HEADERS = {
-    "Content-Security-Policy": CONTENT_SECURITY_POLICY,
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "DENY",
     "Referrer-Policy": "no-referrer",
@@ -80,7 +127,18 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         self._enable_hsts = enable_hsts
 
     async def dispatch(self, request: Request, call_next) -> Response:
-        response = await call_next(request)
+        try:
+            response = await call_next(request)
+        except Exception:
+            # Sin esto el 500 lo fabrica Starlette por fuera de este
+            # middleware y sale sin cabeceras de seguridad.
+            log_errores.exception("Error no controlado en %s", request.url.path)
+            response = JSONResponse(
+                status_code=500, content={"detail": "Error interno del servidor."}
+            )
+        response.headers.setdefault(
+            "Content-Security-Policy", content_security_policy()
+        )
         for header, value in SECURITY_HEADERS.items():
             response.headers.setdefault(header, value)
         if self._enable_hsts and request.url.scheme == "https":
@@ -136,6 +194,9 @@ class LoginRateLimitMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
         client = request.client.host if request.client else "unknown"
         if self._too_many(client, time.monotonic()):
+            # Lo lee la bitácora, que envuelve a este middleware: el endpoint
+            # de login no llega a ejecutarse y no lo anota él.
+            request.state.rate_limited = True
             return JSONResponse(
                 status_code=429,
                 content={
@@ -166,6 +227,7 @@ ACTION_MAP: tuple[tuple[str, str, str], ...] = (
     ("POST", r"^/api/system/update$", "sistema.actualizacion"),
     ("POST", r"^/api/access/unblock-ip$", "acceso.desbloqueo-ip"),
     ("POST", r"^/api/access/unlock-account$", "acceso.desbloqueo-cuenta"),
+    ("POST", r"^/api/auth/logout$", "logout"),
 )
 
 # El login se registra por su cuenta, con el motivo del fallo; y las llamadas
@@ -191,6 +253,9 @@ class ActivityLogMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next) -> Response:
         response = await call_next(request)
+        if getattr(request.state, "rate_limited", False):
+            await self._record_rate_limited(request)
+            return response
         if request.method not in MUTATING or request.url.path in SKIP_PATHS:
             return response
         repository = getattr(request.app.state, "activity", None)
@@ -214,3 +279,117 @@ class ActivityLogMiddleware(BaseHTTPMiddleware):
         except Exception:
             log.warning("No se pudo anotar la acción en la bitácora", exc_info=True)
         return response
+
+    @staticmethod
+    async def _record_rate_limited(request: Request) -> None:
+        """Un login frenado por el limitador también es un intento: se anota.
+
+        No se lee el formulario (el nombre de usuario): el limitador cortó la
+        petición antes y leer el cuerpo aquí sería procesar justo lo que se
+        quería rechazar.
+        """
+        repository = getattr(request.app.state, "activity", None)
+        if repository is None:
+            return
+        try:
+            await repository.record(
+                action="login.ratelimit",
+                ip=request.client.host if request.client else "",
+                detail="demasiados intentos por minuto desde esta IP",
+                ok=False,
+            )
+        except Exception:
+            log.warning("No se pudo anotar la acción en la bitácora", exc_info=True)
+
+
+# --- Límite de tamaño del cuerpo --------------------------------------------
+
+MAX_BODY_BYTES = 8 * 1024 * 1024
+
+
+class _CuerpoDemasiadoGrande(Exception):
+    pass
+
+
+class BodySizeLimitMiddleware:
+    """Rechaza con 413 los cuerpos de más de `MAX_BODY_BYTES`.
+
+    Antes este límite solo existía en Nginx Proxy Manager. Se mira primero
+    `Content-Length`; si no viene (cuerpo por trozos), se cuentan los bytes a
+    medida que llegan y se corta en cuanto se pasa. Es ASGI puro para poder
+    contar el cuerpo sin leerlo entero en memoria.
+    """
+
+    def __init__(self, app: ASGIApp, max_bytes: int | None = None) -> None:
+        self.app = app
+        self._max = max_bytes
+
+    @property
+    def max_bytes(self) -> int:
+        # Se lee en cada petición para que una prueba pueda bajarlo.
+        return self._max if self._max is not None else MAX_BODY_BYTES
+
+    @staticmethod
+    async def _too_large(send: Send) -> None:
+        cuerpo = json.dumps(
+            {"detail": "La petición es demasiado grande (máximo 8 MB)."},
+            ensure_ascii=False,
+        ).encode("utf-8")
+        await send(
+            {
+                "type": "http.response.start",
+                "status": 413,
+                "headers": [
+                    (b"content-type", b"application/json"),
+                    (b"content-length", str(len(cuerpo)).encode()),
+                    (b"connection", b"close"),
+                ],
+            }
+        )
+        await send({"type": "http.response.body", "body": cuerpo})
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        limite = self.max_bytes
+        for name, value in scope.get("headers", []):
+            if name == b"content-length":
+                try:
+                    declarado = int(value)
+                except ValueError:
+                    declarado = 0
+                if declarado > limite:
+                    await self._too_large(send)
+                    return
+
+        recibido = 0
+        excedido = False
+        respuesta_iniciada = False
+
+        async def contar() -> Message:
+            nonlocal recibido, excedido
+            message = await receive()
+            if message["type"] == "http.request":
+                recibido += len(message.get("body", b""))
+                if recibido > limite:
+                    excedido = True
+                    raise _CuerpoDemasiadoGrande()
+            return message
+
+        async def enviar(message: Message) -> None:
+            nonlocal respuesta_iniciada
+            # Pasado el límite, lo que intente responder la aplicación (un 400
+            # por cuerpo ilegible, por ejemplo) se descarta: sale el 413.
+            if excedido:
+                return
+            if message["type"] == "http.response.start":
+                respuesta_iniciada = True
+            await send(message)
+
+        try:
+            await self.app(scope, contar, enviar)
+        except _CuerpoDemasiadoGrande:
+            pass
+        if excedido and not respuesta_iniciada:
+            await self._too_large(send)

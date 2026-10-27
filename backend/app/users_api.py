@@ -175,6 +175,12 @@ async def update_user(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Cuenta no encontrada."
         )
+    # Restablecer la clave o cambiar el rol cierra las sesiones abiertas de la
+    # cuenta: quien tuviera la clave anterior (o un token robado) queda fuera.
+    if payload.password is not None or (
+        payload.role is not None and payload.role != stored.get("role")
+    ):
+        await users.bump_token_version(username)
     return updated
 
 

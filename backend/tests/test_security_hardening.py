@@ -2,7 +2,12 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app import main as main_module
-from app.secrets_box import decrypt_secret, encrypt_secret, looks_encrypted
+from app.secrets_box import (
+    ClaveIlegibleError,
+    decrypt_secret,
+    encrypt_secret,
+    looks_encrypted,
+)
 
 
 pytestmark = pytest.mark.anyio
@@ -29,12 +34,23 @@ def test_legacy_plaintext_is_returned_as_is() -> None:
 
 def test_wrong_key_cannot_decrypt() -> None:
     token = encrypt_secret(KEY, "S3cret!")
-    other = decrypt_secret("otra-llave-distinta-totalmente-diferente", token)
-    assert other != "S3cret!"
+    # Regresión: antes devolvía el cifrado como si fuera texto plano heredado.
+    with pytest.raises(ClaveIlegibleError):
+        decrypt_secret("otra-llave-distinta-totalmente-diferente", token)
 
 
-def client() -> AsyncClient:
-    transport = ASGITransport(app=main_module.app)
+def test_token_from_another_key_is_not_reencrypted() -> None:
+    """Regresión: tras rotar la llave, la migración al arrancar volvía a cifrar
+    el token viejo encima y la clave original quedaba irrecuperable."""
+    token = encrypt_secret(KEY, "S3cret!")
+    otra = "otra-llave-distinta-totalmente-diferente"
+    assert looks_encrypted(otra, token) is True
+    # Restaurar la llave original lo recupera intacto.
+    assert decrypt_secret(KEY, token) == "S3cret!"
+
+
+def client(ip: str = "127.0.0.1") -> AsyncClient:
+    transport = ASGITransport(app=main_module.app, client=(ip, 123))
     return AsyncClient(transport=transport, base_url="http://test")
 
 
@@ -50,7 +66,8 @@ async def test_bruteforce_lockout(
     # Este caso mide el bloqueo *por cuenta*: relajamos el límite por IP para
     # que no sea él el que responda 429 y la prueba siga midiendo lo que dice.
     monkeypatch.setattr("app.middleware.LOGIN_RATE_LIMIT", 100)
-    async with client() as api:
+    # Desde fuera: la red local (127.0.0.1) es de confianza y no se bloquea.
+    async with client("203.0.113.9") as api:
         for _ in range(8):
             await login(api, "admin", "wrong")
         locked = await login(api, "admin", "wrong")

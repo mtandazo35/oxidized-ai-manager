@@ -1,6 +1,13 @@
 from functools import lru_cache
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+# Los valores de `.env.example` empiezan así; arrancar con ellos es arrancar
+# con secretos públicos.
+EXAMPLE_PREFIX = "CHANGE_ME"
+MIN_SECRET_KEY_LENGTH = 32
 
 
 class Settings(BaseSettings):
@@ -45,6 +52,29 @@ class Settings(BaseSettings):
     ip_block_minutes: int = 30
     # Cuánto se guarda la bitácora antes de purgarse sola.
     activity_retention_days: int = 90
+
+    @field_validator("app_secret_key")
+    @classmethod
+    def _secreto_real(cls, value: str) -> str:
+        # Con la llave de ejemplo cualquiera que lea `.env.example` puede
+        # firmar tokens de administrador y descifrar las claves de los routers.
+        if value.startswith(EXAMPLE_PREFIX) or len(value) < MIN_SECRET_KEY_LENGTH:
+            raise ValueError(
+                "APP_SECRET_KEY no es válida: use un valor aleatorio de al menos "
+                f"{MIN_SECRET_KEY_LENGTH} caracteres, no el de .env.example "
+                "(por ejemplo: openssl rand -hex 32)."
+            )
+        return value
+
+    @field_validator("oxidized_source_token")
+    @classmethod
+    def _token_real(cls, value: str) -> str:
+        if value.startswith(EXAMPLE_PREFIX):
+            raise ValueError(
+                "OXIDIZED_SOURCE_TOKEN no es válido: sigue con el valor de "
+                ".env.example. Genere uno (openssl rand -hex 32)."
+            )
+        return value
 
     model_config = SettingsConfigDict(
         env_file=".env",

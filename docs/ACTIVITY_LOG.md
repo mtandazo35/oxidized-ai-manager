@@ -22,7 +22,9 @@ nombres se guarda igual con su método y ruta.
 | `login.ok` / `login.fail` | acceso concedido o rechazado |
 | `login.denied` | la IP no está en la lista de permitidas |
 | `login.blocked` / `login.locked` | la IP o la cuenta estaban bloqueadas |
+| `login.ratelimit` | el limitador (5/min por IP) frenó un intento de login |
 | `password.change` | alguien cambió su clave |
+| `logout` | alguien cerró todas sus sesiones |
 | `equipo.alta` / `.edicion` / `.baja` / `.carga-masiva` | inventario |
 | `respaldo.manual` / `.masivo` | respaldos lanzados a mano |
 | `cuenta.alta` / `.edicion` / `.baja` | gestión de cuentas |

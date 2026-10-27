@@ -70,9 +70,10 @@ async def test_change_password_clears_forced_flag(auth_headers, user_repository)
             headers=auth_headers,
             json={"current_password": TEST_ADMIN_PASSWORD, "new_password": "clave-nueva-1"},
         )
-        me = await api.get("/api/auth/me", headers=auth_headers)
+        nuevo = {"Authorization": f"Bearer {changed.json()['access_token']}"}
+        me = await api.get("/api/auth/me", headers=nuevo)
 
-    assert changed.status_code == 204
+    assert changed.status_code == 200
     assert me.json()["must_change_password"] is False
 
 
@@ -105,7 +106,7 @@ async def test_change_password_flow(auth_headers) -> None:
         old_login = await login(api, "admin", TEST_ADMIN_PASSWORD)
         new_login = await login(api, "admin", "new-password-123")
 
-    assert changed.status_code == 204
+    assert changed.status_code == 200
     assert old_login.status_code == 401
     assert new_login.status_code == 200
 
