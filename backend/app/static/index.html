@@ -1842,6 +1842,11 @@ $("btn-upload").addEventListener("click", async () => {
     "Terminado: " + ok + " creados, " + dup + " duplicados, " + bad + " con error.",
     bad === 0);
   button.disabled = false;
+  // Una vez subido el listado, limpiar el formulario para no volver a cargar
+  // lo mismo por error (las contraseñas pegadas tampoco se quedan a la vista).
+  // El resultado por línea queda en la tabla de abajo.
+  $("bulk-text").value = "";
+  $("bulk-file").value = "";
   if (ok) {
     refresh();
   }
