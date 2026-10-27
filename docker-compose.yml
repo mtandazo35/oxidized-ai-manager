@@ -1,7 +1,16 @@
 name: oxidized-ai-manager
 
+# Rotación de logs para todos los servicios: sin ella, el driver json-file de
+# Docker crece sin límite y acaba llenando el disco del anfitrión.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   postgres:
+    logging: *default-logging
     image: postgres:16-alpine
     restart: unless-stopped
     security_opt:
@@ -22,6 +31,7 @@ services:
       - core
 
   redis:
+    logging: *default-logging
     image: redis:7.4-alpine
     restart: unless-stopped
     security_opt:
@@ -43,6 +53,7 @@ services:
       - core
 
   oxidized-init:
+    logging: *default-logging
     image: alpine:3.22
     restart: "no"
     user: "0:0"
@@ -66,6 +77,7 @@ services:
       - oxidized_data:/target
 
   oxidized:
+    logging: *default-logging
     # Imagen propia: la oficial trunca los respaldos de RouterOS grandes contra
     # equipos remotos. El motivo completo está en oxidized/Dockerfile.
     #
@@ -87,6 +99,10 @@ services:
         condition: service_completed_successfully
       backend:
         condition: service_healthy
+    # oxidized-web NO tiene autenticación y sirve las configuraciones completas
+    # (claves incluidas): se publica solo en 127.0.0.1 del anfitrión. No lo
+    # cambie a una IP de la LAN ni lo exponga en el proxy; el panel ya ofrece
+    # lo necesario con login y permisos por empresa.
     ports:
       - "${OXIDIZED_BIND_ADDRESS:-127.0.0.1}:${OXIDIZED_PORT:-8888}:8888"
     volumes:
@@ -106,6 +122,7 @@ services:
       - core
 
   backend:
+    logging: *default-logging
     build:
       context: ./backend
     restart: unless-stopped

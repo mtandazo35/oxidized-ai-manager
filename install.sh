@@ -7,6 +7,17 @@
 #     sudo ./install.sh --proxy RED     # detrás de un proxy externo (Nginx Proxy
 #                                       # Manager): conecta el backend a esa red
 #                                       # Docker y no publica el puerto en la LAN.
+#     sudo ./install.sh --systemd       # además instala las unidades de systemd
+#                                       # (botón "Actualizar" y respaldo diario)
+#                                       # con la ruta real del repositorio.
+#
+# Ruta recomendada del repositorio: /opt/oxidized-ai-manager (la que traen las
+# unidades de deploy/). Con --systemd funciona desde cualquier otra.
+#
+# Con --proxy se escribe COMPOSE_FILE en .env, así que `docker compose ...` a
+# mano, el botón "Actualizar" y el respaldo usan siempre el overlay del proxy.
+# Si .env ya tiene PROXY_NETWORK, volver a ejecutar el script sin --proxy
+# conserva el modo proxy.
 #
 # El TLS, el certificado y las listas de acceso los gestiona el proxy externo,
 # que no forma parte de este repositorio. Ver docs/PUBLIC_ACCESS.md.
@@ -23,9 +34,13 @@ die()  { printf '%s[x]%s %s\n' "$RED" "$NC" "$1" >&2; exit 1; }
 cd "$(dirname "$0")"
 
 PROXY_NETWORK=""
+INSTALL_SYSTEMD=0
 while [ $# -gt 0 ]; do
     case "$1" in
-        --proxy) PROXY_NETWORK="${2:-}"; shift 2 ;;
+        --proxy)
+            [ -n "${2:-}" ] || die "--proxy necesita el nombre de la red Docker."
+            PROXY_NETWORK="$2"; shift 2 ;;
+        --systemd) INSTALL_SYSTEMD=1; shift ;;
         -h|--help) grep '^#' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) die "Opción desconocida: $1" ;;
     esac
@@ -118,6 +133,13 @@ chmod 700 "$CHANNEL_DIR"
 set_kv UPDATE_CHANNEL_DIR "./.update-channel"
 
 # --- Modo proxy externo: unir el backend a la red del proxy ---
+# Una instalación con proxy no debe perderlo por volver a ejecutar el script
+# sin --proxy: se reutiliza la red que ya figura en .env.
+if [ -z "$PROXY_NETWORK" ]; then
+    PROXY_NETWORK="$(grep -E '^PROXY_NETWORK=' .env | tail -n 1 | cut -d= -f2- || true)"
+    [ -z "$PROXY_NETWORK" ] || \
+        info "Modo proxy conservado: .env ya define PROXY_NETWORK=$PROXY_NETWORK."
+fi
 if [ -n "$PROXY_NETWORK" ]; then
     docker network inspect "$PROXY_NETWORK" >/dev/null 2>&1 || \
         die "No existe la red Docker '$PROXY_NETWORK'. Véala con: docker network ls"
@@ -133,10 +155,17 @@ if [ -n "$PROXY_NETWORK" ]; then
     # El puerto deja de publicarse hacia la LAN: el proxy entra por la red Docker.
     set_kv API_BIND_ADDRESS    "127.0.0.1"
 
+    # Compose lee COMPOSE_FILE del .env: así los comandos a mano
+    # (`docker compose up -d`, `ps`, `logs`), el botón "Actualizar" y el
+    # respaldo usan los mismos archivos que esta instalación, sin -f.
+    set_kv COMPOSE_FILE        "docker-compose.yml:deploy/docker-compose.proxy.yml"
+
     info "Backend conectado a la red '$PROXY_NETWORK' (confía en $PROXY_SUBNET)."
     COMPOSE_FILES="-f docker-compose.yml -f deploy/docker-compose.proxy.yml"
 else
     COMPOSE_FILES="-f docker-compose.yml"
+    # Sin red de proxy, un COMPOSE_FILE con el overlay haría fallar a Compose.
+    sed -i '/^COMPOSE_FILE=.*docker-compose\.proxy\.yml/d' .env
     # Modo local: el panel queda solo en 127.0.0.1 del host. Para exponerlo use
     # un proxy externo con --proxy (ver docs/PUBLIC_ACCESS.md).
     set_kv API_BIND_ADDRESS    "127.0.0.1"
@@ -167,10 +196,39 @@ else
         "$GRN" "$NC" "$YLW" "$API_PORT_VAL" "$NC"
     info "Solo accesible desde el propio host. Para exponerlo: sudo ./install.sh --proxy <red>"
 fi
-if [ ! -f /etc/systemd/system/oxidized-ai-manager-updater.path ]; then
+# --- Unidades de systemd (solo con --systemd) ---
+# Las unidades de deploy/ traen la ruta canónica /opt/oxidized-ai-manager; aquí
+# se sustituye por la ruta real del repositorio. Idempotente: reescribe las
+# cuatro unidades y vuelve a habilitar, sin duplicar nada.
+UNIT_DIR=/etc/systemd/system
+CANONICAL_DIR=/opt/oxidized-ai-manager
+if [ "$INSTALL_SYSTEMD" -eq 1 ]; then
+    [ "$IS_ROOT" -eq 1 ] || die "--systemd requiere root (sudo ./install.sh --systemd)."
+    command -v systemctl >/dev/null 2>&1 || die "--systemd: no se encontró systemctl."
+    REPO_DIR="$(pwd -P)"
+    # systemd no admite espacios sin escapar en estas rutas y sed usa '|'.
+    case "$REPO_DIR" in
+        *[[:space:]]*|*'|'*|*'&'*|*'\'*) die "--systemd: la ruta '$REPO_DIR' tiene caracteres no admitidos." ;;
+    esac
+    for unit in oxidized-ai-manager-updater.path oxidized-ai-manager-updater.service \
+                oxidized-ai-manager-backup.service oxidized-ai-manager-backup.timer; do
+        sed "s|$CANONICAL_DIR|$REPO_DIR|g" "deploy/$unit" > "$UNIT_DIR/$unit"
+        chmod 644 "$UNIT_DIR/$unit"
+    done
+    chmod +x scripts/*.sh
+    systemctl daemon-reload
+    systemctl enable --now oxidized-ai-manager-updater.path >/dev/null
+    info "Unidades instaladas para $REPO_DIR; botón \"Actualizar\" activo."
+    if [ -f /etc/oxidized-ai-manager-backup.env ]; then
+        systemctl enable --now oxidized-ai-manager-backup.timer >/dev/null
+        info "Respaldo diario activo (oxidized-ai-manager-backup.timer)."
+    else
+        warn "Respaldo diario NO activado: falta /etc/oxidized-ai-manager-backup.env con BACKUP_PASSPHRASE."
+        printf '      Ver docs/BACKUP_RESTORE.md y luego: sudo systemctl enable --now oxidized-ai-manager-backup.timer\n'
+    fi
+elif [ ! -f "$UNIT_DIR/oxidized-ai-manager-updater.path" ]; then
     warn "El botón \"Actualizar\" del panel necesita las unidades del anfitrión:"
-    printf '      sudo cp deploy/oxidized-ai-manager-updater.{path,service} /etc/systemd/system/\n'
-    printf '      sudo systemctl daemon-reload && sudo systemctl enable --now oxidized-ai-manager-updater.path\n'
+    printf '      sudo ./install.sh --systemd      (o a mano: docs/UPDATES.md)\n'
 fi
 info "Usuario: admin"
 if [ -n "$ADMIN_PASSWORD" ]; then

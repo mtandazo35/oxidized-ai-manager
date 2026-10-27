@@ -4,6 +4,8 @@ After=docker.service
 Requires=docker.service
 
 [Service]
+# Ruta canónica: /opt/oxidized-ai-manager. Si el repositorio vive en otra,
+# `sudo ./install.sh --systemd` instala estas unidades con la ruta real.
 Type=oneshot
 WorkingDirectory=/opt/oxidized-ai-manager
 # La frase de cifrado va en un archivo aparte con permisos 600, NUNCA aquí:

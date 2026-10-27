@@ -8,14 +8,19 @@ StartLimitIntervalSec=120
 StartLimitBurst=3
 
 [Service]
+# Ruta canónica: /opt/oxidized-ai-manager. Si el repositorio vive en otra,
+# `sudo ./install.sh --systemd` instala estas unidades con la ruta real.
 Type=oneshot
-WorkingDirectory=/root/oxidized-ai-manager
-Environment=PROJECT_DIR=/root/oxidized-ai-manager
-Environment=CHANNEL_DIR=/root/oxidized-ai-manager/.update-channel
+WorkingDirectory=/opt/oxidized-ai-manager
+Environment=PROJECT_DIR=/opt/oxidized-ai-manager
+Environment=CHANNEL_DIR=/opt/oxidized-ai-manager/.update-channel
 Environment=UPDATE_BRANCH=main
+# Opcional: exigir que origin/main esté firmado (git verify-commit) por una
+# clave del llavero de root. Ver docs/UPDATES.md antes de activarlo.
+#Environment=UPDATE_REQUIRE_SIGNED=1
 # La frase de cifrado del respaldo previo, si la tiene configurada.
 EnvironmentFile=-/etc/oxidized-ai-manager-backup.env
-ExecStart=/root/oxidized-ai-manager/scripts/apply-update.sh
+ExecStart=/opt/oxidized-ai-manager/scripts/apply-update.sh
 # Deja el fallo por escrito y consume la petición, para que el panel no se
 # quede colgado en "actualizando…" ni la unidad .path entre en bucle.
-ExecStopPost=/root/oxidized-ai-manager/scripts/update-failed.sh
+ExecStopPost=/opt/oxidized-ai-manager/scripts/update-failed.sh

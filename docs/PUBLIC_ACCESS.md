@@ -24,13 +24,31 @@ El instalador:
 - escribe en `.env` `PROXY_NETWORK` y `FORWARDED_ALLOW_IPS` (la subred de esa
   red, lo único en lo que uvicorn confiará para leer `X-Forwarded-For`),
 - deja `API_BIND_ADDRESS=127.0.0.1` (el puerto ya no sale a la LAN),
+- escribe `COMPOSE_FILE=docker-compose.yml:deploy/docker-compose.proxy.yml`,
 - levanta el stack con `deploy/docker-compose.proxy.yml`.
 
-Manualmente es lo mismo:
+`COMPOSE_FILE` es lo que hace que el overlay **no se pierda**: Compose lo lee del
+`.env` del directorio actual, así que un `docker compose up -d` a mano, el
+botón «Actualizar» del panel y el respaldo cargan los mismos dos archivos que
+la instalación. Sin él, cualquier `up` sin `-f` recrearía el backend fuera de
+la red de NPM. Volver a ejecutar `install.sh` sin `--proxy` conserva el modo
+proxy mientras `.env` tenga `PROXY_NETWORK`.
+
+Manualmente es lo mismo (desde el directorio del repositorio):
 
 ```bash
-docker compose -f docker-compose.yml -f deploy/docker-compose.proxy.yml up -d
+# en .env:
+#   PROXY_NETWORK=npm_default
+#   FORWARDED_ALLOW_IPS=<subred de esa red>
+#   COMPOSE_FILE=docker-compose.yml:deploy/docker-compose.proxy.yml
+docker compose up -d
 ```
+
+**Instalaciones anteriores** a `COMPOSE_FILE` (tienen `PROXY_NETWORK` pero no esa
+línea): añádala, o vuelva a ejecutar `sudo ./install.sh --proxy <red>`. El
+script de actualización la añade solo, pero la actualización que trae ese
+cambio todavía la ejecuta el script anterior; ver
+[UPDATES.md](UPDATES.md#mismos-archivos-de-compose-que-la-instalación).
 
 ## 2. Crear el Proxy Host en NPM
 
@@ -117,8 +135,9 @@ host aparte solo para `/health/*`.
 
 ```bash
 cd /opt/oxidized-ai-manager
-docker compose -f docker-compose.yml -f deploy/docker-compose.proxy.yml ps
-docker compose -f docker-compose.yml -f deploy/docker-compose.proxy.yml logs --tail=100 backend
+docker compose ps                       # COMPOSE_FILE del .env ya incluye el overlay
+docker compose logs --tail=100 backend
+docker network inspect npm_default --format '{{range .Containers}}{{.Name}} {{end}}'   # el backend debe figurar
 ```
 
 Para cambiar la clave del panel: menú de usuario, o

@@ -20,9 +20,13 @@ demás dependencias por sí mismo):
 
 ```bash
 sudo apt-get update && sudo apt-get install -y git && \
-git clone https://github.com/mtandazo35/oxidized-ai-manager.git && \
-cd oxidized-ai-manager && sudo ./install.sh
+sudo git clone https://github.com/mtandazo35/oxidized-ai-manager.git /opt/oxidized-ai-manager && \
+cd /opt/oxidized-ai-manager && sudo ./install.sh --systemd
 ```
+
+`/opt/oxidized-ai-manager` es la ruta canónica (la de las unidades de
+`deploy/` y la documentación). `--systemd` instala además las unidades del
+botón «Actualizar» y del respaldo diario con la ruta real del repositorio.
 
 El script instala Docker/Compose si faltan, genera `.env` con secretos
 aleatorios, aplica el ajuste de kernel para Redis, levanta el stack e imprime la
@@ -189,7 +193,8 @@ En **Configuración → Versión y actualizaciones** (solo administrador) se
 compara el commit desplegado con `origin/main` y se aplica la nueva versión con
 un botón. El contenedor **no** se reconstruye a sí mismo: deja una petición y
 la aplica una unidad de systemd del anfitrión, que respalda antes y nunca toca
-los volúmenes. Instalación de esa unidad y detalles en
+los volúmenes; si la versión nueva no construye o no arranca, vuelve sola a la
+anterior. La unidad se instala con `sudo ./install.sh --systemd`; detalles en
 [docs/UPDATES.md](docs/UPDATES.md).
 
 ## Respaldo de la plataforma
@@ -225,6 +230,30 @@ python3 -m venv .venv
 
 Las pruebas usan dobles para las dependencias; no necesitan contenedores ni routers reales.
 
+## Diseño del panel (Tailwind CSS)
+
+Los estilos del panel se escriben en `panel/panel.css` con **Tailwind CSS 4** y se
+compilan dentro del propio `backend/app/static/index.html`, entre los marcadores
+`tailwind:begin` y `tailwind:end`. La CSP no admite CDN ni hojas de terceros, así
+que el CSS generado viaja dentro del archivo y **el despliegue no necesita Node**:
+solo hace falta para cambiar el diseño.
+
+```bash
+cd panel
+npm install
+npm run build     # compila e incrusta el CSS (o `npm run watch` mientras se edita)
+```
+
+Para ver el panel sin Docker ni PostgreSQL hay un servidor de demostración con
+datos de ejemplo en memoria y un repositorio de respaldos temporal:
+
+```bash
+.venv/bin/pip install -r backend/requirements-dev.txt
+.venv/bin/python panel/dev_server.py      # http://127.0.0.1:8000 — admin / demo-admin-123
+```
+
+Es solo para desarrollo: no guarda nada y la clave es fija.
+
 ## Documentación
 
 - [Contexto del proyecto](docs/PROJECT_CONTEXT.md)
@@ -238,6 +267,7 @@ Las pruebas usan dobles para las dependencias; no necesitan contenedores ni rout
 - [Respaldos de RouterOS completos (truncamiento y secretos)](docs/ROUTEROS_RESPALDO_COMPLETO.md)
 - [Actualizaciones desde el panel](docs/UPDATES.md)
 - [Seguridad](docs/SECURITY.md)
+- [QA del proyecto (pendientes)](docs/QA_README.md)
 - [Detalles de la Fase 1](docs/PHASE1.md)
 - [Detalles de la Fase 2 (inventario)](docs/PHASE2.md)
 - [Detalles de la Fase 3 (respaldos Git y eventos)](docs/PHASE3.md)
