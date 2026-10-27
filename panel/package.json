@@ -1,0 +1,14 @@
+{
+  "name": "oxidized-ai-manager-panel",
+  "private": true,
+  "description": "Compila los estilos del panel con Tailwind CSS y los incrusta en backend/app/static/index.html.",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "watch": "node build.mjs --watch"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "4.3.3",
+    "tailwindcss": "4.3.3"
+  }
+}

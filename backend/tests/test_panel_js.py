@@ -174,3 +174,127 @@ def test_los_totales_de_auditoria_cuentan_lo_que_se_ve() -> None:
     assert re.search(r"const risky = rows\.filter", render), (
         "el recuento de riesgo sigue mirando el inventario entero"
     )
+
+
+# --- Regresiones de la QA -------------------------------------------------
+
+
+def test_ningun_manejador_de_eventos_en_linea() -> None:
+    """Los `onclick="fn('${esc(x)}')"` permitían XSS: `esc` no escapaba
+    comillas y un nombre de usuario como `x');alert(1);('` se convertía en
+    código. Además la CSP ya no admite manejadores en línea, así que uno
+    nuevo dejaría el botón muerto sin ningún error visible."""
+    html = PANEL.read_text(encoding="utf-8")
+    en_linea = re.findall(r"""\son[a-z]+\s*=\s*["'`$]""", html)
+
+    assert not en_linea, f"Manejadores en línea en el panel: {en_linea[:5]}"
+
+
+def test_esc_escapa_comillas_y_angulares() -> None:
+    js = panel_js()
+    cuerpo = re.search(r"const ESC_MAPA = \{(.*?)\};", js, re.S)
+
+    assert cuerpo, "esc() ya no usa ESC_MAPA: revise que siga escapando comillas"
+    for caracter, entidad in (("&", "&amp;"), ("<", "&lt;"), (">", "&gt;"),
+                              ('"', "&quot;"), ("'", "&#39;")):
+        assert entidad in cuerpo.group(1), f"esc() no escapa {caracter!r}"
+    assert "innerText" not in re.search(r"function esc\(value\) \{(.*?)\n\}", js, re.S).group(1)
+
+
+def test_esc_ejecutado_en_node() -> None:
+    """Además de leer el código, se ejecuta: es la función que protege todo."""
+    import json
+    import shutil
+    import subprocess
+
+    import pytest
+
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node no está instalado")
+    js = panel_js()
+    mapa = re.search(r"const ESC_MAPA = \{.*?\};", js, re.S).group(0)
+    funcion = re.search(r"function esc\(value\) \{.*?\n\}", js, re.S).group(0)
+    ataque = """x" onmouseover="alert(1)' <script>&"""
+    programa = f"{mapa}\n{funcion}\nprocess.stdout.write(esc({json.dumps(ataque)}));"
+    salida = subprocess.run([node, "-e", programa], capture_output=True, text=True, check=True).stdout
+
+    assert salida == "x&quot; onmouseover=&quot;alert(1)&#39; &lt;script&gt;&amp;"
+
+
+def test_toda_accion_de_los_botones_tiene_su_funcion() -> None:
+    """Un `data-accion` sin entrada en ACCIONES es un botón que no hace nada."""
+    js = panel_js()
+    usadas = set(re.findall(r'data-accion="(\w+)"', PANEL.read_text(encoding="utf-8")))
+    definidas = set(re.findall(r"^  (\w+): \(el\) =>", re.search(
+        r"const ACCIONES = \{(.*?)\n\};", js, re.S).group(1), re.M))
+
+    assert usadas, "no se encontró ningún data-accion"
+    assert not usadas - definidas, f"acciones sin función: {sorted(usadas - definidas)}"
+
+
+def test_sin_dialogos_nativos_del_navegador() -> None:
+    """prompt(), alert() y confirm() no siguen el diseño ni el tema."""
+    js = re.sub(r"//.*", "", panel_js())
+
+    assert not re.search(r"(?<![\w.])(prompt|alert|confirm)\(", js)
+
+
+def test_cerrar_sesion_detiene_los_sondeos_y_vacia_la_pantalla() -> None:
+    """Cada ingreso sin recargar sumaba un setInterval y los datos de la
+    cuenta anterior seguían en el DOM para el siguiente usuario."""
+    js = panel_js()
+    limpiar = re.search(r"function limpiarEstado\(\) \{(.*?)\n\}", js, re.S).group(1)
+    entrar = re.search(r"async function enterApp\(\) \{(.*?)\n\}", js, re.S).group(1)
+
+    assert "clearInterval(refreshTimer)" in limpiar
+    assert "clearInterval(fastPollTimer)" in limpiar
+    assert "allDevices = []" in limpiar and "devices-body" in limpiar
+    assert "setInterval(refresh" not in entrar.replace("refreshTimer = setInterval(refresh", "")
+    assert "clearInterval(refreshTimer)" in entrar
+    assert re.search(r'fetch\("/api/auth/logout"', js), "cerrar sesión no revoca el token"
+
+
+def test_el_login_distingue_bloqueo_de_clave_incorrecta() -> None:
+    js = panel_js()
+    login = re.search(r'\$\("login-form"\)\.addEventListener\("submit".*?\n\}\);', js, re.S).group(0)
+
+    assert "429" in login and "403" in login
+
+
+def test_la_carga_masiva_usa_una_sola_peticion() -> None:
+    """Un POST por fila recargaba Oxidized una vez por equipo."""
+    js = panel_js()
+    subir = re.search(r'\$\("btn-upload"\)\.addEventListener\("click".*?\n\}\);', js, re.S).group(0)
+
+    assert "/api/devices/import" in subir
+    assert 'fetch("/api/devices"' not in subir
+    assert "finally" in subir, "un error a mitad dejaba el botón deshabilitado"
+
+
+def test_el_javascript_del_panel_compila(tmp_path) -> None:
+    """Un error de sintaxis deja el panel en blanco (ni siquiera aparece el
+    login) y ninguna prueba del backend lo nota. `node --check` lo detecta."""
+    import shutil
+    import subprocess
+
+    import pytest
+
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node no está instalado")
+    html = PANEL.read_text(encoding="utf-8")
+    for numero, codigo in enumerate(re.findall(r"<script[^>]*>(.*?)</script>", html, re.S)):
+        archivo = tmp_path / f"script{numero}.js"
+        archivo.write_text(codigo, encoding="utf-8")
+        resultado = subprocess.run([node, "--check", str(archivo)], capture_output=True, text=True)
+        assert resultado.returncode == 0, f"script {numero} no compila:\n{resultado.stderr}"
+
+
+def test_cambiar_la_clave_guarda_el_token_nuevo() -> None:
+    """Cambiar la clave invalida las sesiones abiertas; si el panel no se queda
+    con el token que devuelve el servidor, la siguiente llamada da 401."""
+    js = panel_js()
+    form = re.search(r'\$\("pass-form"\)\.addEventListener\("submit".*?\n\}\);', js, re.S).group(0)
+
+    assert "access_token" in form and 'localStorage.setItem("oxm_token"' in form

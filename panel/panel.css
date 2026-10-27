@@ -1,0 +1,582 @@
+/*
+ * Estilos del panel — Tailwind CSS 4.
+ *
+ * Fuente de verdad del diseño. `npm run build` lo compila y lo incrusta en
+ * backend/app/static/index.html (la CSP no permite hojas de terceros ni CDN).
+ *
+ * El script del panel pinta mucho HTML con clases propias (`badge ok`,
+ * `ghost mini`, `finding high`…). Esas clases se definen aquí como
+ * componentes con @apply, para no tener que reescribir el JavaScript; el
+ * marcado estático usa utilidades de Tailwind directamente.
+ *
+ * Criterio visual: colores sólidos y planos, bordes finos, sombras mínimas.
+ * Nada de degradados, brillos, cristal esmerilado ni texto degradado: es una
+ * herramienta de operación de red y tiene que leerse como tal.
+ */
+
+@import "tailwindcss" source(none);
+@source "./.scan/index.html";
+
+/* Modo oscuro por atributo: lo fija el script del <head> (preferencia guardada
+   o la del sistema) y el botón de tema lo alterna. */
+@custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
+
+/* ------------------------------------------------------------------------
+ * Tokens.
+ *
+ * Dos ejes independientes: el TEMA (claro / oscuro) fija los colores de
+ * estado y las sombras; la PALETA (grafito, petróleo, marino, bosque) fija
+ * fondos, texto y acento. Cada paleta define sus dos variantes completas.
+ *
+ * Los nombres --bg, --surface, --ink, --accent-hover… se conservan porque el
+ * script y algunos estilos en línea del marcado los usan directamente.
+ * --accent-hover es el acento legible como TEXTO sobre el fondo.
+ * --------------------------------------------------------------------- */
+@layer base {
+  /* --- Tema claro: estados y sombras --- */
+  :root {
+    color-scheme: light;
+    --bar-h: 60px;
+    --ok-bg: #e3f2e8;    --ok-ink: #2b7a4b;
+    --fail-bg: #f9e5e3;  --fail-ink: #b0372d;
+    --warn-bg: #f8eed6;  --warn-ink: #85570d;
+    --off-bg: rgb(120 120 115 / .12); --off-ink: #62625c;
+    --shadow: 0 1px 2px rgb(0 0 0 / .05);
+    --shadow-pop: 0 12px 32px -12px rgb(0 0 0 / .22);
+    --scrim: rgb(20 20 18 / .45);
+  }
+
+  /* --- Tema oscuro: estados y sombras --- */
+  [data-theme=dark] {
+    color-scheme: dark;
+    --ok-bg: rgb(76 175 122 / .14);   --ok-ink: #6cc792;
+    --fail-bg: rgb(217 83 79 / .16);  --fail-ink: #ee8a83;
+    --warn-bg: rgb(224 160 48 / .15); --warn-ink: #e6b75a;
+    --off-bg: rgb(160 160 155 / .13); --off-ink: #a3a29b;
+    --shadow: none;
+    --shadow-pop: 0 16px 40px -12px rgb(0 0 0 / .7);
+    --scrim: rgb(0 0 0 / .6);
+  }
+
+  /* --- Grafito + ámbar (por defecto) --- */
+  :root, [data-palette=grafito] {
+    --bg: #f6f6f4;  --surface: #ffffff;  --surface-solid: #ffffff;  --surface-2: #f0efeb;
+    --border: #e3e2dd;  --border-strong: #cfcdc6;
+    --ink: #1c1d1f;  --ink-soft: #3d3e40;  --ink-muted: #6b6a64;
+    --accent: #b7791f;  --accent-hover: #8f5d12;  --accent-ink: #ffffff;
+    --accent-soft: rgb(183 121 31 / .11);  --code-bg: #fafaf8;
+  }
+  [data-theme=dark], [data-theme=dark][data-palette=grafito] {
+    --bg: #111315;  --surface: #1a1d21;  --surface-solid: #1a1d21;  --surface-2: #22262b;
+    --border: #2a2f36;  --border-strong: #3a4048;
+    --ink: #e6e4df;  --ink-soft: #c8c6c0;  --ink-muted: #9a9890;
+    --accent: #e0a030;  --accent-hover: #f0b955;  --accent-ink: #1a1406;
+    --accent-soft: rgb(224 160 48 / .13);  --code-bg: #0d0f11;
+  }
+
+  /* --- Pizarra + azul petróleo --- */
+  [data-palette=petroleo] {
+    --bg: #f4f6f6;  --surface: #ffffff;  --surface-solid: #ffffff;  --surface-2: #edf1f1;
+    --border: #dfe5e6;  --border-strong: #c9d2d4;
+    --ink: #172026;  --ink-soft: #34434a;  --ink-muted: #5d6e73;
+    --accent: #1f7a70;  --accent-hover: #17615a;  --accent-ink: #ffffff;
+    --accent-soft: rgb(31 122 112 / .10);  --code-bg: #f8fafa;
+  }
+  [data-theme=dark][data-palette=petroleo] {
+    --bg: #0f1417;  --surface: #172026;  --surface-solid: #172026;  --surface-2: #1e2a31;
+    --border: #26323a;  --border-strong: #34444e;
+    --ink: #e3e9ea;  --ink-soft: #c3cfd2;  --ink-muted: #8fa1a6;
+    --accent: #2fa597;  --accent-hover: #5cc2b5;  --accent-ink: #04201c;
+    --accent-soft: rgb(47 165 151 / .13);  --code-bg: #0a0f11;
+  }
+
+  /* --- Azul marino clásico --- */
+  [data-palette=marino] {
+    --bg: #f3f5f8;  --surface: #ffffff;  --surface-solid: #ffffff;  --surface-2: #edf1f6;
+    --border: #dde3ea;  --border-strong: #c7d0db;
+    --ink: #142033;  --ink-soft: #33425a;  --ink-muted: #5b6b80;
+    --accent: #1f5f9e;  --accent-hover: #184c7f;  --accent-ink: #ffffff;
+    --accent-soft: rgb(31 95 158 / .10);  --code-bg: #f8fafc;
+  }
+  [data-theme=dark][data-palette=marino] {
+    --bg: #0d1520;  --surface: #152030;  --surface-solid: #152030;  --surface-2: #1b293c;
+    --border: #24344a;  --border-strong: #33465f;
+    --ink: #e4e9f0;  --ink-soft: #c3cddb;  --ink-muted: #8d9bb0;
+    --accent: #3b82c4;  --accent-hover: #7fb2e5;  --accent-ink: #ffffff;
+    --accent-soft: rgb(59 130 196 / .15);  --code-bg: #09101a;
+  }
+
+  /* --- Verde bosque --- */
+  [data-palette=bosque] {
+    --bg: #f4f5f1;  --surface: #ffffff;  --surface-solid: #ffffff;  --surface-2: #eef0ea;
+    --border: #dfe3da;  --border-strong: #c9cfc3;
+    --ink: #18201b;  --ink-soft: #36423a;  --ink-muted: #5f6b62;
+    --accent: #2f7a4a;  --accent-hover: #24603a;  --accent-ink: #ffffff;
+    --accent-soft: rgb(47 122 74 / .10);  --code-bg: #f9faf7;
+  }
+  [data-theme=dark][data-palette=bosque] {
+    --bg: #0e1310;  --surface: #161d19;  --surface-solid: #161d19;  --surface-2: #1d2621;
+    --border: #26302a;  --border-strong: #354139;
+    --ink: #e2e7e1;  --ink-soft: #c4ccc4;  --ink-muted: #93a096;
+    --accent: #5aa874;  --accent-hover: #86c79a;  --accent-ink: #0a1a0f;
+    --accent-soft: rgb(90 168 116 / .13);  --code-bg: #0a0e0b;
+  }
+}
+
+@theme inline {
+  --font-sans: ui-sans-serif, system-ui, "Segoe UI Variable Text", "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "Cascadia Code", "SF Mono", Menlo, Consolas, monospace;
+
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-solid: var(--surface-solid);
+  --color-surface-2: var(--surface-2);
+  --color-line: var(--border);
+  --color-line-strong: var(--border-strong);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-ink-muted: var(--ink-muted);
+  --color-accent: var(--accent);
+  --color-accent-text: var(--accent-hover);
+  --color-accent-ink: var(--accent-ink);
+  --color-ok: var(--ok-ink);
+  --color-fail: var(--fail-ink);
+  --color-warn: var(--warn-ink);
+
+  --animate-pop: pop .14s ease-out;
+  --animate-blink: blink 1.1s steps(1) infinite;
+
+  @keyframes pop {
+    from { opacity: 0; transform: translateY(4px); }
+    to   { opacity: 1; transform: none; }
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+}
+
+/* ------------------------------------------------------------------------
+ * Base
+ * --------------------------------------------------------------------- */
+@layer base {
+  [hidden] { display: none !important; }
+
+  html { -webkit-text-size-adjust: 100%; }
+  body { @apply min-h-screen bg-bg font-sans text-[15px] leading-normal text-ink antialiased; }
+
+  h1 { @apply text-lg font-semibold tracking-tight text-ink; }
+  h2 { @apply mt-8 mb-3 text-base font-semibold tracking-tight text-ink; }
+  h3 { @apply font-semibold; }
+  p { margin: .75em 0; }
+  code { @apply rounded bg-surface-2 px-1.5 py-0.5 font-mono text-[.85em] text-ink-soft; }
+  strong { @apply font-semibold text-ink; }
+  ::selection { background: var(--accent-soft); }
+
+  * { scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
+
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  label { @apply text-sm text-ink-soft; }
+
+  input, select, textarea {
+    @apply rounded-md border border-line-strong bg-surface-solid px-3 py-2 text-sm text-ink transition-colors
+      placeholder:text-ink-muted/70;
+  }
+  [data-theme=dark] input, [data-theme=dark] select, [data-theme=dark] textarea { background-color: var(--bg); }
+  input:focus, select:focus, textarea:focus { @apply border-accent outline-none ring-2 ring-accent/20; }
+  input[type=checkbox] {
+    @apply size-4 cursor-pointer rounded-sm p-0;
+    accent-color: var(--accent);
+  }
+  input[type=file] { @apply border-0 bg-transparent p-0 text-sm text-ink-muted; }
+  input[type=file]::file-selector-button {
+    @apply mr-3 cursor-pointer rounded-md border border-line-strong bg-surface-2 px-3 py-2 text-sm font-medium
+      text-ink-soft hover:text-ink;
+  }
+  select { @apply cursor-pointer pr-8; }
+  optgroup { @apply font-semibold; }
+
+  table { @apply w-full border-collapse text-[13.5px]; }
+  th {
+    @apply border-b border-line-strong px-2.5 py-2 text-left text-[11px] font-semibold tracking-[.06em]
+      whitespace-nowrap text-ink-muted uppercase;
+  }
+  td { @apply border-b border-line px-2.5 py-2 text-left whitespace-nowrap text-ink-soft; }
+  th:first-child, td:first-child { @apply pl-3; }
+  tbody tr:last-child td { border-bottom-color: transparent; }
+  td:last-child { width: 1%; }
+  tbody tr:hover td { background: var(--surface-2); }
+  td:first-child { @apply font-medium text-ink; }
+  td[data-col=address], td[data-col=port] { @apply font-mono text-[13px]; }
+}
+
+/* ------------------------------------------------------------------------
+ * Componentes (clases que pinta el script del panel)
+ * --------------------------------------------------------------------- */
+@layer components {
+  /* Botón por defecto = acción principal. `preguntar()` reasigna className a
+     "" o "danger", así que el estilo tiene que vivir en el elemento. */
+  button {
+    @apply inline-flex cursor-pointer items-center justify-center gap-2 rounded-md border border-transparent
+      bg-accent px-4 py-2 text-sm font-semibold whitespace-nowrap text-accent-ink transition-colors
+      select-none disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  button:hover:not(:disabled) { background-color: color-mix(in srgb, var(--accent) 86%, black); }
+  [data-theme=dark] button:hover:not(:disabled) { background-color: color-mix(in srgb, var(--accent) 88%, white); }
+
+  button.ghost { @apply border-line-strong bg-surface-solid font-medium text-ink-soft; }
+  [data-theme=dark] button.ghost { background-color: var(--surface-2); }
+  button.ghost:hover:not(:disabled),
+  [data-theme=dark] button.ghost:hover:not(:disabled) { @apply text-ink; background-color: var(--accent-soft); border-color: var(--accent); }
+
+  button.danger { @apply border-transparent text-white; background-color: #b8372d; }
+  [data-theme=dark] button.danger { background-color: #c2443a; }
+  button.danger:hover:not(:disabled) { background-color: #9c2c24; }
+  [data-theme=dark] button.danger:hover:not(:disabled) { background-color: #d4554a; }
+  button.mini { @apply gap-1 rounded px-2.5 py-1 text-xs; }
+  button.ghost.mini, button.danger.mini { @apply font-medium; }
+  td > button.mini { @apply px-2; }
+
+  /* Las acciones de Routers se quedan fijas a la derecha: con muchas columnas
+     visibles la tabla se desplaza, pero los botones siempre están a mano. */
+  #tabla-routers th, #tabla-routers td { @apply px-2; }
+  #tabla-routers th:first-child, #tabla-routers td:first-child { @apply pl-3; }
+  @media (min-width: 1024px) {
+    #tabla-routers th:last-child, #tabla-routers td:last-child {
+      @apply sticky right-0 z-1 border-l border-line;
+      background: var(--surface-solid);
+    }
+    #tabla-routers tbody tr:hover td:last-child { background: var(--surface-2); }
+    #tabla-routers .grupo-fila td:last-child { @apply static border-l-0; }
+  }
+
+  .card {
+    @apply overflow-x-auto rounded-lg border border-line bg-surface p-5;
+    box-shadow: var(--shadow);
+  }
+
+  .muted { @apply text-[13px] text-ink-muted; }
+  .msg { @apply my-2 min-h-[1.2em] text-[13px] font-medium; }
+  .msg.err { @apply text-fail; }
+  .msg.ok { @apply text-ok; }
+
+  /* Pastillas de estado: con punto de color delante. */
+  .badge { @apply inline-flex items-center gap-1.5 rounded px-2 py-0.5 text-xs font-semibold whitespace-nowrap; }
+  .badge::before { content: ""; @apply size-1.5 shrink-0 rounded-full bg-current; }
+  .badge.ok   { background: var(--ok-bg);   color: var(--ok-ink); }
+  .badge.fail { background: var(--fail-bg); color: var(--fail-ink); }
+  .badge.off  { background: var(--off-bg);  color: var(--off-ink); }
+  .badge.run  { background: var(--warn-bg); color: var(--warn-ink); }
+  .badge.run::before { animation: var(--animate-blink); }
+  .badge.nuevo { @apply text-white; background: var(--ok-ink); }
+  [data-theme=dark] .badge.nuevo { color: #0b1a10; }
+  /* Respaldo guardado pero sospechoso: botón con forma de pastilla. */
+  button.badge.warn {
+    @apply ml-2 rounded px-2 py-0.5 text-xs font-semibold;
+    background: var(--warn-bg); color: var(--warn-ink);
+  }
+  button.badge.warn:hover:not(:disabled) { background: var(--warn-bg); filter: brightness(.95); }
+  button.badge.warn::before { display: none; }
+
+  /* --- Cabecera y menú de usuario --- */
+  .menu { @apply relative; }
+  .menu-list {
+    @apply absolute top-[calc(100%+6px)] right-0 z-20 flex min-w-44 animate-pop flex-col gap-0.5 rounded-lg border
+      border-line-strong bg-surface-solid p-1.5;
+    box-shadow: var(--shadow-pop);
+  }
+  .menu-list button {
+    @apply w-full justify-start rounded border-0 bg-transparent px-3 py-2 text-left text-sm font-medium
+      text-ink-soft hover:text-ink;
+  }
+  .menu-list button:hover:not(:disabled) { background: var(--surface-2); }
+  .menu-list.user { @apply min-w-60; }
+  .menu-list.user button svg {
+    @apply size-4 flex-none fill-none stroke-ink-muted;
+    stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
+  }
+  .menu-list.user button:hover svg { stroke: var(--accent-hover); }
+  .menu-foot { @apply mt-1.5 border-t border-line px-3 pt-2 pb-1 text-xs; }
+
+  /* Selector de paleta dentro del menú de usuario. */
+  .menu-section { @apply mt-1 border-t border-line px-3 pt-2.5 pb-1.5; }
+  .menu-section-title { @apply mb-2 text-[11px] font-semibold tracking-[.06em] text-ink-muted uppercase; }
+  .paletas { @apply grid grid-cols-4 gap-1.5; }
+  .menu-list .swatch {
+    @apply flex h-auto w-full flex-col items-center gap-1 rounded-md border border-line bg-transparent px-1 py-1.5
+      text-[11px] font-medium text-ink-soft;
+  }
+  .menu-list .swatch:hover:not(:disabled) { background: var(--surface-2); border-color: var(--border-strong); }
+  .menu-list .swatch[aria-pressed=true] { @apply text-ink; border-color: var(--accent); background: var(--accent-soft); }
+  .swatch-color { @apply block h-4 w-full rounded-sm; }
+  .swatch[data-paleta=grafito] .swatch-color { background: linear-gradient(90deg, #22262b 50%, #e0a030 50%); }
+  .swatch[data-paleta=petroleo] .swatch-color { background: linear-gradient(90deg, #1e2a31 50%, #2fa597 50%); }
+  .swatch[data-paleta=marino] .swatch-color { background: linear-gradient(90deg, #1b293c 50%, #3b82c4 50%); }
+  .swatch[data-paleta=bosque] .swatch-color { background: linear-gradient(90deg, #1d2621 50%, #5aa874 50%); }
+
+  .user-btn {
+    @apply gap-2.5 rounded-md border border-transparent bg-transparent py-1 pr-2.5 pl-1 font-semibold text-ink;
+  }
+  .user-btn:hover:not(:disabled) { background: var(--surface-2); border-color: var(--border); }
+  .user-btn .caret { @apply text-[10px] text-ink-muted; }
+  .avatar {
+    @apply inline-grid size-8 place-items-center rounded-md bg-accent text-xs font-bold tracking-wide text-accent-ink;
+  }
+
+  .update-chip { @apply gap-2 rounded-md px-3 py-1.5 text-xs text-white; background: var(--ok-ink); }
+  [data-theme=dark] .update-chip { color: #0b1a10; }
+  .update-chip:hover:not(:disabled) { background: color-mix(in srgb, var(--ok-ink) 85%, black); }
+  .update-chip svg { @apply size-4 fill-none stroke-current; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+  .theme-toggle { @apply size-9 rounded-md border border-line bg-transparent p-0 text-ink-soft hover:text-ink; }
+  .theme-toggle:hover:not(:disabled) { background: var(--surface-2); }
+  .theme-toggle svg { @apply size-4.5 fill-none stroke-current; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .theme-toggle .sol { display: none; }
+  [data-theme=dark] .theme-toggle .sol { display: block; }
+  [data-theme=dark] .theme-toggle .luna { display: none; }
+
+  /* Marca: cuadro sólido del color de acento. */
+  .brand-tile { @apply grid flex-none place-items-center rounded-md bg-accent text-accent-ink; }
+  .brand-tile svg { @apply fill-none stroke-current; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+
+  /* --- Estructura: el <main> se queda sin clases porque las pruebas del
+     panel lo buscan literalmente como `<main>`. --- */
+  .shell > main { @apply mx-auto w-full max-w-[1600px] min-w-0 flex-1 px-4 pt-6 pb-16 sm:px-6 2xl:px-8; }
+  main .card { @apply p-4 2xl:p-5; }
+
+  /* Cabecera de cada pestaña. */
+  .page-head { @apply mb-5 flex flex-wrap items-end justify-between gap-4; }
+  .page-head h2 { @apply m-0 text-[22px] font-semibold tracking-tight text-ink; }
+  .page-head p { @apply mt-1 mb-0 text-sm text-ink-muted; }
+  .eyebrow { @apply mb-1 text-[11px] font-semibold tracking-[.08em] text-accent-text uppercase; }
+
+  /* --- Barra lateral --- */
+  nav.tabs button {
+    @apply relative min-h-9 w-full justify-start gap-3 rounded-md border-0 bg-transparent px-3 py-2 text-left
+      text-sm font-medium text-ink-muted hover:text-ink;
+  }
+  nav.tabs button:hover:not(:disabled) { background: var(--surface-2); }
+  nav.tabs button svg {
+    @apply size-4.5 flex-none fill-none stroke-current;
+    stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round;
+  }
+  nav.tabs button.active { @apply font-semibold text-ink; background: var(--accent-soft); }
+  nav.tabs button.active:hover:not(:disabled) { background: var(--accent-soft); }
+  nav.tabs button.active svg { stroke: var(--accent-hover); }
+  nav.tabs button.active::before {
+    content: ""; @apply absolute top-1.5 bottom-1.5 left-0 hidden w-[3px] rounded-r-sm bg-accent min-[861px]:block;
+  }
+
+  /* --- Filtros sobre las tablas --- */
+  .table-tools { @apply mb-4 flex flex-wrap items-center gap-2; }
+  .table-tools > input[type=search] { margin-left: auto; }
+  .table-tools > input[type=search]:first-child { margin-left: 0; }
+  @media (max-width: 700px) { .table-tools > input[type=search] { margin-left: 0; } }
+
+  .col-menu { @apply relative; }
+  .col-menu > summary {
+    @apply flex cursor-pointer list-none items-center gap-1 rounded-md border border-line-strong bg-surface-solid px-3
+      py-2 text-sm font-medium text-ink-soft select-none hover:text-ink;
+  }
+  [data-theme=dark] .col-menu > summary { background-color: var(--surface-2); }
+  .col-menu > summary::-webkit-details-marker { display: none; }
+  .col-menu > summary::after { content: "▾"; @apply text-[10px] text-ink-muted; }
+  .col-menu-panel {
+    @apply absolute right-0 z-30 mt-1.5 flex min-w-48 animate-pop flex-col gap-1 rounded-lg border border-line-strong
+      bg-surface-solid p-2;
+    box-shadow: var(--shadow-pop);
+  }
+  .col-menu-panel label {
+    @apply flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-sm whitespace-nowrap hover:bg-surface-2;
+  }
+  .col-menu-panel button { @apply mt-1; }
+  #tabla-routers [data-col][hidden] { display: none; }
+
+  /* Cabecera de grupo dentro de la tabla, al estilo de Winbox. */
+  .grupo-fila td {
+    @apply border-b border-line-strong px-3 py-1.5 text-xs font-semibold tracking-wide text-ink uppercase;
+    background: var(--surface-2);
+  }
+  .grupo-fila:hover td { background: var(--surface-2); }
+  .grupo-fila .cuenta {
+    @apply ml-1.5 rounded px-1.5 py-0.5 text-[11px] font-semibold text-accent-text normal-case;
+    background: var(--accent-soft);
+  }
+
+  .field { @apply flex items-center gap-2; }
+
+  /* --- Ventanas --- */
+  .overlay {
+    @apply fixed inset-0 z-30 grid place-items-center overflow-y-auto p-4;
+    background: var(--scrim);
+  }
+  .overlay > .card {
+    @apply relative max-h-[calc(100vh-2rem)] w-[min(400px,100%)] animate-pop overflow-y-auto border-line-strong p-6;
+    background: var(--surface-solid);
+    box-shadow: var(--shadow-pop);
+  }
+  .overlay > .card > input, .overlay > .card > select,
+  .overlay > .card > form > input, .overlay > .card > form > select { @apply mb-3 w-full; }
+  .overlay > .card > label { @apply mt-1 block text-[13px] font-medium; }
+  .overlay > .card.wide { width: min(940px, 100%); }
+  .overlay > .card.xwide { width: min(1020px, 100%); }
+  .overlay > .card.mwide { width: min(640px, 100%); }
+  .modal-head { @apply mb-4 flex items-center justify-between gap-4 border-b border-line pb-4; }
+  .modal-head h1 { @apply text-lg; }
+  .modal-body { @apply max-h-[72vh] overflow-y-auto pr-1.5; }
+  .modal-body > h2:first-child { margin-top: 0; }
+  .modal-body > h2 { @apply mt-6 text-xs tracking-[.06em] text-ink-muted uppercase; }
+  .modal-body .card { @apply w-auto overflow-visible border-0 bg-transparent p-0 shadow-none; }
+  .modal-body .card + .card { @apply mt-4 border-t border-line pt-4; }
+  .modal-body input:not([type=checkbox]), .modal-body select, .modal-body textarea { @apply mb-0 w-auto; }
+  .modal-body input[type=number] { width: 96px; }
+  .modal-body .field { @apply flex-wrap; }
+  .modal-body .field label { @apply whitespace-normal; }
+
+  #hist-overlay { z-index: 40; }
+  #ask-overlay, #input-overlay, #update-overlay { z-index: 50; }
+
+  /* Diálogos propios (confirmar, pedir un dato): sustituyen a confirm() y
+     prompt() del navegador, que no siguen el diseño ni el tema. */
+  .overlay > .card.dialogo { width: min(460px, 100%); }
+  .dialogo-head { @apply flex items-start gap-4; }
+  .dialogo-head h1 { @apply text-lg leading-snug; }
+  .dialogo-icono {
+    @apply grid size-10 flex-none place-items-center rounded-md text-accent-text;
+    background: var(--accent-soft);
+  }
+  .dialogo-icono.peligro { color: var(--fail-ink); background: var(--fail-bg); }
+  .dialogo-icono svg { @apply size-5 fill-none stroke-current; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+  .dialogo-acciones { @apply mt-6 flex justify-end gap-2 border-t border-line pt-4; }
+  button.ojo {
+    @apply absolute top-1/2 right-1.5 size-8 -translate-y-1/2 rounded border-0 bg-transparent p-0 text-ink-muted
+      hover:text-ink;
+  }
+  button.ojo:hover:not(:disabled) { background: var(--surface-2); }
+  button.ojo svg { @apply size-4.5 fill-none stroke-current; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+  /* --- Historial de versiones y diff --- */
+  .version-list { @apply mb-3 flex max-h-44 flex-col gap-1 overflow-y-auto pr-1; }
+  .version-list .vrow { @apply flex items-center gap-1.5; }
+  .version-list .vrow > button:first-child {
+    @apply flex-1 justify-start border-line bg-surface-2 text-left font-mono text-xs font-medium text-ink-soft;
+  }
+  .version-list .vrow > button:first-child:hover:not(:disabled) { background: var(--accent-soft); }
+  .version-list .vrow > button:first-child.sel { @apply text-ink; border-color: var(--accent); background: var(--accent-soft); }
+  .version-list .mini { @apply px-2 py-1.5 text-[11px]; }
+
+  pre.diff {
+    @apply m-0 max-h-[52vh] overflow-auto rounded-md border border-line py-3 font-mono text-[12.5px] leading-relaxed
+      whitespace-pre text-ink-soft;
+    background: var(--code-bg);
+  }
+  pre.diff .dline { @apply block min-h-[1.5em] px-4; }
+  .dadd { color: var(--ok-ink); background: var(--ok-bg); box-shadow: inset 3px 0 0 var(--ok-ink); }
+  .ddel { color: var(--fail-ink); background: var(--fail-bg); box-shadow: inset 3px 0 0 var(--fail-ink); }
+  .dhunk { @apply text-accent-text; background: var(--accent-soft); }
+  .dmeta { @apply text-ink-muted; }
+
+  /* --- Auditoría --- */
+  .sev { @apply inline-flex items-center rounded px-2 py-0.5 text-xs font-semibold; }
+  .sev.critical { background: var(--fail-bg); color: var(--fail-ink); }
+  .sev.high     { background: rgb(214 110 40 / .14); color: #b0561c; }
+  .sev.medium   { background: var(--warn-bg); color: var(--warn-ink); }
+  .sev.low      { background: var(--off-bg); color: var(--ink-soft); }
+  .sev.ok       { background: var(--ok-bg); color: var(--ok-ink); }
+  .sev.unknown  { background: var(--off-bg); color: var(--off-ink); }
+  [data-theme=dark] .sev.high { color: #ec9a5e; }
+  .scorebar { @apply h-1.5 w-24 overflow-hidden rounded-full bg-line-strong; }
+  .scorebar > span { @apply block h-full rounded-full; }
+
+  .finding {
+    @apply mb-2.5 rounded-md border border-l-[3px] border-line border-l-line-strong p-4;
+    background: var(--surface-2);
+  }
+  .finding.critical { border-left-color: var(--fail-ink); }
+  .finding.high     { border-left-color: #c96a2c; }
+  .finding.medium   { border-left-color: var(--warn-ink); }
+  .finding.low      { border-left-color: var(--ink-muted); }
+  .finding h3 { @apply m-0 mb-2 flex flex-wrap items-center gap-2 text-sm text-ink; }
+  .finding .ev {
+    @apply my-1 block rounded px-2.5 py-1.5 font-mono text-xs break-all whitespace-pre-wrap text-ink-soft;
+    background: var(--code-bg);
+  }
+  .finding .rec { @apply mt-2 mb-0 text-[13px] text-ink-muted; }
+  #findings-view { @apply max-h-[58vh] overflow-y-auto pr-1; }
+
+  /* --- Mi cuenta --- */
+  .account-row { @apply flex justify-between gap-4 border-b border-line py-2.5 text-sm; }
+  .account-row:last-child { @apply border-b-0; }
+  .account-row span:first-child { @apply text-ink-muted; }
+  .account-row span:last-child { @apply font-medium text-ink; }
+
+  /* --- Ajustes del sistema: mosaico de secciones --- */
+  .hub { @apply grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-3 py-1; }
+  .hub-item {
+    @apply relative flex h-auto flex-col items-start justify-start gap-4 rounded-lg border border-line bg-surface p-5
+      text-left text-[15px] leading-snug font-semibold whitespace-normal text-ink;
+    box-shadow: var(--shadow);
+  }
+  .hub-item::after { content: "→"; @apply absolute top-5 right-5 text-ink-muted; }
+  .hub-item:hover:not(:disabled) { background: var(--surface-solid); border-color: var(--accent); }
+  .hub-item:hover::after { @apply text-accent-text; }
+  .hub-item .disc { @apply grid size-11 place-items-center rounded-md text-accent-text; background: var(--accent-soft); }
+  .hub-item svg { @apply size-5.5 fill-none stroke-current; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .hub-item .badge { @apply mt-0.5; }
+
+  /* --- Versión y actualizaciones --- */
+  .spinner {
+    @apply mx-auto size-10 animate-spin rounded-full border-[3px] border-line-strong;
+    border-top-color: var(--accent);
+  }
+  .cuenta-atras { @apply text-4xl leading-tight font-bold text-accent-text tabular-nums; }
+  .ver-num { @apply flex items-baseline gap-2; }
+  .ver-num span { @apply text-3xl font-bold tracking-tight text-ink; }
+  .ver-num code { @apply text-xs text-ink-muted; }
+  .ver-linea { @apply flex items-center justify-between gap-4 border-b border-line py-3; }
+  .ver-linea:first-child { @apply pt-0; }
+  .ver-acciones { @apply mt-4 flex flex-wrap justify-center gap-2; }
+  .ver-aviso { @apply mt-4 mb-1 flex items-center justify-center gap-2 text-base font-semibold text-ok; }
+  .ver-aviso svg { @apply size-5 fill-none stroke-current; stroke-width: 2; stroke-linecap: round; }
+  .changes-head {
+    @apply mt-4 rounded-t-md border border-line px-3 py-2 text-center text-xs font-semibold tracking-wide text-ink-soft
+      uppercase;
+    background: var(--surface-2);
+  }
+  .change-list {
+    @apply m-0 max-h-60 list-none overflow-y-auto rounded-b-md border border-t-0 border-line bg-surface-solid py-1 text-sm;
+  }
+  .change-list li { @apply flex items-baseline gap-2.5 px-3 py-2; }
+  .change-list li + li { @apply border-t border-line; }
+  .change-list .tipo { @apply flex-[0_0_84px] text-xs font-semibold; }
+  .change-list .tipo.nuevo { @apply text-accent-text; }
+  .change-list .tipo.correccion { @apply text-warn; }
+  .change-list .tipo.mejora { @apply text-ink-muted; }
+  .change-list .fecha { @apply ml-auto flex-none text-xs text-ink-muted; }
+
+  #avisos-lista { list-style: disc; }
+
+  /* --- Tarjetas de resumen (Routers) --- */
+  .kpi { @apply relative rounded-lg border border-line bg-surface p-4; box-shadow: var(--shadow); }
+  .kpi-icon {
+    @apply grid size-9 place-items-center rounded-md;
+    color: var(--kpi-color, var(--accent));
+    background: color-mix(in srgb, var(--kpi-color, var(--accent)) 14%, transparent);
+  }
+  .kpi-icon svg { @apply size-4.5 fill-none stroke-current; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+  .kpi-value { @apply mt-2 text-3xl font-semibold tracking-tight text-ink tabular-nums; }
+  .kpi-label { @apply text-xs font-semibold tracking-[.06em] text-ink-muted uppercase; }
+  .kpi-bar { @apply mt-3 h-1.5 overflow-hidden rounded-full bg-line; }
+  .kpi-bar > span {
+    @apply block h-full w-0 rounded-full transition-[width] duration-500;
+    background: var(--kpi-color, var(--accent));
+  }
+
+  /* --- Pantalla de entrada --- */
+  .login-feature svg { @apply size-4.5 fill-none stroke-current; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .feature-icon { @apply grid size-9 flex-none place-items-center rounded-md border border-line bg-surface text-accent-text; }
+  .login-form input { @apply mb-0 w-full py-2.5; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after { animation: none !important; transition: none !important; }
+}
