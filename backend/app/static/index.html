@@ -251,6 +251,7 @@
         <p>Último evento de cada equipo, su último éxito y el commit guardado.</p>
       </div>
     </div>
+    <p class="msg" id="estado-progreso" role="status" aria-live="polite" hidden></p>
     <div class="card">
       <div class="table-tools">
         <input id="filter-text-estado" type="search" placeholder="Buscar…" title="Filtra por nombre, identity, IP, puerto, plataforma, versión, usuario o grupo" class="w-56">
@@ -1127,24 +1128,62 @@ function setMsg(id, text, ok) {
 const pendingBackups = {};
 // Nodos de la última tanda de respaldo masivo, para mostrar su avance en vivo
 // en la propia sección (no solo en la pestaña Estado de respaldos).
+// `bulkRunNodes` guarda la tanda EN EL ORDEN en que oxidized la procesará
+// (un Set itera en orden de inserción). Oxidized corre con `threads: 1`, así
+// que respalda de uno en uno siguiendo ese orden: por eso podemos decir por
+// dónde va. `bulkRunBaseline` es la "firma" de cada nodo al empezar (estado +
+// fechas de oxidized); cuando cambia, ese nodo ya se procesó en esta tanda.
 let bulkRunNodes = new Set();
 let bulkRunFallidos = [];
+let bulkRunStart = 0;
+let bulkRunBaseline = {};
+let bulkActivo = null;
+
+function firmaOx(name) {
+  const ox = statusCache.oxByNode[name];
+  return ox ? `${ox.status}|${ox.time}|${ox.mtime}` : "";
+}
+
+// ¿Este nodo ya se procesó en la tanda actual? Sí si llegó un evento nuevo
+// (posterior al inicio) o si su firma de oxidized cambió respecto al inicio.
+function nodoProcesadoEnTanda(name) {
+  const ev = statusCache.evByNode[name];
+  if (ev && new Date(ev.last_event_at).getTime() > bulkRunStart) return true;
+  return firmaOx(name) !== (bulkRunBaseline[name] || "");
+}
+
+function avanceMasivo() {
+  const orden = [...bulkRunNodes];
+  const procesados = orden.filter(nodoProcesadoEnTanda);
+  // Con threads:1 el que está en curso es el primero de la cola sin procesar.
+  const activo = orden.find((n) => !nodoProcesadoEnTanda(n)) || null;
+  return { orden, total: orden.length, procesados: procesados.length, activo };
+}
 
 function actualizarEstadoMasivo() {
-  if (!bulkRunNodes.size) return;
-  const enProceso = [...bulkRunNodes].filter((n) => pendingBackups[n]);
-  const total = bulkRunNodes.size;
+  if (!bulkRunNodes.size) { bulkActivo = null; return; }
+  const { total, procesados, activo } = avanceMasivo();
+  bulkActivo = activo;
   const colaFallida = bulkRunFallidos.length
     ? ` No se encolaron: ${bulkRunFallidos.join(", ")}.` : "";
-  if (enProceso.length) {
-    setMsg("bulk-run-msg",
-      `Respaldo masivo en proceso: ${total - enProceso.length} de ${total} terminados, `
-      + `${enProceso.length} en curso…${colaFallida}`, true);
+  let texto;
+  if (activo) {
+    const enCola = total - procesados - 1;
+    texto = `Respaldo masivo: ${procesados} de ${total} procesados · `
+      + `en curso (${procesados + 1}/${total}): ${activo} · ${enCola} en cola.${colaFallida}`;
   } else {
-    setMsg("bulk-run-msg",
-      `Respaldo masivo terminado: ${total} procesados.${colaFallida}`, true);
+    texto = `Respaldo masivo terminado: ${total} procesados.${colaFallida}`;
     bulkRunNodes = new Set();
     bulkRunFallidos = [];
+    bulkActivo = null;
+  }
+  setMsg("bulk-run-msg", texto, true);
+  // Mismo avance en la pestaña Estado de respaldos.
+  const prog = $("estado-progreso");
+  if (prog) { prog.textContent = texto; prog.hidden = false; }
+  if (!bulkRunNodes.size && prog) {
+    // Al terminar, deja el aviso final visible un momento y luego lo oculta.
+    setTimeout(() => { if (!bulkRunNodes.size) prog.hidden = true; }, 15000);
   }
 }
 let allDevices = [];
@@ -1185,7 +1224,10 @@ function rellenarGrupos(sufijo) {
 }
 
 function currentStateBadge(name, oxByNode) {
-  if (pendingBackups[name]) return '<span class="badge run">respaldando…</span>';
+  if (pendingBackups[name] || name === bulkActivo)
+    return '<span class="badge run">respaldando…</span>';
+  if (bulkRunNodes.has(name) && !nodoProcesadoEnTanda(name))
+    return '<span class="badge off">en cola</span>';
   const ox = oxByNode[name];
   if (!ox) return '<span class="badge off">—</span>';
   if (ox.status === "success") return '<span class="badge ok">OK</span>';
@@ -1542,7 +1584,8 @@ function alEscribir(id, render) {
 
 // Estado actual de un equipo en texto, para agrupar por él.
 function estadoDe(name) {
-  if (pendingBackups[name]) return "Respaldando";
+  if (pendingBackups[name] || name === bulkActivo) return "Respaldando";
+  if (bulkRunNodes.has(name) && !nodoProcesadoEnTanda(name)) return "En cola";
   const ox = statusCache.oxByNode[name];
   if (!ox) return "Sin datos";
   if (ox.status === "success") return "Correctos";
@@ -1615,7 +1658,7 @@ function startFastPoll() {
   if (fastPollTimer) return;
   fastPollTimer = setInterval(async () => {
     await refresh();
-    if (!Object.keys(pendingBackups).length) {
+    if (!Object.keys(pendingBackups).length && !bulkRunNodes.size) {
       clearInterval(fastPollTimer);
       fastPollTimer = null;
     }
@@ -2474,11 +2517,14 @@ async function runBulkBackup(payload) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
-    const now = Date.now();
-    result.queued.forEach((name) => { pendingBackups[name] = now; });
-    // El conjunto de esta tanda, para mostrar su avance en vivo aquí mismo.
+    // El conjunto de esta tanda, EN ORDEN de proceso (oxidized va de uno en
+    // uno). No se marcan todos como "respaldando": el avance se calcula por el
+    // orden real, así se ve cuál está en curso y cuántos quedan en cola.
+    bulkRunStart = Date.now();
     bulkRunNodes = new Set(result.queued);
     bulkRunFallidos = result.failed;
+    bulkRunBaseline = {};
+    result.queued.forEach((name) => { bulkRunBaseline[name] = firmaOx(name); });
     if (result.queued.length) startFastPoll();
     actualizarEstadoMasivo();
     // Confirmación en modal de que la orden se ejecutó.
