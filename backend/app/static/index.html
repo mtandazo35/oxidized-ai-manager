@@ -256,6 +256,7 @@
         <input id="filter-text-estado" type="search" placeholder="Buscar…" title="Filtra por nombre, identity, IP, puerto, plataforma, versión, usuario o grupo" class="w-56">
         <select id="filter-group-estado"><option value="">Todas las empresas</option></select>
         <select id="group-by-estado" title="Agrupa las filas"><option value="">Sin agrupar</option><option value="group_name">Por empresa</option><option value="estado">Por estado actual</option></select>
+        <select id="filter-respaldo-estado" title="Muestra solo los equipos que nunca se respaldaron con éxito, o solo los que sí"><option value="">Respaldados y no</option><option value="no">Solo no respaldados</option><option value="si">Solo respaldados</option></select>
       </div>
       <p class="msg" id="estado-msg" role="status" aria-live="polite"></p>
       <table id="tabla-estado">
@@ -1563,7 +1564,20 @@ function renderStatus() {
     !groupFilter &&
     (!query || node.toLowerCase().includes(query)));
 
-  const names = [...new Set([...visibleDeviceNames, ...orphanNodes])].sort();
+  let names = [...new Set([...visibleDeviceNames, ...orphanNodes])].sort();
+
+  // Filtro "respaldado / no respaldado": un equipo cuenta como respaldado si
+  // oxidized tiene su último intento en `success` o si hay un último éxito
+  // registrado. "never", "sin datos" y "con fallo" son todos "no respaldado".
+  const respaldo = $("filter-respaldo-estado").value;
+  const estaRespaldado = (name) => {
+    const ox = oxByNode[name];
+    if (ox && ox.status === "success") return true;
+    const ev = evByNode[name];
+    return !!(ev && ev.last_success_at);
+  };
+  if (respaldo === "no") names = names.filter((n) => !estaRespaldado(n));
+  else if (respaldo === "si") names = names.filter((n) => estaRespaldado(n));
 
   const fila = (name) => {
         const ev = evByNode[name];
@@ -1587,7 +1601,7 @@ function renderStatus() {
   const grupoDe = agrupar === "group_name" ? (n) => porEmpresa[n]
     : agrupar === "estado" ? (n) => estadoDe(n) : null;
   const pagina = paginar("estado", ordenar("estado", names, grupoDe),
-    [query, groupFilter, agrupar].join("|"));
+    [query, groupFilter, agrupar, respaldo].join("|"));
   $("status-body").innerHTML = !names.length
     ? '<tr><td colspan="7" class="muted">Sin routers registrados.</td></tr>'
     : grupoDe
@@ -1878,6 +1892,7 @@ $("filter-group").addEventListener("change", renderDevices);
 alEscribir("filter-text-estado", renderStatus);
 $("group-by-estado").addEventListener("change", renderStatus);
 $("filter-group-estado").addEventListener("change", renderStatus);
+$("filter-respaldo-estado").addEventListener("change", renderStatus);
 Object.keys(TABLAS).forEach((tabla) => prefsDeFiltros(tabla));
 Object.keys(TABLA_DE).forEach((idTabla) => prepararAnchos(idTabla));
 
