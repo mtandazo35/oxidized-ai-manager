@@ -334,6 +334,21 @@
   [data-theme=dark] .theme-toggle .sol { display: block; }
   [data-theme=dark] .theme-toggle .luna { display: none; }
 
+  /* Marca «MIKROTIK — BACKUP», como el logo (panel/marca/). Sus colores son
+     fijos: un logo no cambia con la paleta que elija cada usuario. */
+  .marca { @apply flex flex-col justify-center leading-none; --marca-azul: #1d6fd6; --marca-tinta: #16243a; }
+  [data-theme=dark] .marca { --marca-azul: #3aa6f7; --marca-tinta: #e8edf5; }
+  .marca-nombre { @apply text-[17px] font-extrabold tracking-[.06em] uppercase; color: var(--marca-tinta); }
+  .marca-sub {
+    @apply mt-1 flex items-center gap-1.5 text-[9.5px] font-bold tracking-[.48em] uppercase;
+    color: var(--marca-azul);
+  }
+  .marca-sub::before, .marca-sub::after { content: ""; @apply h-px w-3 bg-current; }
+  .marca-sub::after { margin-left: -.48em; }   /* compensa el espaciado de la última letra */
+  .marca-grande .marca-nombre { @apply text-[26px]; }
+  .marca-grande .marca-sub { @apply mt-1.5 text-xs; }
+  .marca-grande .marca-sub::before, .marca-grande .marca-sub::after { @apply w-5; }
+
   /* Marca: cuadro sólido del color de acento. */
   .brand-tile { @apply grid flex-none place-items-center rounded-md bg-accent text-accent-ink; }
   .brand-tile svg { @apply fill-none stroke-current; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
