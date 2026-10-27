@@ -997,7 +997,8 @@ function poblarPlataformas(id, valor = "routeros") {
 // siempre y sin avisar) y no se puede maquetar.
 let askResolver = null;
 
-function preguntar(titulo, texto, etiquetaOk = "Aceptar", peligro = false) {
+function preguntar(titulo, texto, etiquetaOk = "Aceptar", peligro = false,
+                   soloAceptar = false) {
   // Si ya había una pregunta abierta, se da por cancelada: antes su promesa
   // quedaba sin resolver para siempre y la acción pendiente nunca terminaba.
   if (askResolver) cerrarPregunta(false);
@@ -1007,10 +1008,18 @@ function preguntar(titulo, texto, etiquetaOk = "Aceptar", peligro = false) {
   const si = $("ask-yes");
   si.textContent = etiquetaOk;
   si.className = peligro ? "danger" : "";
+  // En modo aviso (solo Aceptar) se oculta Cancelar: la ventana solo informa.
+  $("ask-no").hidden = soloAceptar;
   $("ask-icono").classList.toggle("peligro", peligro);
   $("ask-overlay").hidden = false;
   si.focus();
   return new Promise((resolve) => { askResolver = resolve; });
+}
+
+// Aviso de confirmación: un modal con un solo botón, para notificar que una
+// orden se ejecutó (las notificaciones del panel son modales, no banners).
+function avisar(titulo, texto, etiquetaOk = "Entendido") {
+  return preguntar(titulo, texto, etiquetaOk, false, true);
 }
 
 function cerrarPregunta(respuesta) {
@@ -2229,6 +2238,13 @@ async function runBulkBackup(payload) {
     setMsg("bulk-run-msg", summary + ". Vea el avance en la pestaña Estado de respaldos.",
       result.failed.length === 0);
     if (result.queued.length) startFastPoll();
+    // Confirmación en modal de que la orden se ejecutó.
+    avisar("Orden enviada",
+      result.queued.length
+        ? `Se encolaron ${result.queued.length} respaldos. ` +
+          `Siga el avance en la pestaña Estado de respaldos.` +
+          (result.failed.length ? ` No se pudieron encolar: ${result.failed.join(", ")}.` : "")
+        : "No se encoló ningún respaldo.");
   } catch (error) { setMsg("bulk-run-msg", error.message, false); }
 }
 
