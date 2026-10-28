@@ -2,6 +2,7 @@ import asyncio
 import datetime as dt
 import logging
 
+import asyncssh
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
@@ -71,10 +72,12 @@ async def _authorize_node(
     return device.get("history_since")
 
 
-# Límite del chequeo de alcance: cuánto espera cada sondeo TCP y cuántos a la
-# vez. El objetivo es decidir rápido si un equipo "está ahí", no abrir SSH.
-CHECK_TIMEOUT = 3.0
-CHECK_CONCURRENCY = 50
+# Validación de acceso previa al respaldo: intenta **autenticar por SSH** con
+# las credenciales del equipo (no solo abrir el puerto), para confirmar que el
+# respaldo podrá entrar. `CHECK_TIMEOUT` cubre conexión y login; la
+# concurrencia es menor que en un simple TCP porque el handshake pesa más.
+CHECK_TIMEOUT = 6.0
+CHECK_CONCURRENCY = 20
 
 
 async def _resolve_targets(
@@ -104,19 +107,43 @@ async def _resolve_targets(
     return targets
 
 
-async def _tcp_alcanzable(address: str, port: int) -> bool:
-    """¿Abre el puerto? Sondeo TCP corto; no autentica, solo mide alcance."""
+async def _validar_acceso_ssh(
+    address: str, port: int, username: str, password: str
+) -> str:
+    """Intenta **autenticar** por SSH con las credenciales del equipo.
+
+    Devuelve: "ok" si entra; "credenciales" si el equipo responde pero rechaza
+    el usuario/clave; "sin_conexion" si no se llega al puerto; "error" si el
+    SSH no se pudo negociar (algoritmos, etc.). No ejecuta ningún comando.
+    """
     try:
-        fut = asyncio.open_connection(address, port)
-        reader, writer = await asyncio.wait_for(fut, timeout=CHECK_TIMEOUT)
-        writer.close()
-        try:
-            await writer.wait_closed()
-        except Exception:
-            pass
-        return True
-    except (OSError, asyncio.TimeoutError):
-        return False
+        conn = await asyncio.wait_for(
+            asyncssh.connect(
+                address,
+                port=port,
+                username=username,
+                password=password,
+                known_hosts=None,
+                config=None,
+            ),
+            timeout=CHECK_TIMEOUT,
+        )
+        conn.close()
+        return "ok"
+    except asyncssh.PermissionDenied:
+        return "credenciales"
+    except (OSError, asyncio.TimeoutError, asyncssh.ConnectionLost):
+        return "sin_conexion"
+    except asyncssh.Error:
+        return "error"
+
+
+# Lo que el panel muestra para cada motivo de fallo de acceso.
+_MOTIVO_TEXTO = {
+    "credenciales": "usuario o clave inválidos",
+    "sin_conexion": "no responde",
+    "error": "no se pudo negociar SSH",
+}
 
 
 @router.post("/check")
@@ -125,27 +152,40 @@ async def check_reachability(
     payload: BulkBackupRequest,
     user: CurrentUser = Depends(require_write),
 ) -> dict:
-    """Antes de respaldar: prueba el alcance TCP de cada equipo en paralelo.
-
-    Sirve para no gastar el timeout SSH (30 s por nodo) en equipos caídos:
-    el panel avisa en un modal y respalda solo los que responden.
+    """Antes de respaldar: valida el **acceso SSH** (usuario+clave) de cada
+    equipo en paralelo. Así se confirma que el respaldo podrá entrar y no se
+    gasta el timeout de 30 s por nodo en equipos caídos o mal configurados.
+    El panel avisa en un modal y respalda solo los que acceden.
     """
     targets = await _resolve_targets(request, user, payload)
+    ids = [t["id"] for t in targets]
+    creds = {
+        c["id"]: c
+        for c in await request.app.state.devices.credentials_for(ids, user.scope)
+    }
     sem = asyncio.Semaphore(CHECK_CONCURRENCY)
 
-    async def comprobar(device: dict) -> tuple[dict, bool]:
+    async def comprobar(device: dict) -> tuple[dict, str]:
+        cred = creds.get(device["id"])
+        if cred is None:
+            return device, "sin_conexion"
         async with sem:
-            ok = await _tcp_alcanzable(device["address"], int(device["port"]))
-        return device, ok
+            estado = await _validar_acceso_ssh(
+                cred["address"], int(cred["port"]),
+                cred["username"], cred["password"],
+            )
+        return device, estado
 
     resultados = await asyncio.gather(*(comprobar(d) for d in targets))
     reachable = [
-        {"id": d["id"], "name": d["name"]} for d, ok in resultados if ok
+        {"id": d["id"], "name": d["name"]}
+        for d, estado in resultados if estado == "ok"
     ]
     unreachable = [
         {"id": d["id"], "name": d["name"], "address": d["address"],
-         "port": d["port"], "group_name": d.get("group_name", "")}
-        for d, ok in resultados if not ok
+         "port": d["port"], "group_name": d.get("group_name", ""),
+         "reason": estado, "reason_text": _MOTIVO_TEXTO.get(estado, estado)}
+        for d, estado in resultados if estado != "ok"
     ]
     return {
         "checked": len(targets),

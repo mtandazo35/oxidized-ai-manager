@@ -219,6 +219,34 @@ class DeviceRepository:
             nodes.append(node)
         return nodes
 
+    async def credentials_for(
+        self, device_ids: list[int], group: str | None = None
+    ) -> list[dict[str, Any]]:
+        """Credenciales descifradas de equipos activos, para validar el acceso
+        SSH antes de respaldar. Respeta la empresa del usuario (`group`)."""
+        if not device_ids:
+            return []
+        if group is None:
+            rows = await self._pool.fetch(
+                "SELECT id, name, address, port, username, password "
+                "FROM devices WHERE enabled AND id = ANY($1::int[])",
+                device_ids,
+            )
+        else:
+            rows = await self._pool.fetch(
+                "SELECT id, name, address, port, username, password "
+                "FROM devices WHERE enabled AND id = ANY($1::int[]) "
+                "AND group_name = $2",
+                device_ids,
+                group,
+            )
+        out = []
+        for row in rows:
+            d = dict(row)
+            d["password"] = decrypt_secret(self._key, d["password"])
+            out.append(d)
+        return out
+
 
 class ActivityRepository:
     """Bitácora. Escribir aquí nunca debe tumbar la petición que la origina."""

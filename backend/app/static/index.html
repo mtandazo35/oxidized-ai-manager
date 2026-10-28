@@ -2071,8 +2071,8 @@ window.backupNow = async (id) => {
     });
   } catch (error) { await avisar("Error", error.message); return; }
   const caido = chk.unreachable[0];
-  if (caido && !await preguntar("El equipo no responde",
-    `${caido.name} no responde en ${caido.address}:${caido.port}. `
+  if (caido && !await preguntar("No se validó el acceso",
+    `${caido.name} (${caido.address}:${caido.port}): ${caido.reason_text}. `
     + `¿Respaldar de todos modos?`, "Respaldar igual", true)) return;
   try {
     const result = await api("/api/devices/" + id + "/backup", { method: "POST" });
@@ -2628,8 +2628,22 @@ async function runBulkBackup(payload) {
 // Verifica el alcance de los equipos ANTES de encolar: así no se gastan los
 // timeouts SSH en cajas caídas. Muestra el resultado en un modal y respalda
 // solo los que responden.
+// Describe los equipos que no acceden, agrupando por motivo (credenciales /
+// no responde / error de SSH), con algunos nombres.
+function resumenFallos(caidos) {
+  const porMotivo = {};
+  caidos.forEach((u) => {
+    (porMotivo[u.reason_text || "sin acceso"] ||= []).push(u.name);
+  });
+  return Object.entries(porMotivo).map(([motivo, nombres]) => {
+    const muestra = nombres.slice(0, 8).join(", ");
+    const resto = nombres.length > 8 ? `, y ${nombres.length - 8} más` : "";
+    return `${nombres.length} con ${motivo} (${muestra}${resto})`;
+  }).join("; ");
+}
+
 async function respaldar(payload) {
-  setMsg("bulk-run-msg", "Verificando conexión de los equipos…", true);
+  setMsg("bulk-run-msg", "Validando acceso SSH (usuario y clave) de los equipos…", true);
   let chk;
   try {
     chk = await api("/api/backups/check", {
@@ -2643,26 +2657,22 @@ async function respaldar(payload) {
     await avisar("Sin equipos", "No hay routers activos para respaldar.");
     return;
   }
-  const responden = chk.reachable.length;
-  const caidos = chk.unreachable;
-  if (!responden) {
-    const nombres = caidos.slice(0, 12).map((u) => u.name).join(", ");
-    await avisar("Ningún equipo responde",
-      `Verifiqué ${chk.checked} equipos y ninguno responde en su puerto SSH `
-      + `(${nombres}${caidos.length > 12 ? ", …" : ""}). `
-      + `Revise la conexión antes de respaldar.`);
+  const acceden = chk.reachable.length;
+  const fallan = chk.unreachable;
+  if (!acceden) {
+    await avisar("Ningún equipo accesible",
+      `Validé el acceso de ${chk.checked} equipos y ninguno permitió entrar: `
+      + `${resumenFallos(fallan)}. Revise conexión y credenciales antes de respaldar.`);
     return;
   }
-  let texto = `Verifiqué ${chk.checked} equipos: ${responden} responden`;
-  if (caidos.length) {
-    const nombres = caidos.slice(0, 12).map((u) => u.name).join(", ");
-    texto += ` y ${caidos.length} no responden (${nombres}`
-      + `${caidos.length > 12 ? `, y ${caidos.length - 12} más` : ""}). `
-      + `Se respaldarán solo los ${responden} que responden.`;
+  let texto = `Validé el acceso de ${chk.checked} equipos: ${acceden} entran con sus credenciales`;
+  if (fallan.length) {
+    texto += ` y ${fallan.length} no (${resumenFallos(fallan)}). `
+      + `Se respaldarán solo los ${acceden} que acceden.`;
   } else {
     texto += `. Se encolará el respaldo de todos.`;
   }
-  if (!await preguntar("Verificación de conexión", texto, `Respaldar ${responden}`))
+  if (!await preguntar("Validación de acceso", texto, `Respaldar ${acceden}`))
     return;
   runBulkBackup({ scope: "devices", device_ids: chk.reachable.map((r) => r.id) });
 }
