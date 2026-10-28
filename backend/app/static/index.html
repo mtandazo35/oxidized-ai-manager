@@ -358,9 +358,9 @@
 .toast.visible{opacity:1;transform:none}
 .toast .t-ico{width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 12px;background:var(--ok-bg);color:var(--ok-ink)}
 .toast .t-ico svg{width:24px;height:24px;stroke:currentColor;fill:none;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
-.toast h3{margin:0;font-size:1.05rem;font-weight:700;color:var(--ink)}
-.toast .t-nombre{margin:8px 0 0;font-weight:700;font-size:1.1rem;color:var(--ink)}
-.toast p.t-sub{margin:6px 0 0;color:var(--ink-muted);font-size:.9rem;line-height:1.35}
+.toast h3{margin:0;font-size:1.25rem;font-weight:800;color:var(--ink)}
+.toast .t-nombre{margin:8px 0 0;font-weight:700;font-size:1.4rem;color:var(--ink);word-break:break-word}
+.toast p.t-sub{margin:8px 0 0;color:var(--ink-muted);font-size:.95rem;line-height:1.4}
 .toast.t-espera .t-ico{background:transparent;color:var(--accent)}
 .toast.t-espera .t-ico svg{animation:toast-girar 1s linear infinite}
 @keyframes toast-girar{to{transform:rotate(360deg)}}
@@ -1969,7 +1969,8 @@ async function refresh() {
         delete pendingBackups[name];
         const ok = ev.last_event === "node_success";
         if (ok) {
-          setMsg("device-msg", name + ": respaldo completado.", true);
+          // Toast centrado, nombre grande, se desvanece solo.
+          toast({ titulo: "Respaldo completado", nombre: name });
         } else {
           // Aviso de fallo como modal (no banner), según la convención.
           avisar("Respaldo fallido",
