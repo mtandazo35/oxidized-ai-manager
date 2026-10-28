@@ -2125,9 +2125,12 @@ window.backupNow = async (id) => {
     });
   } catch (error) { await avisar("Error", error.message); return; }
   const caido = chk.unreachable[0];
-  if (caido && !await preguntar("No se validó el acceso",
-    `${caido.name} (${caido.address}:${caido.port}): ${caido.reason_text}. `
-    + `¿Respaldar de todos modos?`, "Respaldar igual", true)) return;
+  if (caido) {
+    await avisar("No se puede respaldar",
+      `${caido.name} (${caido.address}:${caido.port}): ${caido.reason_text}. `
+      + `No se respaldó: revise conexión y credenciales.`);
+    return;
+  }
   try {
     const result = await api("/api/devices/" + id + "/backup", { method: "POST" });
     pendingBackups[result.node] = Date.now();
