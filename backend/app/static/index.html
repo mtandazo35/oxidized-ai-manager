@@ -827,6 +827,13 @@
 <div class="overlay" id="edit-overlay" hidden>
   <form class="card" id="edit-form">
     <h1 style="margin-bottom:16px;font-size:1.1rem" id="edit-title">Editar</h1>
+    <label for="e-name">Nombre</label>
+    <input id="e-name" required style="margin:4px 0 4px">
+    <p class="muted" style="margin:0 0 10px">
+      Es el nombre del archivo en el repositorio de respaldos. Al cambiarlo, los
+      respaldos anteriores quedan bajo el nombre viejo y Oxidized empieza uno
+      nuevo con el nombre nuevo. Espacios y acentos se ajustan solos.
+    </p>
     <label for="e-address">Dirección (IP o host)</label>
     <input id="e-address" required style="margin:4px 0 10px">
     <label for="e-port">Puerto SSH</label>
@@ -2102,6 +2109,7 @@ window.openEdit = (id) => {
   if (!device) return;
   editDeviceId = id;
   $("edit-title").textContent = "Editar " + device.name;
+  $("e-name").value = device.name;
   $("e-address").value = device.address;
   $("e-port").value = device.port;
   $("e-username").value = device.username;
@@ -2120,6 +2128,7 @@ $("btn-close-edit").addEventListener("click", () => {
 $("edit-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const body = {
+    name: $("e-name").value.trim(),
     address: $("e-address").value.trim(),
     port: Number($("e-port").value) || 22,
     username: $("e-username").value,
