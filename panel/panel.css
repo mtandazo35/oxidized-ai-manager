@@ -245,6 +245,9 @@
       @apply sticky right-0 z-1 border-l border-line;
       background: var(--surface-solid);
     }
+    /* La esquina (título de la columna de botones) va fija arriba y a la
+       derecha, por encima de las demás celdas fijas. */
+    #tabla-routers th:last-child { @apply top-0 z-4; }
     #tabla-routers tbody tr:hover td:last-child { background: var(--surface-2); }
     #tabla-routers .grupo-fila td:last-child { @apply static border-l-0; }
   }
@@ -417,7 +420,24 @@
   /* Anchos ajustables: el asa vive en el borde derecho de cada cabecera y
      dibuja el separador entre columnas. Con anchos guardados la tabla pasa a
      diseño fijo y el texto que no cabe se corta con «…». */
-  thead th { @apply relative; }
+  /* Fila de títulos fija al desplazar, en todas las tablas: queda arriba de su
+     zona de desplazamiento (la de la tabla o la de la ventana que la contiene).
+     El borde inferior va como sombra porque, con border-collapse, el borde de
+     una celda fija no la acompaña al desplazarse. */
+  thead th {
+    @apply sticky top-0 z-3;
+    background: var(--surface-solid);
+    box-shadow: inset 0 -1px 0 var(--border-strong);
+  }
+
+  /* Zona de desplazamiento propia de las tablas grandes: así la cabecera fija
+     convive con el desplazamiento horizontal (al ensanchar columnas), y la
+     barra horizontal queda siempre a la vista al pie de la tabla. */
+  .tabla-scroll {
+    @apply overflow-auto;
+    max-height: calc(100vh - var(--bar-h) - 8rem);
+    max-height: calc(100dvh - var(--bar-h) - 8rem);
+  }
   .col-asa { @apply absolute top-0 right-0 z-2 h-full w-2.5 cursor-col-resize touch-none; }
   .col-asa::after {
     content: ""; @apply absolute top-1/4 right-1 h-1/2 w-px transition-colors;

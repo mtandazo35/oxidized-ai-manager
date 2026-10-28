@@ -371,3 +371,14 @@ def test_respaldar_abre_la_ventana_en_vivo() -> None:
     assert 'rsTerminar(name, "sin-terminar")' in js
     for fase in ("validando", "curso", "ok", "fallo", "sin-terminar", "sin-acceso", "error"):
         assert re.search(rf'^\s+"?{re.escape(fase)}"?: \["', js, re.M), f"fase sin definir: {fase}"
+
+
+def test_las_tablas_grandes_tienen_zona_propia_para_la_cabecera_fija() -> None:
+    """La fila de títulos queda fija al desplazar. Con desplazamiento
+    horizontal eso solo funciona si la tabla está dentro de su propia zona
+    de desplazamiento: sin el contenedor, la cabecera se va con la página."""
+    html = PANEL.read_text(encoding="utf-8")
+    for id_tabla in ("tabla-routers", "tabla-estado", "tabla-audit"):
+        assert re.search(rf'<div class="tabla-scroll">\s*<table id="{id_tabla}">', html), id_tabla
+    css = html[html.index("/* tailwind:begin"):html.index("/* tailwind:end */")]
+    assert re.search(r"thead th\{[^}]*position:sticky", css), "la cabecera ya no es fija"
