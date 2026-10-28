@@ -42,6 +42,30 @@ def test_parse_empty_config() -> None:
     assert parse_routeros_metadata("") == {}
 
 
+# Export real compacto: `/export` omite los valores por defecto, así que un
+# RouterOS con el identity de fábrica no trae `/system identity`.
+ROUTEROS_EXPORT_SIN_IDENTITY = """\
+#                   version: 7.23.2 (stable)
+#                board-name: hEX
+/ip address
+add address=192.0.2.1/24 interface=ether1
+/system clock
+set time-zone-name=America/Guayaquil
+"""
+
+
+def test_parse_default_identity_when_export_omits_it() -> None:
+    meta = parse_routeros_metadata(ROUTEROS_EXPORT_SIN_IDENTITY)
+
+    assert meta["identity"] == "MikroTik"
+    assert meta["ros_version"] == "7.23.2 (stable)"
+
+
+def test_parse_no_identity_guess_for_non_routeros() -> None:
+    # Sin pistas de RouterOS no se inventa identity.
+    assert "identity" not in parse_routeros_metadata("hostname foo\ninterface eth0\n")
+
+
 @pytest.fixture
 def metadata_repo(tmp_path):
     repo = str(tmp_path / "backups")
