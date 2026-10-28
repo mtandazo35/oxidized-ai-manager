@@ -135,6 +135,17 @@ class FakeDeviceRepository:
             repository.purge_node(device["name"])
         return True
 
+    async def credentials_for(
+        self, device_ids: list[int], group: str | None = None
+    ) -> list[dict[str, Any]]:
+        """Como el real: credenciales de equipos activos, filtradas por empresa."""
+        return [
+            {key: device.get(key) for key in ("id", "name", "address", "port", "username", "password")}
+            for device in self._devices.values()
+            if device["id"] in device_ids and device.get("enabled", True)
+            and self._in_group(device, group)
+        ]
+
     async def list_oxidized_nodes(self) -> list[dict[str, Any]]:
         enabled = sorted(
             (device for device in self._devices.values() if device["enabled"]),

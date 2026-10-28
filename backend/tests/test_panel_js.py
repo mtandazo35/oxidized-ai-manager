@@ -356,3 +356,18 @@ def test_los_anchos_de_columna_se_pueden_ajustar_y_se_guardan() -> None:
     assert "suprimirClicOrden" in js, "soltar el asa no debe ordenar la columna"
     aplicar = re.search(r"function aplicarColumnas\(\) \{(.*?)\n\}", js, re.S).group(1)
     assert 'aplicarAnchos("tabla-routers")' in aplicar
+
+
+def test_respaldar_abre_la_ventana_en_vivo() -> None:
+    """Respaldar ya no encadena avisos de texto: abre la ventana de respaldo,
+    que valida, respalda y termina en el mismo sitio."""
+    js = panel_js()
+    uno = re.search(r"window\.backupNow = async \(id\) => \{(.*?)\n\};", js, re.S).group(1)
+    tanda = re.search(r"async function runBulkBackup\(payload\) \{(.*?)\n\}", js, re.S).group(1)
+
+    assert 'rsAbrir({ modo: "uno"' in uno and "avisar(" not in uno
+    assert 'rsAbrir({\n      modo: "tanda"' in tanda and "Orden enviada" not in tanda
+    assert 'rsTerminar(name, ok ? "ok" : "fallo")' in js
+    assert 'rsTerminar(name, "sin-terminar")' in js
+    for fase in ("validando", "curso", "ok", "fallo", "sin-terminar", "sin-acceso", "error"):
+        assert re.search(rf'^\s+"?{re.escape(fase)}"?: \["', js, re.M), f"fase sin definir: {fase}"

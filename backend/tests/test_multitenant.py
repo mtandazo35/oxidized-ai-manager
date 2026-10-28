@@ -753,3 +753,36 @@ async def test_duplicate_name_does_not_reveal_other_companies(
     assert propio.status_code == ajeno.status_code == renombre.status_code == 409
     assert propio.json() == ajeno.json() == renombre.json()
     assert "empresa" not in ajeno.json()["detail"].lower()
+
+
+async def test_ssh_check_only_sees_and_probes_own_company(
+    inventory, make_user, monkeypatch
+) -> None:
+    """La validación de acceso previa al respaldo devuelve nombres e IPs: un
+    operador de una empresa no debe ver ni hacer conectar a equipos de otra,
+    aunque pida sus ids."""
+    sondeados = []
+
+    async def fake_validar(address, port, username, password):
+        sondeados.append(address)
+        return "sin_conexion"
+
+    monkeypatch.setattr("app.backups._validar_acceso_ssh", fake_validar)
+    headers = make_user("op-a", role="operador", group_name="EmpresaA")
+
+    async with client() as api:
+        todos = await api.post("/api/backups/check", headers=headers, json={"scope": "all"})
+        por_ids = await api.post(
+            "/api/backups/check",
+            headers=headers,
+            json={
+                "scope": "devices",
+                "device_ids": [inventory["alfa"]["id"], inventory["beta"]["id"]],
+            },
+        )
+
+    for response in (todos, por_ids):
+        assert response.status_code == 200
+        nombres = [d["name"] for d in response.json()["reachable"] + response.json()["unreachable"]]
+        assert nombres == ["rb-alfa"]
+    assert inventory["beta"]["address"] not in sondeados

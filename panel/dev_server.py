@@ -234,6 +234,46 @@ app.router.lifespan_context = lifespan_demo
 devices_module.backup_new_nodes = sin_respaldo
 
 
+# --- Simulación del respaldo, para ver la ventana en vivo sin equipos reales.
+# La validación SSH «entra» en todos salvo rb-pppoe-sur (no responde); Oxidized
+# termina cada respaldo a los pocos segundos y rb-sucursal-02 falla siempre.
+import asyncio  # noqa: E402
+
+from app import backups as backups_module  # noqa: E402
+
+SIN_CONEXION = {"10.10.8.1"}        # rb-pppoe-sur
+FALLA_RESPALDO = {"rb-sucursal-02"}
+_cola_demo: list[str] = []
+
+
+async def validar_demo(address, port, username, password):
+    await asyncio.sleep(0.8)
+    return "sin_conexion" if address in SIN_CONEXION else "ok"
+
+
+async def respaldo_demo(oxidized_url, node):
+    """Como Oxidized con threads: 1, los respaldos van de uno en uno."""
+    _cola_demo.append(node)
+    if len(_cola_demo) > 1:
+        return
+
+    async def procesar():
+        while _cola_demo:
+            nombre = _cola_demo[0]
+            await asyncio.sleep(3)
+            evento = "node_fail" if nombre in FALLA_RESPALDO else "node_success"
+            await app.state.backup_events.record_event(nombre, evento, "demo" if evento == "node_success" else "")
+            app.state.estados_demo[nombre] = "success" if evento == "node_success" else "no_connection"
+            _cola_demo.pop(0)
+
+    asyncio.get_running_loop().create_task(procesar())
+
+
+backups_module._validar_acceso_ssh = validar_demo
+backups_module.trigger_node_backup = respaldo_demo
+devices_module.trigger_node_backup = respaldo_demo
+
+
 @app.get("/nodes.json", include_in_schema=False)
 async def oxidized_simulado() -> list[dict]:
     estados = getattr(app.state, "estados_demo", {})

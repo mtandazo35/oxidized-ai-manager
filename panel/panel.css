@@ -502,6 +502,101 @@
   .modal-body .field { @apply flex-wrap; }
   .modal-body .field label { @apply whitespace-normal; }
 
+  /* --- Ventana de respaldo en vivo --- */
+  #respaldo-overlay { z-index: 45; }
+  /* El color del resultado (--tono) se elige por data-tono. Mismo peso de
+     selector que el de la ventana: si no, el acento por defecto ganaría. */
+  .overlay > .card.respaldo-card {
+    @apply w-[min(520px,100%)] px-7 pt-8 pb-6;
+    --tono: var(--accent);
+    border-top: 3px solid var(--tono);
+  }
+  .overlay > .card.respaldo-card[data-tono=ok] { --tono: var(--ok-ink); }
+  .overlay > .card.respaldo-card[data-tono=fallo] { --tono: var(--fail-ink); }
+  .overlay > .card.respaldo-card[data-tono=aviso] { --tono: var(--warn-ink); }
+  .rs-x {
+    @apply absolute top-3 right-3 size-8 rounded-md border-0 bg-transparent p-0 text-ink-muted hover:text-ink;
+  }
+  .rs-x:hover:not(:disabled) { background: var(--surface-2); }
+  .rs-x svg { @apply size-4.5 fill-none stroke-current; stroke-width: 2; stroke-linecap: round; }
+
+  .rs-hero { @apply flex flex-col items-center text-center; }
+  /* Anillo: arco que gira mientras trabaja; en una tanda, avance real
+     (--avance, 0-100); al terminar, aro completo del color del resultado. */
+  .rs-anillo {
+    @apply relative grid size-24 place-items-center rounded-full;
+    background: color-mix(in srgb, var(--tono) 10%, transparent);
+  }
+  .rs-anillo::before {
+    content: ""; @apply absolute inset-0 rounded-full;
+    background: conic-gradient(var(--tono) calc(var(--avance, 100) * 1%), var(--border) 0);
+    -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 6px), #000 calc(100% - 5px));
+    mask: radial-gradient(farthest-side, transparent calc(100% - 6px), #000 calc(100% - 5px));
+    transition: background .4s;
+  }
+  .respaldo-card[data-tono=curso] .rs-anillo:not([style*="--avance"])::before {
+    background: conic-gradient(var(--tono) 0 28%, var(--border) 0);
+    animation: rs-girar 1s linear infinite;
+  }
+  .rs-icono { @apply relative grid place-items-center; color: var(--tono); }
+  .rs-icono svg { @apply size-9 fill-none stroke-current; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+  .respaldo-card[data-tono=curso] .rs-icono svg { animation: rs-latir 1.6s ease-in-out infinite; }
+  .respaldo-card:not([data-tono=curso]) .rs-icono svg { animation: rs-aparecer .35s cubic-bezier(.2, 1.4, .4, 1); }
+  .rs-cifra { @apply relative flex items-baseline gap-1 tabular-nums; }
+  .rs-cifra strong { @apply text-2xl font-bold text-ink; }
+  .rs-cifra span { @apply text-sm text-ink-muted; }
+  .rs-hero h1 { @apply mt-5 text-xl; }
+  .rs-equipo { @apply mt-1 mb-0 text-lg font-semibold break-all text-ink; }
+  .rs-equipo[data-datos]::after {
+    content: attr(data-datos); @apply mt-0.5 block font-mono text-xs font-normal text-ink-muted;
+  }
+  .rs-detalle { @apply mx-auto mt-3 mb-0 max-w-sm text-sm leading-relaxed text-ink-muted; }
+
+  /* Pasos: acceso → respaldo → guardado, unidos por una línea. */
+  .rs-pasos { @apply relative m-0 mt-7 grid list-none grid-cols-3 p-0; }
+  .rs-pasos li { @apply relative flex flex-col items-center gap-2 text-center text-xs font-medium text-ink-muted; }
+  .rs-pasos li:not(:first-child)::before {
+    content: ""; @apply absolute top-2.5 right-1/2 h-0.5 w-full transition-colors;
+    background: var(--border-strong);
+  }
+  .rs-pasos li.hecho::before, .rs-pasos li.activo::before { background: var(--ok-ink); }
+  .rs-pasos li.error::before { background: var(--fail-ink); }
+  .rs-pasos li.aviso::before { background: var(--warn-ink); }
+  .rs-punto {
+    @apply relative z-1 grid size-5 place-items-center rounded-full border-2 border-line-strong bg-surface-solid
+      text-[11px] leading-none font-bold text-white transition-colors;
+  }
+  .rs-pasos li.hecho, .rs-pasos li.activo, .rs-pasos li.error, .rs-pasos li.aviso { @apply text-ink; }
+  .rs-pasos li.hecho .rs-punto { border-color: var(--ok-ink); background: var(--ok-ink); }
+  .rs-pasos li.hecho .rs-punto::after { content: "✓"; }
+  .rs-pasos li.activo .rs-punto {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 4px var(--accent-soft);
+    animation: rs-latir 1.4s ease-in-out infinite;
+  }
+  .rs-pasos li.activo .rs-punto::after { content: ""; @apply size-2 rounded-full; background: var(--accent); }
+  .rs-pasos li.error .rs-punto { border-color: var(--fail-ink); background: var(--fail-ink); }
+  .rs-pasos li.error .rs-punto::after { content: "✕"; }
+  .rs-pasos li.aviso .rs-punto { border-color: var(--warn-ink); background: var(--warn-ink); }
+  .rs-pasos li.aviso .rs-punto::after { content: "!"; }
+  [data-theme=dark] .rs-pasos li:is(.hecho, .error, .aviso) .rs-punto { color: var(--bg); }
+
+  /* Barra indeterminada mientras se trabaja. */
+  .rs-barra { @apply mt-6 h-1 overflow-hidden rounded-full bg-line; }
+  .rs-barra > span { @apply block h-full w-1/3 rounded-full; background: var(--tono); animation: rs-deslizar 1.3s ease-in-out infinite; }
+
+  /* Tanda: resumen y lista de equipos. */
+  .rs-chips { @apply mt-6 flex flex-wrap justify-center gap-2; }
+  .rs-lista {
+    @apply m-0 mt-4 max-h-56 list-none overflow-y-auto rounded-md border border-line p-0 text-left text-sm;
+  }
+  .rs-lista li { @apply flex items-center justify-between gap-3 border-t border-line px-3 py-2 first:border-t-0; }
+  .rs-lista li.rs-fila-curso { background: var(--accent-soft); }
+  .rs-nodo { @apply min-w-0 truncate font-medium text-ink; }
+
+  .rs-tiempo { @apply mt-5 mb-0 text-center text-xs text-ink-muted tabular-nums; }
+  .rs-acciones { @apply mt-5 flex flex-wrap justify-center gap-2 border-t border-line pt-5; }
+
   #hist-overlay { z-index: 40; }
   #ask-overlay, #input-overlay, #update-overlay { z-index: 50; }
 
@@ -646,6 +741,11 @@
   .feature-icon { @apply grid size-9 flex-none place-items-center rounded-md border border-line bg-surface text-accent-text; }
   .login-form input { @apply mb-0 w-full py-2.5; }
 }
+
+@keyframes rs-girar { to { transform: rotate(360deg); } }
+@keyframes rs-latir { 50% { transform: scale(.88); opacity: .7; } }
+@keyframes rs-aparecer { from { transform: scale(.4); opacity: 0; } }
+@keyframes rs-deslizar { from { transform: translateX(-110%); } to { transform: translateX(320%); } }
 
 @media (prefers-reduced-motion: reduce) {
   *, ::before, ::after { animation: none !important; transition: none !important; }
