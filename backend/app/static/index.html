@@ -1969,8 +1969,7 @@ async function refresh() {
         delete pendingBackups[name];
         const ok = ev.last_event === "node_success";
         if (ok) {
-          // Toast centrado, nombre grande, se desvanece solo.
-          toast({ titulo: "Respaldo completado", nombre: name });
+          avisar("Respaldo completado", `${name}: el respaldo se guardó correctamente.`);
         } else {
           // Aviso de fallo como modal (no banner), según la convención.
           avisar("Respaldo fallido",
@@ -2141,8 +2140,10 @@ window.backupNow = async (id) => {
     pendingBackups[result.node] = Date.now();
     renderStatus();
     startFastPoll();
-    toast({ titulo: "Respaldo iniciado", nombre: result.node,
-            sub: "En proceso — el resultado aparecerá en Estado de respaldos." });
+    cerrarToast();
+    await avisar("Respaldo iniciado",
+      `El respaldo de ${result.node} está en proceso. `
+      + `El resultado aparecerá en la pestaña Estado de respaldos.`);
   } catch (error) { cerrarToast(); await avisar("Error", error.message); }
 };
 
