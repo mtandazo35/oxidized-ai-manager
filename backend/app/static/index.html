@@ -476,7 +476,7 @@
         <button type="button" class="ghost" id="btn-bulk-run-group">Respaldar grupo</button>
       </div>
       <p class="muted" style="margin:0 0 6px">Selectivo — marque los routers:</p>
-      <div id="bulk-run-devices" style="max-height:220px;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:4px;margin-bottom:10px"></div>
+      <div id="bulk-run-devices" style="max-height:340px;overflow-y:auto;display:flex;flex-direction:column;gap:10px;margin-bottom:10px"></div>
       <button type="button" class="ghost" id="btn-bulk-run-selected">Respaldar seleccionados</button>
       <p class="msg" id="bulk-run-msg" role="status" aria-live="polite"></p>
     </div>
@@ -2498,12 +2498,55 @@ function renderBulkDevices() {
   const enabled = allDevices
     .filter((d) => d.enabled)
     .filter((d) => !group || (d.group_name || "") === group);
-  $("bulk-run-devices").innerHTML = enabled.length
-    ? enabled.map((d) => `<label style="display:flex;gap:6px;align-items:center">
-        <input type="checkbox" class="bulk-run-check" value="${d.id}">
-        ${esc(d.name)}${d.group_name ? ` <span class="muted">(${esc(d.group_name)})</span>` : ""}
-      </label>`).join("")
-    : '<span class="muted">Sin routers activos en esta empresa.</span>';
+  if (!enabled.length) {
+    $("bulk-run-devices").innerHTML =
+      '<span class="muted">Sin routers activos en esta empresa.</span>';
+    return;
+  }
+  // Agrupados por empresa, cada bloque con su cabecera y un "marcar todos".
+  const porEmpresa = new Map();
+  enabled.forEach((d) => {
+    const g = d.group_name || "Sin empresa";
+    if (!porEmpresa.has(g)) porEmpresa.set(g, []);
+    porEmpresa.get(g).push(d);
+  });
+  const grid = "display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:4px;margin-top:6px";
+  $("bulk-run-devices").innerHTML = [...porEmpresa.keys()].sort().map((g) => {
+    const items = porEmpresa.get(g).sort((a, b) => a.name.localeCompare(b.name));
+    const checks = items.map((d) => `<label style="display:flex;gap:6px;align-items:center">
+        <input type="checkbox" class="bulk-run-check" value="${d.id}" data-group="${esc(g)}">
+        ${esc(d.name)}</label>`).join("");
+    return `<fieldset style="border:1px solid var(--line,#e5e7eb);border-radius:8px;padding:6px 10px 8px;margin:0">
+      <legend style="padding:0 4px">
+        <label style="display:flex;gap:6px;align-items:center;cursor:pointer">
+          <input type="checkbox" class="bulk-grupo-all" data-group="${esc(g)}">
+          <strong>${esc(g)}</strong> <span class="muted">(${items.length})</span>
+        </label>
+      </legend>
+      <div style="${grid}">${checks}</div>
+    </fieldset>`;
+  }).join("");
+}
+
+// Marcar/desmarcar toda una empresa, y mantener la cabecera al día cuando se
+// marcan routers sueltos (delegación: se registra una sola vez).
+function bulkDevicesClick(e) {
+  const t = e.target;
+  if (t.classList.contains("bulk-grupo-all")) {
+    document.querySelectorAll(
+      `.bulk-run-check[data-group="${CSS.escape(t.dataset.group)}"]`
+    ).forEach((c) => { c.checked = t.checked; });
+  } else if (t.classList.contains("bulk-run-check")) {
+    const hermanos = [...document.querySelectorAll(
+      `.bulk-run-check[data-group="${CSS.escape(t.dataset.group)}"]`)];
+    const head = document.querySelector(
+      `.bulk-grupo-all[data-group="${CSS.escape(t.dataset.group)}"]`);
+    if (head) {
+      const marcados = hermanos.filter((c) => c.checked).length;
+      head.checked = marcados === hermanos.length;
+      head.indeterminate = marcados > 0 && marcados < hermanos.length;
+    }
+  }
 }
 
 async function loadBulkRun() {
@@ -2555,6 +2598,7 @@ $("btn-bulk-all").addEventListener("click", async () => {
     runBulkBackup({ scope: "all" });
 });
 $("bulk-run-group").addEventListener("change", renderBulkDevices);
+$("bulk-run-devices").addEventListener("change", bulkDevicesClick);
 $("btn-bulk-run-group").addEventListener("click", async () => {
   const group = $("bulk-run-group").value;
   // "Todos" (valor vacío) respalda la flota entera, como el botón de arriba.
