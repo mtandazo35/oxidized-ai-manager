@@ -4,7 +4,7 @@ password: ""
 model: routeros
 interval: 31536000
 debug: false
-threads: 1
+threads: 20
 # `timeout` es el límite de conexión SSH: un equipo inalcanzable falla ahí, así
 # que subirlo poco. `timelimit` es el techo de la sesión completa, y un core con
 # un export de cientos de kilobytes por un enlace lento no cabía en 60 s: al

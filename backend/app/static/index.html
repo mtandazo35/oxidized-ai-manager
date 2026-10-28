@@ -1900,12 +1900,17 @@ async function refresh() {
       if (ev && new Date(ev.last_event_at).getTime() > startedAt) {
         delete pendingBackups[name];
         const ok = ev.last_event === "node_success";
-        setMsg("device-msg", name + (ok
-          ? ": respaldo completado."
-          : ": el respaldo falló (revise conexión o credenciales)."), ok);
+        if (ok) {
+          setMsg("device-msg", name + ": respaldo completado.", true);
+        } else {
+          // Aviso de fallo como modal (no banner), según la convención.
+          avisar("Respaldo fallido",
+            `${name}: el respaldo falló. Revise la conexión o las credenciales.`);
+        }
       } else if (now - startedAt > 180000) {
         delete pendingBackups[name];
-        setMsg("device-msg", name + ": el respaldo sigue sin terminar; revise el estado.", false);
+        avisar("Respaldo sin terminar",
+          `${name}: el respaldo sigue sin terminar; revise el estado del equipo.`);
       }
     }
     actualizarEstadoMasivo();
@@ -2592,29 +2597,61 @@ async function runBulkBackup(payload) {
   } catch (error) { setMsg("bulk-run-msg", error.message, false); }
 }
 
-$("btn-bulk-all").addEventListener("click", async () => {
-  if (await preguntar("Respaldar todo",
-    "Se encola el respaldo de todos los routers activos.", "Encolar"))
-    runBulkBackup({ scope: "all" });
-});
-$("bulk-run-group").addEventListener("change", renderBulkDevices);
-$("bulk-run-devices").addEventListener("change", bulkDevicesClick);
-$("btn-bulk-run-group").addEventListener("click", async () => {
-  const group = $("bulk-run-group").value;
-  // "Todos" (valor vacío) respalda la flota entera, como el botón de arriba.
-  if (!group) {
-    if (await preguntar("Respaldar todo",
-      "Se encola el respaldo de todos los routers activos.", "Encolar"))
-      runBulkBackup({ scope: "all" });
+// Verifica el alcance de los equipos ANTES de encolar: así no se gastan los
+// timeouts SSH en cajas caídas. Muestra el resultado en un modal y respalda
+// solo los que responden.
+async function respaldar(payload) {
+  setMsg("bulk-run-msg", "Verificando conexión de los equipos…", true);
+  let chk;
+  try {
+    chk = await api("/api/backups/check", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  } catch (error) { setMsg("bulk-run-msg", error.message, false); return; }
+  setMsg("bulk-run-msg", "", true);
+  if (!chk.checked) {
+    await avisar("Sin equipos", "No hay routers activos para respaldar.");
     return;
   }
-  runBulkBackup({ scope: "group", group });
+  const responden = chk.reachable.length;
+  const caidos = chk.unreachable;
+  if (!responden) {
+    const nombres = caidos.slice(0, 12).map((u) => u.name).join(", ");
+    await avisar("Ningún equipo responde",
+      `Verifiqué ${chk.checked} equipos y ninguno responde en su puerto SSH `
+      + `(${nombres}${caidos.length > 12 ? ", …" : ""}). `
+      + `Revise la conexión antes de respaldar.`);
+    return;
+  }
+  let texto = `Verifiqué ${chk.checked} equipos: ${responden} responden`;
+  if (caidos.length) {
+    const nombres = caidos.slice(0, 12).map((u) => u.name).join(", ");
+    texto += ` y ${caidos.length} no responden (${nombres}`
+      + `${caidos.length > 12 ? `, y ${caidos.length - 12} más` : ""}). `
+      + `Se respaldarán solo los ${responden} que responden.`;
+  } else {
+    texto += `. Se encolará el respaldo de todos.`;
+  }
+  if (!await preguntar("Verificación de conexión", texto, `Respaldar ${responden}`))
+    return;
+  runBulkBackup({ scope: "devices", device_ids: chk.reachable.map((r) => r.id) });
+}
+
+$("btn-bulk-all").addEventListener("click", () => respaldar({ scope: "all" }));
+$("bulk-run-group").addEventListener("change", renderBulkDevices);
+$("bulk-run-devices").addEventListener("change", bulkDevicesClick);
+$("btn-bulk-run-group").addEventListener("click", () => {
+  const group = $("bulk-run-group").value;
+  // "Todos" (valor vacío) respalda la flota entera, como el botón de arriba.
+  respaldar(group ? { scope: "group", group } : { scope: "all" });
 });
 $("btn-bulk-run-selected").addEventListener("click", () => {
   const ids = [...document.querySelectorAll(".bulk-run-check:checked")]
     .map((c) => Number(c.value));
   if (!ids.length) { setMsg("bulk-run-msg", "Marque al menos un router.", false); return; }
-  runBulkBackup({ scope: "devices", device_ids: ids });
+  respaldar({ scope: "devices", device_ids: ids });
 });
 
 // --- Auditoría (Fase 4) ---------------------------------------------------

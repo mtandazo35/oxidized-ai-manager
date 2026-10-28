@@ -232,7 +232,7 @@ ACTION_MAP: tuple[tuple[str, str, str], ...] = (
 
 # El login se registra por su cuenta, con el motivo del fallo; y las llamadas
 # de Oxidized llevan su propio token de servicio, no una sesión.
-SKIP_PATHS = ("/api/auth/login", "/api/oxidized/events")
+SKIP_PATHS = ("/api/auth/login", "/api/oxidized/events", "/api/backups/check")
 
 MUTATING = ("POST", "PUT", "PATCH", "DELETE")
 

@@ -1,3 +1,4 @@
+import asyncio
 import datetime as dt
 import logging
 
@@ -70,12 +71,16 @@ async def _authorize_node(
     return device.get("history_since")
 
 
-@router.post("/run", status_code=status.HTTP_202_ACCEPTED)
-async def run_bulk_backup(
-    request: Request,
-    payload: BulkBackupRequest,
-    user: CurrentUser = Depends(require_write),
-) -> dict:
+# Límite del chequeo de alcance: cuánto espera cada sondeo TCP y cuántos a la
+# vez. El objetivo es decidir rápido si un equipo "está ahí", no abrir SSH.
+CHECK_TIMEOUT = 3.0
+CHECK_CONCURRENCY = 50
+
+
+async def _resolve_targets(
+    request: Request, user: CurrentUser, payload: BulkBackupRequest
+) -> list[dict]:
+    """Equipos activos que abarca la petición (todos / grupo / selección)."""
     if payload.scope == "group" and not payload.group:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -96,6 +101,66 @@ async def run_bulk_backup(
     elif payload.scope == "devices":
         wanted = set(payload.device_ids)
         targets = [device for device in targets if device["id"] in wanted]
+    return targets
+
+
+async def _tcp_alcanzable(address: str, port: int) -> bool:
+    """¿Abre el puerto? Sondeo TCP corto; no autentica, solo mide alcance."""
+    try:
+        fut = asyncio.open_connection(address, port)
+        reader, writer = await asyncio.wait_for(fut, timeout=CHECK_TIMEOUT)
+        writer.close()
+        try:
+            await writer.wait_closed()
+        except Exception:
+            pass
+        return True
+    except (OSError, asyncio.TimeoutError):
+        return False
+
+
+@router.post("/check")
+async def check_reachability(
+    request: Request,
+    payload: BulkBackupRequest,
+    user: CurrentUser = Depends(require_write),
+) -> dict:
+    """Antes de respaldar: prueba el alcance TCP de cada equipo en paralelo.
+
+    Sirve para no gastar el timeout SSH (30 s por nodo) en equipos caídos:
+    el panel avisa en un modal y respalda solo los que responden.
+    """
+    targets = await _resolve_targets(request, user, payload)
+    sem = asyncio.Semaphore(CHECK_CONCURRENCY)
+
+    async def comprobar(device: dict) -> tuple[dict, bool]:
+        async with sem:
+            ok = await _tcp_alcanzable(device["address"], int(device["port"]))
+        return device, ok
+
+    resultados = await asyncio.gather(*(comprobar(d) for d in targets))
+    reachable = [
+        {"id": d["id"], "name": d["name"]} for d, ok in resultados if ok
+    ]
+    unreachable = [
+        {"id": d["id"], "name": d["name"], "address": d["address"],
+         "port": d["port"], "group_name": d.get("group_name", "")}
+        for d, ok in resultados if not ok
+    ]
+    return {
+        "checked": len(targets),
+        "reachable": reachable,
+        "unreachable": unreachable,
+    }
+
+
+@router.post("/run", status_code=status.HTTP_202_ACCEPTED)
+async def run_bulk_backup(
+    request: Request,
+    payload: BulkBackupRequest,
+    user: CurrentUser = Depends(require_write),
+) -> dict:
+    targets = await _resolve_targets(request, user, payload)
     settings = get_settings()
     queued: list[str] = []
     failed: list[str] = []
