@@ -30,3 +30,6 @@ backups/
 # Canal de actualización (peticiones y estado que intercambian el panel y el
 # anfitrión); se crea en tiempo de ejecución.
 .update-channel/
+
+# Herramientas locales de Claude Code (skills, settings) — nunca al repo
+.claude/
