@@ -690,8 +690,12 @@
         <button type="button" class="ghost" id="btn-log-refresh">Actualizar</button>
       </div>
       <p class="msg" id="log-msg" role="status" aria-live="polite"></p>
-      <div style="max-height:420px;overflow-y:auto">
-        <table>
+      <div style="max-height:420px;overflow-y:auto;padding-right:8px">
+        <table style="table-layout:fixed;width:100%">
+          <colgroup>
+            <col style="width:18%"><col style="width:26%"><col style="width:14%">
+            <col style="width:16%"><col style="width:26%">
+          </colgroup>
           <thead><tr><th>Cuándo</th><th>Acción</th><th>Usuario</th><th>Origen</th><th>Detalle</th></tr></thead>
           <tbody id="log-body"></tbody>
         </table>
