@@ -2052,13 +2052,28 @@ $("btn-close-changes").addEventListener("click", () => {
 });
 
 window.backupNow = async (id) => {
+  // Verifica el alcance del equipo antes de respaldar y avisa en modal.
+  let chk;
+  try {
+    chk = await api("/api/backups/check", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ scope: "devices", device_ids: [id] }),
+    });
+  } catch (error) { await avisar("Error", error.message); return; }
+  const caido = chk.unreachable[0];
+  if (caido && !await preguntar("El equipo no responde",
+    `${caido.name} no responde en ${caido.address}:${caido.port}. `
+    + `¿Respaldar de todos modos?`, "Respaldar igual", true)) return;
   try {
     const result = await api("/api/devices/" + id + "/backup", { method: "POST" });
     pendingBackups[result.node] = Date.now();
-    setMsg("device-msg", "Respaldo de " + result.node + " en proceso…", true);
     renderStatus();
     startFastPoll();
-  } catch (error) { setMsg("device-msg", error.message, false); }
+    await avisar("Respaldo iniciado",
+      `El respaldo de ${result.node} está en proceso. `
+      + `El resultado aparecerá en la pestaña Estado de respaldos.`);
+  } catch (error) { await avisar("Error", error.message); }
 };
 
 window.toggleDevice = async (id, enabled) => {
