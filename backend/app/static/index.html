@@ -1228,8 +1228,17 @@ function rellenarGrupos(sufijo) {
 }
 
 function currentStateBadge(name, oxByNode) {
-  if (pendingBackups[name] || name === bulkActivo)
-    return '<span class="badge run">respaldando…</span>';
+  if (pendingBackups[name] || name === bulkActivo) {
+    // En una tanda masiva mostramos el % de avance de la tanda (verde). Un %
+    // por bytes de un equipo no existe: oxidized no lo reporta, así que para
+    // un respaldo suelto se deja el verde "respaldando…".
+    if (bulkRunNodes.size) {
+      const { total, procesados } = avanceMasivo();
+      const pct = total ? Math.round((procesados / total) * 100) : 0;
+      return `<span class="badge ok">respaldando ${pct}%</span>`;
+    }
+    return '<span class="badge ok">respaldando…</span>';
+  }
   if (bulkRunNodes.has(name) && !nodoProcesadoEnTanda(name))
     return '<span class="badge off">en cola</span>';
   const ox = oxByNode[name];
