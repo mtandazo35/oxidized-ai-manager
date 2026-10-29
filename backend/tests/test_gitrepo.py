@@ -167,7 +167,6 @@ async def test_a_git_timeout_reaps_the_process(monkeypatch) -> None:
         "/api/backups/versions?node=rb-lab-01",
         "/api/backups/diff?node=rb-lab-01&commit=abc123",
         "/api/backups/config?node=rb-lab-01&commit=abc123",
-        "/api/audit/node?node=rb-lab-01",
     ],
 )
 async def test_git_errors_do_not_leak_server_paths(
@@ -188,27 +187,6 @@ async def test_git_errors_do_not_leak_server_paths(
     assert response.status_code == 502
     assert response.json()["detail"] == "No se pudo leer el repositorio de respaldos."
     assert "/var/lib" not in response.text
-
-
-async def test_audit_summary_does_not_leak_git_errors(
-    auth_headers, monkeypatch
-) -> None:
-    from app import gitrepo
-
-    async def fallo(*args, **kwargs):
-        raise gitrepo.GitRepoError("fatal: '/var/lib/oxidized/backups.git'")
-
-    monkeypatch.setattr(gitrepo, "_git", fallo)
-
-    async with client(auth_headers) as api:
-        await api.post(
-            "/api/devices", json={"name": "rb-lab-01", "address": "192.0.2.1"}
-        )
-        response = await api.get("/api/audit/summary")
-
-    assert response.status_code == 200
-    assert "/var/lib" not in response.text
-    assert response.json()[0]["error"] == "no se pudo leer el respaldo"
 
 
 async def test_versions_before_history_since_are_hidden(backup_repo) -> None:

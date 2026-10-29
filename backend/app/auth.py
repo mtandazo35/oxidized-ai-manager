@@ -142,12 +142,6 @@ async def require_write(user: CurrentUser = Depends(current_user)) -> CurrentUse
     return user
 
 
-async def require_audit(user: CurrentUser = Depends(current_user)) -> CurrentUser:
-    if not user.can_audit():
-        raise _forbidden("Su cuenta no tiene acceso a la auditoría.")
-    return user
-
-
 async def require_admin(user: CurrentUser = Depends(current_user)) -> CurrentUser:
     """Ajustes globales, usuarios y recarga de Oxidized."""
     if not user.is_admin:

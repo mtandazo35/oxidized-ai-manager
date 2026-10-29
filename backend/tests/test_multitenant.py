@@ -276,31 +276,6 @@ async def test_reader_cannot_launch_backups(inventory, make_user) -> None:
     assert response.status_code == 403
 
 
-# --- Auditoría -------------------------------------------------------------
-
-
-async def test_reader_has_no_access_to_the_audit(inventory, make_user) -> None:
-    headers = make_user("cliente-a", role="lector", group_name="EmpresaA")
-
-    async with client() as api:
-        summary = await api.get("/api/audit/summary", headers=headers)
-        node = await api.get("/api/audit/node?node=rb-alfa", headers=headers)
-
-    assert summary.status_code == 403
-    assert node.status_code == 403
-
-
-async def test_auditor_only_audits_its_own_company(inventory, make_user) -> None:
-    headers = make_user("auditor-a", role="auditor", group_name="EmpresaA")
-
-    async with client() as api:
-        summary = await api.get("/api/audit/summary", headers=headers)
-        ajeno = await api.get("/api/audit/node?node=rb-beta", headers=headers)
-
-    assert [row["node"] for row in summary.json()] == ["rb-alfa"]
-    assert ajeno.status_code == 404
-
-
 # --- Ajustes globales y cuentas -------------------------------------------
 
 
@@ -518,7 +493,7 @@ def _envejecer_eventos(backup_event_repository, node: str) -> None:
 
 
 async def _nada_del_dueno_anterior(
-    api, node: str, commit_ajeno: str, lector: dict, auditor: dict
+    api, node: str, commit_ajeno: str, lector: dict
 ) -> dict:
     """Recorre todo lo que expone historial de un nodo y lo devuelve."""
     respuestas = {
@@ -539,25 +514,15 @@ async def _nada_del_dueno_anterior(
             "/api/backups/events", params={"node": node}, headers=lector
         ),
         "status": await api.get("/api/backups/status", headers=lector),
-        "audit_ajena": await api.get(
-            "/api/audit/node",
-            params={"node": node, "commit": commit_ajeno},
-            headers=auditor,
-        ),
-        "audit_head": await api.get(
-            "/api/audit/node", params={"node": node}, headers=auditor
-        ),
-        "summary": await api.get("/api/audit/summary", headers=auditor),
     }
     assert respuestas["versions"].status_code == 200
     assert respuestas["config_ajena"].status_code == 404
     assert respuestas["diff_ajeno"].status_code == 404
-    assert respuestas["audit_ajena"].status_code == 404
     assert respuestas["events"].status_code == 200
     for nombre, respuesta in respuestas.items():
         assert SECRETO_A not in respuesta.text, nombre
         assert "router-a" not in respuesta.text, nombre
-        if nombre not in ("config_ajena", "diff_ajeno", "audit_ajena"):
+        if nombre not in ("config_ajena", "diff_ajeno"):
             # En los 404 el hash es el que mandó el propio cliente.
             assert commit_ajeno not in respuesta.text, nombre
     return respuestas
@@ -570,7 +535,6 @@ async def test_a_reused_name_does_not_inherit_another_company_history(
     op_a = make_user("op-a", role="operador", group_name="EmpresaA")
     op_b = make_user("op-b", role="operador", group_name="EmpresaB")
     lector_b = make_user("lector-b", role="lector", group_name="EmpresaB")
-    auditor_b = make_user("auditor-b", role="auditor", group_name="EmpresaB")
 
     async with client() as api:
         alta_a = await api.post(
@@ -598,7 +562,7 @@ async def test_a_reused_name_does_not_inherit_another_company_history(
 
         # Sin respaldo propio todavía: nada, ni siquiera el último de A.
         antes = await _nada_del_dueno_anterior(
-            api, "core-01", commit_a, lector_b, auditor_b
+            api, "core-01", commit_a, lector_b
         )
         assert antes["versions"].json() == []
         assert antes["events"].json() == []
@@ -609,7 +573,7 @@ async def test_a_reused_name_does_not_inherit_another_company_history(
         commit_b = shared_repo("core-01", _export_de("b", "ClaveDeB"), 60)
         await backup_event_repository.record_event("core-01", "node_success", commit_b)
         despues = await _nada_del_dueno_anterior(
-            api, "core-01", commit_a, lector_b, auditor_b
+            api, "core-01", commit_a, lector_b
         )
         assert [v["commit"] for v in despues["versions"].json()] == [commit_b]
         assert despues["audit_head"].status_code == 200
@@ -641,7 +605,6 @@ async def test_renaming_into_an_old_name_does_not_inherit_its_history(
     op_a = make_user("op-a", role="operador", group_name="EmpresaA")
     op_b = make_user("op-b", role="operador", group_name="EmpresaB")
     lector_b = make_user("lector-b", role="lector", group_name="EmpresaB")
-    auditor_b = make_user("auditor-b", role="auditor", group_name="EmpresaB")
 
     async with client() as api:
         alta_a = await api.post(
@@ -665,7 +628,7 @@ async def test_renaming_into_an_old_name_does_not_inherit_its_history(
         assert renombre_b.status_code == 200
 
         respuestas = await _nada_del_dueno_anterior(
-            api, "rb-viejo", commit_a, lector_b, auditor_b
+            api, "rb-viejo", commit_a, lector_b
         )
 
     assert respuestas["versions"].json() == []
@@ -678,7 +641,6 @@ async def test_moving_a_device_to_another_company_hides_its_past(
     auth_headers, make_user, shared_repo, backup_event_repository
 ) -> None:
     lector_b = make_user("lector-b", role="lector", group_name="EmpresaB")
-    auditor_b = make_user("auditor-b", role="auditor", group_name="EmpresaB")
 
     async with client() as api:
         alta = await api.post(
@@ -698,7 +660,7 @@ async def test_moving_a_device_to_another_company_hides_its_past(
         assert movido.status_code == 200
 
         respuestas = await _nada_del_dueno_anterior(
-            api, "rb-mudanza", commit_a, lector_b, auditor_b
+            api, "rb-mudanza", commit_a, lector_b
         )
 
     assert respuestas["versions"].json() == []

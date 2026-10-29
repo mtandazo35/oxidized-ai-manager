@@ -46,11 +46,11 @@
       </div>
       <h2 class="mt-6 mb-0 text-[44px] leading-[1.08] font-semibold tracking-tight text-ink">
         Tu red, <span class="text-accent-text">respaldada</span><br>
-        y auditada sin tocarla.
+        sin tocarla.
       </h2>
       <p class="mt-5 max-w-lg text-base text-ink-muted">
-        Respaldos automáticos de MikroTik y otros fabricantes, historial con
-        cambios línea a línea y auditoría determinista de cada configuración.
+        Respaldos automáticos de MikroTik y otros fabricantes, con historial
+        y cambios línea a línea de cada configuración.
       </p>
       <ul class="mt-8 grid max-w-lg gap-3">
         <li class="login-feature flex items-center gap-3 text-sm text-ink-soft">
@@ -159,7 +159,6 @@
     <p class="mx-3 mt-0 mb-2 hidden text-[11px] font-semibold tracking-[.08em] text-ink-muted uppercase min-[861px]:block">Navegación</p>
     <button id="tab-btn-dashboard" class="active"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="6" rx="2"/><rect x="3" y="14" width="18" height="6" rx="2"/><path d="M7 8h.01M7 17h.01"/></svg> Routers</button>
     <button id="tab-btn-estado"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 4v5h-5"/><path d="m9 12 2 2 4-4"/></svg> Estado de respaldos</button>
-    <button id="tab-btn-audit"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg> Auditoría</button>
     <button id="tab-btn-system"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 0 1-4 0v-.1A1.6 1.6 0 0 0 7.9 19.4l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.6 1.6 0 0 0 3 14.9a2 2 0 0 1 0-4h.1A1.6 1.6 0 0 0 4.6 8.1l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.6 1.6 0 0 0 10.1 4.4V3a2 2 0 0 1 4 0v.1a1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0 1.1 2.7H21a2 2 0 0 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1.3z"/></svg> Ajustes del sistema</button>
     <div class="mt-auto hidden rounded-md border border-line bg-surface-2 p-3.5 min-[861px]:block">
       <div class="flex items-center gap-2 text-xs font-semibold text-ink">
@@ -265,47 +264,6 @@
       </table>
       </div>
       <div class="paginador" id="pag-estado" hidden></div>
-    </div>
-    </div>
-
-    <div id="tab-audit" hidden>
-    <div class="page-head">
-      <div>
-        <div class="eyebrow">Seguridad</div>
-        <h2>Auditoría de configuraciones</h2>
-        <p>
-          Hallazgos calculados sobre el <strong>último respaldo</strong> de cada equipo con
-          reglas deterministas: no se consulta nada al router y no se modifica nada.
-          La evidencia sale con las claves censuradas.
-        </p>
-      </div>
-    </div>
-    <div class="card">
-      <div class="table-tools">
-        <button type="button" id="btn-audit-refresh">Auditar de nuevo</button>
-        <button type="button" class="ghost" id="btn-audit-rules">Ver reglas</button>
-        <input id="audit-filter" type="search" placeholder="Buscar…"
-          title="Filtra por nombre, identity, empresa o versión"
-          class="w-52">
-        <select id="filter-group-audit"><option value="">Todas las empresas</option></select>
-        <select id="group-by-audit" title="Agrupa las filas">
-          <option value="">Sin agrupar</option>
-          <option value="group_name">Por empresa</option>
-          <option value="level">Por riesgo</option>
-        </select>
-        <span id="audit-totals" class="muted"></span>
-      </div>
-      <p class="msg" id="audit-msg" role="status" aria-live="polite"></p>
-      <div class="tabla-scroll">
-      <table id="tabla-audit">
-        <thead><tr>
-          <th data-orden="node">Router</th><th data-orden="group_name">Empresa</th><th data-orden="ros_version">RouterOS</th><th data-orden="level">Riesgo</th><th data-orden="score">Puntaje</th>
-          <th data-orden="critical">Crít.</th><th data-orden="high">Alto</th><th data-orden="medium">Medio</th><th data-orden="low">Bajo</th><th></th>
-        </tr></thead>
-        <tbody id="audit-body"></tbody>
-      </table>
-      </div>
-      <div class="paginador" id="pag-audit" hidden></div>
     </div>
     </div>
 
@@ -773,17 +731,6 @@
   </div>
 </div>
 
-<div class="overlay" id="findings-overlay" hidden>
-  <div class="card wide">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-      <h1 style="font-size:1.1rem" id="findings-title">Hallazgos</h1>
-      <button type="button" class="ghost" id="btn-close-findings">Cerrar</button>
-    </div>
-    <p class="msg" id="findings-msg" role="status" aria-live="polite"></p>
-    <div id="findings-view"></div>
-  </div>
-</div>
-
 <div class="overlay" id="add-overlay" hidden>
   <form class="card" id="add-form">
     <h1 style="margin-bottom:16px;font-size:1.1rem">Agregar router</h1>
@@ -867,7 +814,6 @@
     </div>
     <div class="account-row"><span>Empresa</span><span id="account-group">—</span></div>
     <div class="account-row"><span>Puede modificar</span><span id="account-write">—</span></div>
-    <div class="account-row"><span>Ve la auditoría</span><span id="account-audit">—</span></div>
     <div class="account-row"><span>La sesión caduca</span><span id="account-expiry">—</span></div>
     <button type="button" id="btn-close-account" style="width:100%;margin-top:14px">Cerrar</button>
   </div>
@@ -943,10 +889,9 @@ function limpiarEstado() {
   allDevices = [];
   statusCache = { evByNode: {}, oxByNode: {}, eventNodes: [] };
   Object.keys(pendingBackups).forEach((nombre) => { delete pendingBackups[nombre]; });
-  auditRows = [];
   cuentasCache = [];
   currentUser = null;
-  ["devices-body", "status-body", "audit-body", "users-body", "log-body",
+  ["devices-body", "status-body", "users-body", "log-body",
     "blocks-body", "bulk-body", "findings-view", "changes-view", "version-list"]
     .forEach((id) => { if ($(id)) $(id).innerHTML = ""; });
   document.querySelectorAll(".msg").forEach((m) => { if (m.id !== "login-msg") m.textContent = ""; });
@@ -1517,7 +1462,7 @@ function deviceMatchesFilter(device, sufijo = "") {
 }
 
 function updateGroupOptions() {
-  ["-estado", "-audit", ""].forEach(rellenarGrupos);
+  ["-estado", ""].forEach(rellenarGrupos);
 }
 
 function rellenarGrupos(sufijo) {
@@ -1590,7 +1535,6 @@ const TAMANOS_PAGINA = [25, 50, 100, 250];
 const TABLAS = {
   routers: { pagina: 1, firma: "", tabla: "tabla-routers", sufijo: "" },
   estado: { pagina: 1, firma: "", tabla: "tabla-estado", sufijo: "-estado" },
-  audit: { pagina: 1, firma: "", tabla: "tabla-audit", sufijo: "-audit" },
 };
 
 function leerPrefs(tabla) {
@@ -1628,12 +1572,6 @@ const CLAVES_ORDEN = {
     name: (n) => n, estado: (n) => estadoDe(n), last_event: (n) => evento(n).last_event,
     last_event_at: (n) => evento(n).last_event_at, last_success_at: (n) => evento(n).last_success_at,
     last_commit: (n) => evento(n).last_commit,
-  },
-  audit: {
-    node: (r) => r.node, group_name: (r) => r.group_name, ros_version: (r) => r.ros_version,
-    level: (r) => NIVEL_ORDEN[r.level] ?? -1, score: (r) => r.score,
-    critical: (r) => r.counts.critical || 0, high: (r) => r.counts.high || 0,
-    medium: (r) => r.counts.medium || 0, low: (r) => r.counts.low || 0,
   },
 };
 
@@ -1740,7 +1678,6 @@ function marcarOrden(tabla) {
 const RENDER_TABLA = {
   routers: () => renderDevices(),
   estado: () => renderStatus(),
-  audit: () => renderAudit(),
 };
 
 function irAPagina(tabla, pagina) {
@@ -1795,7 +1732,7 @@ function prefsDeFiltros(tabla) {
 // tabla. Doble clic en el asa (o «Restablecer anchos» en Columnas) vuelve al
 // ancho automático.
 const ANCHO_MINIMO = 48;
-const TABLA_DE = { "tabla-routers": "routers", "tabla-estado": "estado", "tabla-audit": "audit" };
+const TABLA_DE = { "tabla-routers": "routers", "tabla-estado": "estado" };
 let suprimirClicOrden = false;
 
 function claveColumna(th, indice) {
@@ -2774,7 +2711,7 @@ $("btn-upload").addEventListener("click", async () => {
   }
 });
 
-const TAB_NAMES = ["dashboard", "estado", "audit", "system"];
+const TAB_NAMES = ["dashboard", "estado", "system"];
 
 // Permisos de la cuenta actual. La interfaz solo esconde lo que la API ya
 // rechaza: ocultar un botón no es un control de acceso.
@@ -2798,8 +2735,6 @@ function applyPermissions(me) {
   $("user-avatar").textContent = initials(me.username);
   $("btn-user").title = (ROLE_LABEL[me.role] || me.role) +
     (me.group_name ? " · " + me.group_name : "");
-  // Apartado Auditoría retirado del panel: la pestaña no se muestra.
-  $("tab-btn-audit").hidden = true;
   // Ajustes del sistema: el administrador ve todo; un operador entra solo
   // por la carga masiva (antes era una pestaña aparte), el resto es de admin.
   $("tab-btn-system").hidden = !perms.can_write;
@@ -2820,7 +2755,6 @@ function applyPermissions(me) {
 }
 
 function allowedTab(tab) {
-  if (tab === "audit") return false;   // apartado retirado del panel
   if (tab === "system") return perms.can_write;
   return true;
 }
@@ -2833,7 +2767,6 @@ function switchTab(tab) {
   });
   if (location.hash !== "#" + tab) history.replaceState(null, "", "#" + tab);
   if (tab === "system") hubMostrar(null);
-  if (tab === "audit") loadAudit();
 }
 
 // Pinta la lista selectiva de routers según la empresa elegida en el
@@ -3003,142 +2936,6 @@ $("btn-bulk-run-selected").addEventListener("click", () => {
     .map((c) => Number(c.value));
   if (!ids.length) { setMsg("bulk-run-msg", "Marque al menos un router.", false); return; }
   respaldar({ scope: "devices", device_ids: ids });
-});
-
-// --- Auditoría (Fase 4) ---------------------------------------------------
-
-const SEV_LABEL = {
-  critical: "Crítico", high: "Alto", medium: "Medio", low: "Bajo",
-  ok: "Sin hallazgos", unknown: "Sin datos",
-};
-const SEV_COLOR = {
-  critical: "var(--fail-ink)", high: "#c96a2c", medium: "var(--warn-ink)",
-  low: "var(--ink-muted)", ok: "var(--ok-ink)", unknown: "var(--off-ink)",
-};
-let auditRows = [];
-
-function auditMatches(row) {
-  const empresa = $("filter-group-audit").value;
-  if (empresa && (row.group_name || "") !== empresa) return false;
-  const query = $("audit-filter").value.trim().toLowerCase();
-  if (!query) return true;
-  return [row.node, row.identity, row.group_name, row.ros_version]
-    .some((value) => (value || "").toLowerCase().includes(query));
-}
-
-function renderAudit() {
-  const rows = auditRows.filter(auditMatches);
-  const fila = (row) => `
-      <tr>
-        <td>${esc(row.node)}${row.identity && row.identity !== row.node
-          ? ` <span class="muted">${esc(row.identity)}</span>` : ""}</td>
-        <td>${esc(row.group_name || "—")}</td>
-        <td>${esc(row.ros_version || "—")}</td>
-        <td><span class="sev ${row.level}">${SEV_LABEL[row.level] || esc(row.level)}</span>${
-          row.error ? ` <span class="muted">${esc(row.error)}</span>` : ""}</td>
-        <td><div class="scorebar" title="${row.score} / 100"><span
-          style="width:${row.score}%;background:${SEV_COLOR[row.level] || "#475569"}"></span></div></td>
-        <td>${row.counts.critical || 0}</td>
-        <td>${row.counts.high || 0}</td>
-        <td>${row.counts.medium || 0}</td>
-        <td>${row.counts.low || 0}</td>
-        <td>${row.error ? "" :
-          `<button type="button" class="ghost mini" data-accion="showFindings" data-node="${esc(row.node)}">hallazgos</button>`}</td>
-      </tr>`;
-  const agrupar = $("group-by-audit").value;
-  const grupoDe = agrupar === "group_name" ? (row) => row.group_name
-    : agrupar === "level" ? (row) => SEV_LABEL[row.level] || row.level : null;
-  const pagina = paginar("audit", ordenar("audit", rows, grupoDe),
-    [$("audit-filter").value, $("filter-group-audit").value, agrupar].join("|"));
-  $("audit-body").innerHTML = !rows.length
-    ? '<tr><td colspan="10" class="muted">Sin equipos que coincidan.</td></tr>'
-    : grupoDe
-      ? agruparFilas(pagina, grupoDe, fila, 10)
-      : pagina.map(fila).join("");
-  aplicarAnchos("tabla-audit");
-  const risky = rows.filter(
-    (row) => row.level === "critical" || row.level === "high"
-  ).length;
-  const pending = rows.filter((row) => row.error).length;
-  const filtrando = rows.length !== auditRows.length;
-  $("audit-totals").textContent = auditRows.length
-    ? `${rows.length} equipos · ${risky} con riesgo alto o crítico` +
-      (pending ? ` · ${pending} sin respaldo` : "") +
-      (filtrando ? ` (de ${auditRows.length})` : "")
-    : "";
-}
-
-async function loadAudit() {
-  $("audit-msg").textContent = "";
-  $("audit-body").innerHTML =
-    '<tr><td colspan="10" class="muted">Auditando el último respaldo de cada equipo…</td></tr>';
-  try {
-    auditRows = await api("/api/audit/summary");
-    renderAudit();
-  } catch (error) {
-    $("audit-body").innerHTML = "";
-    setMsg("audit-msg", error.message, false);
-  }
-}
-
-function findingCard(severity, title, tag, evidence, recommendation) {
-  return `
-    <div class="finding ${severity}">
-      <h3><span class="sev ${severity}">${SEV_LABEL[severity] || esc(severity)}</span>
-        ${esc(title)} <code class="muted">${esc(tag)}</code></h3>
-      ${evidence.map((item) => `<span class="ev">${
-        item.line ? `línea ${item.line}: ` : ""}${esc(item.detail)}</span>`).join("")}
-      <p class="rec">→ ${esc(recommendation)}</p>
-    </div>`;
-}
-
-function openFindings(title) {
-  $("findings-title").textContent = title;
-  $("findings-view").innerHTML = '<span class="muted">Cargando…</span>';
-  $("findings-msg").textContent = "";
-  $("findings-overlay").hidden = false;
-}
-
-let vistaHallazgos = 0;
-
-window.showFindings = async (node) => {
-  openFindings("Hallazgos de " + node);
-  const turno = ++vistaHallazgos;   // descarta la respuesta si se abrió otro equipo
-  try {
-    const report = await api(`/api/audit/node?node=${encodeURIComponent(node)}`);
-    if (turno !== vistaHallazgos) return;
-    $("findings-title").textContent =
-      `${node} · ${report.findings.length} hallazgos de ${report.rules_evaluated} reglas`;
-    $("findings-view").innerHTML = report.findings.length
-      ? report.findings.map((finding) => findingCard(
-          finding.severity, finding.title, finding.rule_id,
-          finding.evidence, finding.recommendation)).join("")
-      : `<p class="muted">Sin hallazgos: la configuración pasa las ${
-          report.rules_evaluated} reglas.</p>`;
-  } catch (error) {
-    $("findings-view").innerHTML = "";
-    setMsg("findings-msg", error.message, false);
-  }
-};
-
-$("btn-audit-refresh").addEventListener("click", loadAudit);
-alEscribir("audit-filter", renderAudit);
-$("filter-group-audit").addEventListener("change", renderAudit);
-$("group-by-audit").addEventListener("change", renderAudit);
-$("btn-close-findings").addEventListener("click", () => {
-  $("findings-overlay").hidden = true;
-});
-$("btn-audit-rules").addEventListener("click", async () => {
-  openFindings("Reglas evaluadas");
-  try {
-    const catalog = await api("/api/audit/rules");
-    $("findings-view").innerHTML = catalog.rules.map((rule) => findingCard(
-      rule.severity, rule.title, `${rule.id} · ${rule.category}`, [],
-      rule.recommendation)).join("");
-  } catch (error) {
-    $("findings-view").innerHTML = "";
-    setMsg("findings-msg", error.message, false);
-  }
 });
 
 // --- Cuentas de acceso (solo administrador) ------------------------------
@@ -3804,7 +3601,6 @@ $("btn-account").addEventListener("click", () => {
   $("account-role").textContent = ROLE_LABEL[me.role] || me.role || "—";
   $("account-group").textContent = me.group_name || "todas las empresas";
   $("account-write").textContent = me.can_write ? "Sí" : "No";
-  $("account-audit").textContent = me.can_audit ? "Sí" : "No";
   const fin = sessionExpiry();
   $("account-expiry").textContent = fin ? fin.toLocaleString() : "—";
   $("account-overlay").hidden = false;
@@ -3988,7 +3784,6 @@ const ACCIONES = {
   loadDiff: (el) => loadDiff(el.dataset.commit),
   loadFullConfig: (el) => loadFullConfig(el.dataset.commit),
   downloadConfig: (el) => downloadConfig(el.dataset.commit),
-  showFindings: (el) => showFindings(el.dataset.node),
   resetUserPass: (el) => resetUserPass(el.dataset.user),
   editUserGroup: (el) => editUserGroup(el.dataset.user),
   deleteUser: (el) => deleteUser(el.dataset.user),
@@ -4073,7 +3868,6 @@ marcarPaleta();
 
 $("tab-btn-dashboard").addEventListener("click", () => switchTab("dashboard"));
 $("tab-btn-estado").addEventListener("click", () => switchTab("estado"));
-$("tab-btn-audit").addEventListener("click", () => switchTab("audit"));
 $("tab-btn-system").addEventListener("click", () => switchTab("system"));
 
 let tabGuardada = initialTab();

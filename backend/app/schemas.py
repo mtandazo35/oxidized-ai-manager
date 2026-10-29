@@ -176,42 +176,6 @@ class BackupStatusOut(BaseModel):
     lines: int = 0
 
 
-class AuditEvidence(BaseModel):
-    detail: str
-    line: int = 0
-
-
-class AuditFinding(BaseModel):
-    rule_id: str
-    category: str
-    severity: str
-    title: str
-    recommendation: str
-    evidence: list[AuditEvidence]
-
-
-class AuditReport(BaseModel):
-    node: str
-    commit: str
-    ros_version: str = ""
-    rules_evaluated: int
-    counts: dict[str, int]
-    score: int
-    level: str
-    findings: list[AuditFinding]
-
-
-class AuditSummaryRow(BaseModel):
-    node: str
-    group_name: str = ""
-    identity: str = ""
-    ros_version: str = ""
-    counts: dict[str, int]
-    score: int
-    level: str
-    error: str = ""
-
-
 ROLES = ("admin", "operador", "auditor", "lector")
 Role = Literal["admin", "operador", "auditor", "lector"]
 USERNAME_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._@-]{1,63}$"

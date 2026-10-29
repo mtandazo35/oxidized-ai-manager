@@ -7,7 +7,6 @@ from pathlib import Path
 from fastapi import FastAPI, status
 from fastapi.responses import FileResponse, JSONResponse
 
-from .audit import router as audit_router
 from .access_api import router as access_router
 from .auth import router as auth_router
 from .backups import router as backups_router
@@ -100,7 +99,6 @@ app.add_middleware(ActivityLogMiddleware)
 app.add_middleware(SecurityHeadersMiddleware, enable_hsts=settings.app_enable_hsts)
 
 app.include_router(access_router)
-app.include_router(audit_router)
 app.include_router(auth_router)
 app.include_router(backups_router)
 app.include_router(devices_router)
