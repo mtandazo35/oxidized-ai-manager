@@ -463,11 +463,16 @@
     <div class="modal-body">
     <div class="card">
       <form id="settings-form">
+        <h3 style="margin-top:0">Respaldo</h3>
         <div class="field" style="margin-bottom:12px">
           <label for="s-interval">Respaldar cada</label>
           <input id="s-interval" type="number" min="5" max="10080" step="5" style="width:90px" required>
           <label for="s-interval">minutos <span class="muted">(global — cada router puede tener el suyo con «Editar»)</span></label>
         </div>
+
+        <hr style="border:none;border-top:1px solid var(--border);margin:18px 0">
+        <h3 style="margin:0 0 4px">Git remoto</h3>
+        <p class="muted" style="margin:0 0 10px">Envía una copia de todos los respaldos a un repositorio Git externo (GitHub, GitLab…), para tenerlos fuera del servidor.</p>
         <div class="field" style="margin-bottom:12px">
           <input id="s-git-enabled" type="checkbox">
           <label for="s-git-enabled">Enviar respaldos a un Git remoto</label>
@@ -480,8 +485,65 @@
           <input id="s-push-interval" type="number" min="5" max="10080" step="5" style="width:90px" required>
           <label for="s-push-interval">minutos</label>
         </div>
+        <details style="margin:0 0 14px;background:var(--code-bg);border:1px solid var(--border);border-radius:8px;padding:10px 14px">
+          <summary style="cursor:pointer;font-weight:600">¿Cómo crear el repositorio y qué permisos darle?</summary>
+          <div class="muted" style="margin-top:10px;line-height:1.55">
+            <p style="margin:0 0 8px"><b>1. Crea un repositorio vacío y privado</b> en GitHub (o GitLab): <i>New repository</i> → nómbralo p. ej. <code>respaldos-mikrotik</code>, márcalo <b>Private</b> y créalo <b>sin</b> README (debe quedar vacío).</p>
+            <p style="margin:0 0 8px"><b>2. Genera un token de acceso.</b> En GitHub: <i>Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token</i>.</p>
+            <ul style="margin:0 0 8px 18px;padding:0">
+              <li><b>Repository access:</b> «Only select repositories» → elige solo el repo de respaldos.</li>
+              <li><b>Permisos (Repository permissions):</b> <b>Contents → Read and write</b>. Es el único que hace falta (deja el resto en «No access»).</li>
+              <li><b>Expiración:</b> elige un plazo largo o sin caducidad; cuando caduque, el envío fallará y habrá que renovarlo aquí.</li>
+            </ul>
+            <p style="margin:0 0 8px"><b>3. Arma la URL con el token incrustado</b> y pégala arriba, con este formato:<br>
+              <code>https://<i>usuario</i>:<i>TOKEN</i>@github.com/<i>usuario</i>/respaldos-mikrotik.git</code></p>
+            <p style="margin:0">Marca la casilla, pulsa <b>Guardar</b> y espera al siguiente envío (o revisa el estado abajo). El token se guarda <b>cifrado</b> y el panel solo lo muestra como <code>***</code>.</p>
+          </div>
+        </details>
+        <div style="margin-bottom:6px"><span class="muted" id="push-status"></span></div>
+
+        <hr style="border:none;border-top:1px solid var(--border);margin:18px 0">
+        <h3 style="margin:0 0 4px">Avisos por Telegram</h3>
+        <p class="muted" style="margin:0 0 10px">Una vez al día, si hay equipos sin respaldo reciente, el panel envía la lista a un chat de Telegram.</p>
+        <div class="field" style="margin-bottom:12px">
+          <input id="s-tg-enabled" type="checkbox">
+          <label for="s-tg-enabled">Enviar avisos por Telegram</label>
+        </div>
+        <div class="field" style="margin-bottom:12px">
+          <label for="s-tg-token" style="min-width:150px">Token del bot</label>
+          <input id="s-tg-token" placeholder="123456789:AA..." style="flex:1" autocomplete="off">
+        </div>
+        <div class="field" style="margin-bottom:12px">
+          <label for="s-tg-chat" style="min-width:150px">Chat ID (persona o grupo)</label>
+          <input id="s-tg-chat" placeholder="-1001234567890" style="flex:1" autocomplete="off">
+        </div>
+        <div class="field" style="margin-bottom:12px">
+          <label for="s-alert-hour">Avisar a las</label>
+          <input id="s-alert-hour" type="number" min="0" max="23" style="width:70px" required>
+          <label for="s-alert-hour">h (hora de Ecuador), si no respaldaron en</label>
+          <input id="s-alert-threshold" type="number" min="1" max="168" style="width:70px" required>
+          <label for="s-alert-threshold">h</label>
+        </div>
+        <details style="margin:0 0 14px;background:var(--code-bg);border:1px solid var(--border);border-radius:8px;padding:10px 14px">
+          <summary style="cursor:pointer;font-weight:600">¿Cómo crear el bot y obtener el Chat ID?</summary>
+          <div class="muted" style="margin-top:10px;line-height:1.55">
+            <p style="margin:0 0 8px"><b>1. Crea el bot:</b> en Telegram abre <code>@BotFather</code> → <code>/newbot</code> → ponle nombre. Te devuelve el <b>token</b> (algo como <code>123456789:AAE...</code>). Pégalo arriba.</p>
+            <p style="margin:0 0 8px"><b>2. Obtén el Chat ID:</b></p>
+            <ul style="margin:0 0 8px 18px;padding:0">
+              <li><b>A un grupo:</b> crea el grupo, agrega el bot, escribe cualquier mensaje y usa <code>@RawDataBot</code> (o <code>@getidsbot</code>) para ver el <code>chat.id</code> (los grupos empiezan con <code>-100</code>).</li>
+              <li><b>A tu propio chat:</b> escríbele <code>/start</code> al bot primero (si no, Telegram no deja que te escriba), y saca tu id con <code>@userinfobot</code>.</li>
+            </ul>
+            <p style="margin:0">Pulsa <b>Guardar</b> y luego <b>Enviar prueba</b> para confirmar. El token se guarda <b>cifrado</b> y el panel solo lo muestra como <code>***</code>.</p>
+          </div>
+        </details>
+        <div class="field" style="margin-bottom:6px">
+          <button type="button" class="ghost" id="btn-tg-test">Enviar prueba</button>
+          <span class="muted" id="tg-test-status" style="margin-left:8px"></span>
+        </div>
+        <div style="margin-bottom:12px"><span class="muted" id="tg-last-status"></span></div>
+
+        <hr style="border:none;border-top:1px solid var(--border);margin:18px 0">
         <button type="submit">Guardar</button>
-        <span class="muted" id="push-status" style="margin-left:12px"></span>
         <p class="msg" id="settings-msg" role="status" aria-live="polite"></p>
       </form>
     </div>
@@ -2197,6 +2259,15 @@ async function loadSettings() {
       (s.last_push_ok ? "OK" : "falló (" + s.last_push_detail + ")") +
       " · " + fmtDate(s.last_push_at);
   }
+  $("s-tg-enabled").checked = s.telegram_enabled;
+  $("s-tg-token").value = s.telegram_bot_token;
+  $("s-tg-chat").value = s.telegram_chat_id;
+  $("s-alert-hour").value = s.stale_alert_hour;
+  $("s-alert-threshold").value = s.stale_alert_threshold_hours;
+  $("tg-last-status").textContent = s.last_stale_alert_at
+    ? "Último aviso: " + fmtDate(s.last_stale_alert_at) +
+      (s.last_stale_alert_detail ? " · " + s.last_stale_alert_detail : "")
+    : "";
 }
 
 // El sondeo de 60 s y el rápido (durante un respaldo) pueden coincidir: sin
@@ -2519,11 +2590,25 @@ $("settings-form").addEventListener("submit", async (event) => {
         git_remote_enabled: $("s-git-enabled").checked,
         git_remote_url: $("s-git-url").value,
         git_push_interval_minutes: Number($("s-push-interval").value),
+        telegram_enabled: $("s-tg-enabled").checked,
+        telegram_bot_token: $("s-tg-token").value,
+        telegram_chat_id: $("s-tg-chat").value,
+        stale_alert_hour: Number($("s-alert-hour").value),
+        stale_alert_threshold_hours: Number($("s-alert-threshold").value),
       }),
     });
     setMsg("settings-msg", "Configuración guardada.", true);
     loadSettings();
   } catch (error) { setMsg("settings-msg", error.message, false); }
+});
+
+$("btn-tg-test").addEventListener("click", async () => {
+  const estado = $("tg-test-status");
+  estado.textContent = "Enviando…";
+  try {
+    const r = await api("/api/settings/test-telegram", { method: "POST" });
+    estado.textContent = r.ok ? "✅ Enviado, revisa el chat." : "❌ " + r.detail;
+  } catch (error) { estado.textContent = "❌ " + error.message; }
 });
 
 $("pass-form").addEventListener("submit", async (event) => {

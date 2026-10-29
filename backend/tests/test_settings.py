@@ -160,6 +160,77 @@ def test_mask_remote_url_hides_bare_tokens() -> None:
     assert mask_remote_url("git@github.com:u/r.git") == "git@github.com:u/r.git"
 
 
+async def test_telegram_token_se_guarda_cifrado_y_enmascarado(
+    auth_headers, settings_repository
+) -> None:
+    async with client() as api:
+        updated = await api.put(
+            "/api/settings",
+            headers=auth_headers,
+            json={
+                "backup_interval_minutes": 60,
+                "git_remote_enabled": False,
+                "git_remote_url": "",
+                "telegram_enabled": True,
+                "telegram_bot_token": "123:ABCsecreto",
+                "telegram_chat_id": "-100999",
+                "stale_alert_hour": 7,
+                "stale_alert_threshold_hours": 12,
+            },
+        )
+
+    assert updated.status_code == 200
+    body = updated.json()
+    assert body["telegram_enabled"] is True
+    assert body["telegram_bot_token"] == "***"
+    assert body["telegram_chat_id"] == "-100999"
+    assert body["stale_alert_hour"] == 7
+    assert body["stale_alert_threshold_hours"] == 12
+    stored = await settings_repository.get_all()
+    assert stored["telegram_bot_token"] == "123:ABCsecreto"
+
+
+async def test_telegram_masked_token_conserva_el_guardado(
+    auth_headers, settings_repository
+) -> None:
+    await settings_repository.set_many({"telegram_bot_token": "123:ABCsecreto"})
+    async with client() as api:
+        response = await api.put(
+            "/api/settings",
+            headers=auth_headers,
+            json={
+                "backup_interval_minutes": 60,
+                "git_remote_enabled": False,
+                "git_remote_url": "",
+                "telegram_enabled": True,
+                "telegram_bot_token": "***",
+                "telegram_chat_id": "-100999",
+            },
+        )
+
+    assert response.status_code == 200
+    stored = await settings_repository.get_all()
+    assert stored["telegram_bot_token"] == "123:ABCsecreto"
+
+
+async def test_telegram_activar_sin_token_o_chat_rechazado(auth_headers) -> None:
+    async with client() as api:
+        response = await api.put(
+            "/api/settings",
+            headers=auth_headers,
+            json={
+                "backup_interval_minutes": 60,
+                "git_remote_enabled": False,
+                "git_remote_url": "",
+                "telegram_enabled": True,
+                "telegram_bot_token": "",
+                "telegram_chat_id": "",
+            },
+        )
+
+    assert response.status_code == 422
+
+
 async def test_http_remote_is_rejected(auth_headers) -> None:
     async with client() as api:
         response = await api.put(

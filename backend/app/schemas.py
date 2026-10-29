@@ -131,6 +131,11 @@ class SettingsUpdate(BaseModel):
     git_remote_enabled: bool
     git_remote_url: str = Field(default="", max_length=300)
     git_push_interval_minutes: int = Field(default=60, ge=5, le=10080)
+    telegram_enabled: bool = False
+    telegram_bot_token: str = Field(default="", max_length=200)
+    telegram_chat_id: str = Field(default="", max_length=64)
+    stale_alert_hour: int = Field(default=8, ge=0, le=23)
+    stale_alert_threshold_hours: int = Field(default=24, ge=1, le=168)
 
 
 class SettingsOut(BaseModel):
@@ -141,6 +146,13 @@ class SettingsOut(BaseModel):
     last_push_ok: bool | None
     last_push_at: datetime | None
     last_push_detail: str
+    telegram_enabled: bool
+    telegram_bot_token: str
+    telegram_chat_id: str
+    stale_alert_hour: int
+    stale_alert_threshold_hours: int
+    last_stale_alert_at: datetime | None
+    last_stale_alert_detail: str
 
 
 class BulkBackupRequest(BaseModel):

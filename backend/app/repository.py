@@ -443,13 +443,21 @@ SETTINGS_DEFAULTS = {
     # `access.is_allowed`.
     "login_allowlist_enabled": "false",
     "login_allowlist": "",
+    # Avisos por Telegram de equipos sin respaldo reciente.
+    "telegram_enabled": "false",
+    "telegram_bot_token": "",
+    "telegram_chat_id": "",
+    "stale_alert_hour": "8",          # hora de Ecuador (0-23)
+    "stale_alert_threshold_hours": "24",
+    "last_stale_alert_at": "",
+    "last_stale_alert_detail": "",
 }
 
 
 # Ajustes que se guardan cifrados: la URL del Git remoto puede llevar un token
 # embebido (`https://usuario:token@host/repo.git`) y un volcado de la base no
 # debe entregarlo en claro. Los consumidores siguen viendo el valor descifrado.
-ENCRYPTED_SETTINGS = frozenset({"git_remote_url"})
+ENCRYPTED_SETTINGS = frozenset({"git_remote_url", "telegram_bot_token"})
 
 
 class SettingsRepository:

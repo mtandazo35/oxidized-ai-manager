@@ -7,9 +7,13 @@ import re
 import httpx
 
 from .config import Settings
+from .notifications import build_stale_message, send_telegram, stale_devices
 
 
 log = logging.getLogger("oxidized-ai-manager.scheduler")
+
+# Ecuador es UTC−5 (sin horario de verano).
+ECUADOR_OFFSET = dt.timedelta(hours=5)
 
 # Credenciales embebidas en una URL HTTP(S): `usuario:clave@` o solo `TOKEN@`
 # (así se escriben los tokens de GitHub y GitLab). Ambas formas se ocultan.
@@ -177,8 +181,60 @@ async def purge_activity(app, settings: Settings) -> int:
         return 0
 
 
+async def maybe_send_stale_alert(
+    app, settings: Settings, last_alert_date: dict
+) -> None:
+    """Una vez al día, a la hora de Ecuador configurada, avisa por Telegram los
+    equipos sin respaldo reciente. `last_alert_date` guarda la fecha (Ecuador)
+    del último envío para no repetir en el mismo día.
+    """
+    values = await app.state.settings.get_all()
+    if values["telegram_enabled"] != "true":
+        return
+    try:
+        hora = int(values["stale_alert_hour"])
+    except ValueError:
+        hora = 8
+    try:
+        umbral = int(values["stale_alert_threshold_hours"])
+    except ValueError:
+        umbral = 24
+
+    now = dt.datetime.now(dt.timezone.utc)
+    ecuador = now - ECUADOR_OFFSET
+    if ecuador.hour != hora or last_alert_date.get("v") == ecuador.date():
+        return
+    # Marcar primero: si el envío falla, no se reintenta en bucle cada minuto.
+    last_alert_date["v"] = ecuador.date()
+
+    devices = await app.state.devices.list_devices()
+    statuses = {row["node"]: row for row in await app.state.backup_events.status()}
+    atrasados = stale_devices(devices, statuses, umbral, now=now)
+    if not atrasados:
+        log.info("Aviso de respaldos: ningún equipo atrasado, no se envía.")
+        return
+    enabled = sum(1 for d in devices if d["enabled"])
+    texto = build_stale_message(atrasados, umbral, enabled, now=now)
+    ok, detail = await send_telegram(
+        values["telegram_bot_token"], values["telegram_chat_id"], texto
+    )
+    await app.state.settings.set_many(
+        {
+            "last_stale_alert_at": now.isoformat(),
+            "last_stale_alert_detail": (
+                f"{len(atrasados)} atrasados, enviado"
+                if ok
+                else f"error: {detail}"
+            ),
+        }
+    )
+    if not ok:
+        log.warning("No se pudo enviar el aviso de Telegram: %s", detail)
+
+
 async def scheduler_loop(app, settings: Settings) -> None:
     last_run: dict[str, float] = {}
+    last_alert_date: dict = {}
     loop = asyncio.get_running_loop()
     last_push = loop.time()
     last_purge = loop.time() - 24 * 3600  # que purgue en el primer ciclo
@@ -186,6 +242,10 @@ async def scheduler_loop(app, settings: Settings) -> None:
         try:
             await asyncio.sleep(60)
             await run_tick(app, settings, last_run, loop.time())
+            try:
+                await maybe_send_stale_alert(app, settings, last_alert_date)
+            except Exception:
+                log.exception("Fallo al evaluar el aviso de respaldos atrasados")
             values = await app.state.settings.get_all()
             if values["git_remote_enabled"] == "true" and values["git_remote_url"]:
                 try:
