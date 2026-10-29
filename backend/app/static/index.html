@@ -2983,7 +2983,7 @@ function switchTab(tab) {
     $("tab-" + name).hidden = name !== tab;
     $("tab-btn-" + name).classList.toggle("active", name === tab);
   });
-  if (location.hash !== "#" + tab) history.replaceState(null, "", "#" + tab);
+  fijarUbicacion("#" + tab);
   if (tab === "system") hubMostrar(null);
 }
 
@@ -3855,7 +3855,15 @@ function hubMostrar(seccion) {
   const modal = $("sec-" + seccion);
   if (!modal) return;
   modal.hidden = false;
+  fijarUbicacion("#system/" + seccion);
   if (HUB_CARGA[seccion]) HUB_CARGA[seccion]();
+}
+
+// …y cerrarla la quita (se sigue en la portada de Ajustes).
+function alCerrarVentana(overlay) {
+  if (overlay && overlay.id.startsWith("sec-") && location.hash.startsWith("#system/")) {
+    fijarUbicacion("#system");
+  }
 }
 
 document.querySelectorAll(".hub-item").forEach((boton) => {
@@ -3868,6 +3876,7 @@ document.querySelectorAll("[data-cerrar]").forEach((boton) => {
   boton.addEventListener("click", () => {
     const destino = $(boton.dataset.cerrar);
     if (destino) destino.hidden = true;
+    alCerrarVentana(destino);
   });
 });
 
@@ -3901,6 +3910,7 @@ function cerrarOverlay(overlay) {
   if (overlay.id === "ask-overlay") cerrarPregunta(false);
   else if (overlay.id === "input-overlay") cerrarEntrada(null);
   else overlay.hidden = true;
+  alCerrarVentana(overlay);
 }
 
 document.addEventListener("keydown", (evento) => {
@@ -4018,11 +4028,25 @@ document.addEventListener("click", (evento) => {
   ACCIONES[el.dataset.accion](el);
 });
 
+// Dónde está el usuario, en la dirección de la página: «#estado», «#system» o
+// «#system/cuentas» (una sección de Ajustes abierta). Recargar vuelve ahí. Una
+// entrada sin «#» abre Routers.
+function leerUbicacion() {
+  const [tab, seccion] = location.hash.replace(/^#/, "").split("/");
+  return {
+    tab: TAB_NAMES.includes(tab) ? tab : "dashboard",
+    seccion: tab === "system" && /^[a-z]+$/.test(seccion || "") ? seccion : "",
+  };
+}
+
+function fijarUbicacion(destino) {
+  if (location.hash !== destino) history.replaceState(null, "", destino);
+}
+
 function initialTab() {
-  // Siempre se entra por Routers. Antes se recuperaba la pestana del hash, que
-  // switchTab actualiza en cada clic: recargar dejaba al operador donde estaba
-  // la vez anterior (a menudo en Ajustes del sistema) en vez de en la lista.
-  return "dashboard";
+  // Antes se entraba siempre por Routers: recargar estando en Ajustes del
+  // sistema devolvía a la lista. Ahora se respeta la pestaña de la dirección.
+  return leerUbicacion().tab;
 }
 $("col-menu-panel").addEventListener("change", (evento) => {
   const casilla = evento.target.closest("[data-columna]");
@@ -4091,6 +4115,7 @@ $("tab-btn-estado").addEventListener("click", () => switchTab("estado"));
 $("tab-btn-system").addEventListener("click", () => switchTab("system"));
 
 let tabGuardada = initialTab();
+let seccionGuardada = leerUbicacion().seccion;
 
 async function enterApp() {
   try {
@@ -4100,6 +4125,11 @@ async function enterApp() {
     comprobarActualizacion();
     show("app");
     switchTab(tabGuardada);
+    if (tabGuardada === "system" && seccionGuardada && allowedTab("system")) {
+      hubMostrar(seccionGuardada);
+    }
+    // Tras un cierre de sesión y nuevo ingreso, se vuelve a donde se estaba.
+    ({ tab: tabGuardada, seccion: seccionGuardada } = leerUbicacion());
     refresh();
     // Un solo sondeo por sesión: antes cada ingreso sin recargar sumaba otro.
     clearInterval(refreshTimer);

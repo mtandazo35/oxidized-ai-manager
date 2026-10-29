@@ -89,21 +89,22 @@ def test_tabs_declared_in_the_script_match_the_buttons() -> None:
     )
 
 
-def test_el_panel_abre_siempre_en_routers() -> None:
-    """Recargar devolvía al operador a la pestaña de la vez anterior.
-
-    `switchTab` escribe la pestaña en el hash de la URL en cada clic, así que
-    `initialTab` leyéndolo significaba abrir en Ajustes del sistema a quien
-    hubiera terminado ahí. Se entra siempre por Routers.
-    """
+def test_recargar_vuelve_a_la_pestana_y_seccion_donde_se_estaba() -> None:
+    """Antes se entraba siempre por Routers y recargar estando en Ajustes del
+    sistema devolvía a la lista. Ahora la dirección guarda dónde se está
+    («#system/cuentas») y recargar vuelve ahí; sin «#» se abre Routers."""
     js = panel_js()
-    cuerpo = re.search(r"function initialTab\(\) \{(.*?)\n\}", js, re.S).group(1)
+    inicial = re.search(r"function initialTab\(\) \{(.*?)\n\}", js, re.S).group(1)
+    leer = re.search(r"function leerUbicacion\(\) \{(.*?)\n\}", js, re.S).group(1)
+    mostrar = re.search(r"function hubMostrar\(seccion\) \{(.*?)\n\}", js, re.S).group(1)
+    entrar = re.search(r"async function enterApp\(\) \{(.*?)\n\}", js, re.S).group(1)
 
-    assert 'return "dashboard";' in cuerpo
-    assert "location.hash" not in cuerpo, (
-        "initialTab vuelve a decidir por el hash: recargar dejaría al operador "
-        "donde estaba, no en Routers"
-    )
+    assert "leerUbicacion().tab" in inicial
+    assert 'TAB_NAMES.includes(tab) ? tab : "dashboard"' in leer, "una pestaña desconocida debe caer en Routers"
+    assert 'fijarUbicacion("#system/" + seccion)' in mostrar
+    assert "hubMostrar(seccionGuardada)" in entrar
+    # Cerrar una sección, por botón, Escape o clic fuera, la quita de la dirección.
+    assert js.count("alCerrarVentana(") >= 3
 
 
 def test_cada_columna_ocultable_existe_en_la_cabecera_y_en_las_filas() -> None:
