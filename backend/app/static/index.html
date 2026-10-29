@@ -461,18 +461,23 @@
       <button type="button" class="ghost" data-cerrar="sec-config">Cerrar</button>
     </div>
     <div class="modal-body">
+    <h2 style="margin-top:0">Respaldo</h2>
     <div class="card">
       <form id="settings-form">
-        <h3 style="margin-top:0">Respaldo</h3>
-        <div class="field" style="margin-bottom:12px">
+        <div class="field">
           <label for="s-interval">Respaldar cada</label>
           <input id="s-interval" type="number" min="5" max="10080" step="5" style="width:90px" required>
           <label for="s-interval">minutos <span class="muted">(global — cada router puede tener el suyo con «Editar»)</span></label>
         </div>
+        <button type="submit" style="margin-top:14px">Guardar</button>
+        <p class="msg" id="settings-msg" role="status" aria-live="polite"></p>
+      </form>
+    </div>
 
-        <hr style="border:none;border-top:1px solid var(--border);margin:18px 0">
-        <h3 style="margin:0 0 4px">Git remoto</h3>
-        <p class="muted" style="margin:0 0 10px">Envía una copia de todos los respaldos a un repositorio Git externo (GitHub, GitLab…), para tenerlos fuera del servidor.</p>
+    <h2>Git remoto</h2>
+    <div class="card">
+      <form id="git-form">
+        <p class="muted" style="margin:0 0 12px">Envía una copia de todos los respaldos a un repositorio Git externo (GitHub, GitLab…), para tenerlos fuera del servidor.</p>
         <div class="field" style="margin-bottom:12px">
           <input id="s-git-enabled" type="checkbox">
           <label for="s-git-enabled">Enviar respaldos a un Git remoto</label>
@@ -500,11 +505,16 @@
             <p style="margin:0">Marca la casilla, pulsa <b>Guardar</b> y espera al siguiente envío (o revisa el estado abajo). El token se guarda <b>cifrado</b> y el panel solo lo muestra como <code>***</code>.</p>
           </div>
         </details>
-        <div style="margin-bottom:6px"><span class="muted" id="push-status"></span></div>
+        <button type="submit">Guardar</button>
+        <div style="margin-top:8px"><span class="muted" id="push-status"></span></div>
+        <p class="msg" id="git-msg" role="status" aria-live="polite"></p>
+      </form>
+    </div>
 
-        <hr style="border:none;border-top:1px solid var(--border);margin:18px 0">
-        <h3 style="margin:0 0 4px">Avisos por Telegram</h3>
-        <p class="muted" style="margin:0 0 10px">Una vez al día, si hay equipos sin respaldo reciente, el panel envía la lista a un chat de Telegram.</p>
+    <h2>Avisos por Telegram</h2>
+    <div class="card">
+      <form id="telegram-form">
+        <p class="muted" style="margin:0 0 12px">Una vez al día, si hay equipos sin respaldo reciente, el panel envía la lista a un chat de Telegram.</p>
         <div class="field" style="margin-bottom:12px">
           <input id="s-tg-enabled" type="checkbox">
           <label for="s-tg-enabled">Enviar avisos por Telegram</label>
@@ -536,15 +546,11 @@
             <p style="margin:0">Pulsa <b>Guardar</b> y luego <b>Enviar prueba</b> para confirmar. El token se guarda <b>cifrado</b> y el panel solo lo muestra como <code>***</code>.</p>
           </div>
         </details>
-        <div class="field" style="margin-bottom:6px">
-          <button type="button" class="ghost" id="btn-tg-test">Enviar prueba</button>
-          <span class="muted" id="tg-test-status" style="margin-left:8px"></span>
-        </div>
-        <div style="margin-bottom:12px"><span class="muted" id="tg-last-status"></span></div>
-
-        <hr style="border:none;border-top:1px solid var(--border);margin:18px 0">
         <button type="submit">Guardar</button>
-        <p class="msg" id="settings-msg" role="status" aria-live="polite"></p>
+        <button type="button" class="ghost" id="btn-tg-test" style="margin-left:8px">Enviar prueba</button>
+        <span class="muted" id="tg-test-status" style="margin-left:8px"></span>
+        <div style="margin-top:8px"><span class="muted" id="tg-last-status"></span></div>
+        <p class="msg" id="telegram-msg" role="status" aria-live="polite"></p>
       </form>
     </div>
 
@@ -2579,27 +2585,48 @@ $("add-form").addEventListener("submit", async (event) => {
   } catch (error) { setMsg("add-msg", error.message, false); }
 });
 
-$("settings-form").addEventListener("submit", async (event) => {
-  event.preventDefault();
+// El PUT de /api/settings exige todos los campos aunque cada tarjeta tenga su
+// propio Guardar: se arma el payload completo leyendo todos los inputs (están
+// todos en el DOM), así guardar una tarjeta no borra lo de las otras.
+function payloadSettings() {
+  return {
+    backup_interval_minutes: Number($("s-interval").value),
+    git_remote_enabled: $("s-git-enabled").checked,
+    git_remote_url: $("s-git-url").value,
+    git_push_interval_minutes: Number($("s-push-interval").value),
+    telegram_enabled: $("s-tg-enabled").checked,
+    telegram_bot_token: $("s-tg-token").value,
+    telegram_chat_id: $("s-tg-chat").value,
+    stale_alert_hour: Number($("s-alert-hour").value),
+    stale_alert_threshold_hours: Number($("s-alert-threshold").value),
+  };
+}
+
+async function guardarSettings(msgId) {
   try {
     await api("/api/settings", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        backup_interval_minutes: Number($("s-interval").value),
-        git_remote_enabled: $("s-git-enabled").checked,
-        git_remote_url: $("s-git-url").value,
-        git_push_interval_minutes: Number($("s-push-interval").value),
-        telegram_enabled: $("s-tg-enabled").checked,
-        telegram_bot_token: $("s-tg-token").value,
-        telegram_chat_id: $("s-tg-chat").value,
-        stale_alert_hour: Number($("s-alert-hour").value),
-        stale_alert_threshold_hours: Number($("s-alert-threshold").value),
-      }),
+      body: JSON.stringify(payloadSettings()),
     });
-    setMsg("settings-msg", "Configuración guardada.", true);
+    setMsg(msgId, "Configuración guardada.", true);
     loadSettings();
-  } catch (error) { setMsg("settings-msg", error.message, false); }
+  } catch (error) { setMsg(msgId, error.message, false); }
+}
+
+$("settings-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  guardarSettings("settings-msg");
+});
+
+$("git-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  guardarSettings("git-msg");
+});
+
+$("telegram-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  guardarSettings("telegram-msg");
 });
 
 $("btn-tg-test").addEventListener("click", async () => {
