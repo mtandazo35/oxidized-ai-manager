@@ -527,11 +527,12 @@
           <summary style="cursor:pointer;font-weight:600">¿Cómo crear el repositorio y qué permisos darle?</summary>
           <div class="muted" style="margin-top:10px;line-height:1.55">
             <p style="margin:0 0 8px"><b>1. Crea un repositorio vacío y privado</b> en GitHub (o GitLab): <i>New repository</i> → nómbralo p. ej. <code>respaldos-mikrotik</code>, márcalo <b>Private</b> y créalo <b>sin</b> README (debe quedar vacío).</p>
-            <p style="margin:0 0 8px"><b>2. Genera un token de acceso.</b> En GitHub: <i>Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token</i>.</p>
+            <p style="margin:0 0 8px"><b>2. Genera un token de acceso.</b> <b>OJO:</b> el token NO está en los ajustes del repositorio, sino en los de <b>tu cuenta</b>. Ve a <code>https://github.com/settings/personal-access-tokens/new</code> (o: foto de perfil arriba a la derecha → <i>Settings</i> → abajo del todo <i>Developer settings</i> → <i>Personal access tokens → Fine-grained tokens → Generate new token</i>).</p>
             <ul style="margin:0 0 8px 18px;padding:0">
+              <li><b>Expiration:</b> un plazo largo o <i>No expiration</i>; cuando caduque, el envío fallará y habrá que renovarlo aquí.</li>
               <li><b>Repository access:</b> «Only select repositories» → elige solo el repo de respaldos.</li>
               <li><b>Permisos (Repository permissions):</b> <b>Contents → Read and write</b>. Es el único que hace falta (deja el resto en «No access»).</li>
-              <li><b>Expiración:</b> elige un plazo largo o sin caducidad; cuando caduque, el envío fallará y habrá que renovarlo aquí.</li>
+              <li>Pulsa <b>Generate token</b> y <b>cópialo ya</b>: GitHub solo lo muestra una vez (empieza con <code>github_pat_…</code>).</li>
             </ul>
             <p style="margin:0 0 8px"><b>3. Arma la URL con el token incrustado</b> y pégala arriba, con este formato:<br>
               <code>https://<i>usuario</i>:<i>TOKEN</i>@github.com/<i>usuario</i>/respaldos-mikrotik.git</code></p>
