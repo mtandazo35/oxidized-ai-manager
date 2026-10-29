@@ -1762,7 +1762,10 @@ function aplicarAnchos(idTabla) {
   tabla.classList.add("anchos-fijos");
   let total = 0;
   ths.forEach((th, i) => {
-    let ancho = anchos[claveColumna(th, i)] || 120;
+    // Nunca por debajo del mínimo: un ancho guardado minúsculo (de una medición
+    // con la tabla filtrada a pocas filas, o de un estado viejo) dejaba la
+    // columna de 1-5 px, invisible, y la fila parecía vacía aunque tiene datos.
+    let ancho = Math.max(ANCHO_MINIMO, anchos[claveColumna(th, i)] || 120);
     // La columna de botones no se recorta nunca: mide lo que ocupan sus
     // botones en las filas pintadas (cambian: «Pausar» / «Activar»…).
     if (i === ths.length - 1) {
@@ -1780,7 +1783,8 @@ function aplicarAnchos(idTabla) {
 function medirAnchos(idTabla) {
   const anchos = Object.assign({}, leerPrefs(TABLA_DE[idTabla]).anchos || {});
   cabeceras(idTabla).forEach((th, i) => {
-    if (!th.hidden) anchos[claveColumna(th, i)] = Math.round(th.getBoundingClientRect().width);
+    if (!th.hidden) anchos[claveColumna(th, i)] =
+      Math.max(ANCHO_MINIMO, Math.round(th.getBoundingClientRect().width));
   });
   return anchos;
 }
