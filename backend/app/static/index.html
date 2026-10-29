@@ -58,10 +58,6 @@
           Respaldos programados y versionados en Git
         </li>
         <li class="login-feature flex items-center gap-3 text-sm text-ink-soft">
-          <span class="feature-icon"><svg viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.4-3 8.3-7 10-4-1.7-7-5.6-7-10V6z"/><path d="M9.5 12l1.8 1.8 3.4-3.6"/></svg></span>
-          Auditoría de seguridad con reglas deterministas
-        </li>
-        <li class="login-feature flex items-center gap-3 text-sm text-ink-soft">
           <span class="feature-icon"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M2.5 20c0-3.6 3-5.6 6.5-5.6s6.5 2 6.5 5.6"/><path d="M17 11.5a2.6 2.6 0 1 0 0-5.2"/><path d="M18.5 20c0-2.2-.7-3.8-2-4.8"/></svg></span>
           Varias empresas, cada una ve solo lo suyo
         </li>
@@ -2802,7 +2798,8 @@ function applyPermissions(me) {
   $("user-avatar").textContent = initials(me.username);
   $("btn-user").title = (ROLE_LABEL[me.role] || me.role) +
     (me.group_name ? " · " + me.group_name : "");
-  $("tab-btn-audit").hidden = !perms.can_audit;
+  // Apartado Auditoría retirado del panel: la pestaña no se muestra.
+  $("tab-btn-audit").hidden = true;
   // Ajustes del sistema: el administrador ve todo; un operador entra solo
   // por la carga masiva (antes era una pestaña aparte), el resto es de admin.
   $("tab-btn-system").hidden = !perms.can_write;
@@ -2823,7 +2820,7 @@ function applyPermissions(me) {
 }
 
 function allowedTab(tab) {
-  if (tab === "audit") return perms.can_audit;
+  if (tab === "audit") return false;   // apartado retirado del panel
   if (tab === "system") return perms.can_write;
   return true;
 }
