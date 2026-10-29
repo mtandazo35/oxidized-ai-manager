@@ -255,6 +255,7 @@
         <select id="filter-group-estado"><option value="">Todas las empresas</option></select>
         <select id="group-by-estado" title="Agrupa las filas"><option value="">Sin agrupar</option><option value="group_name">Por empresa</option><option value="estado">Por estado actual</option></select>
         <select id="filter-respaldo-estado" title="Muestra solo los equipos que nunca se respaldaron con éxito, o solo los que sí"><option value="">Respaldados y no</option><option value="no">Solo no respaldados</option><option value="si">Solo respaldados</option></select>
+        <button type="button" id="estado-chip" class="chip-filtro" title="Quitar el filtro" hidden></button>
       </div>
       <p class="msg" id="estado-msg" role="status" aria-live="polite"></p>
       <div class="tabla-scroll">
@@ -327,6 +328,8 @@
 .kpi-click{cursor:pointer;transition:transform .12s ease,box-shadow .12s ease}
 .kpi-click:hover{transform:translateY(-1px);box-shadow:0 6px 18px rgba(0,0,0,.12)}
 .kpi-click:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.chip-filtro{border:1px solid var(--border-strong);background:var(--accent-soft);color:var(--ink);border-radius:999px;padding:3px 10px;font-size:.82rem;cursor:pointer;white-space:nowrap}
+.chip-filtro:hover{background:var(--accent);color:var(--accent-ink)}
 </style>
 
 <!-- Respaldo en vivo: se abre al pulsar «Respaldar» (un router) o al lanzar un
@@ -1852,6 +1855,8 @@ function estadoDe(name) {
   return "Con fallo";
 }
 
+let estadoSolo = "";   // filtro "solo este estado actual" en Estado de respaldos
+
 function renderStatus() {
   const evByNode = statusCache.evByNode;
   const oxByNode = statusCache.oxByNode;
@@ -1880,6 +1885,15 @@ function renderStatus() {
   };
   if (respaldo === "no") names = names.filter((n) => !estaRespaldado(n));
   else if (respaldo === "si") names = names.filter((n) => estaRespaldado(n));
+
+  // Filtro "solo un estado" (p. ej. al llegar desde la tarjeta Con fallo):
+  // deja únicamente los equipos en ese estado y muestra un chip para quitarlo.
+  if (estadoSolo) names = names.filter((n) => estadoDe(n) === estadoSolo);
+  const chip = $("estado-chip");
+  if (chip) {
+    chip.hidden = !estadoSolo;
+    chip.textContent = estadoSolo ? `Solo: ${estadoSolo} ✕` : "";
+  }
 
   const fila = (name) => {
         const ev = evByNode[name];
@@ -2051,26 +2065,36 @@ function renderKpis() {
 
 // Lleva a Estado de respaldos agrupado por estado actual, para ver de un
 // vistazo qué equipos están en cada estado (con fallo, en curso, en cola…).
-function irAEstadoPorEstado() {
+// Va a Estado de respaldos. Con `solo` deja únicamente ese estado (la tarjeta
+// Con fallo manda "Con fallo"); sin él, agrupa por estado para ver todos los
+// grupos (la tarjeta Pendientes, que abarca en curso / en cola / pendientes).
+function irAEstadoPorEstado(solo = "") {
+  estadoSolo = solo;
   switchTab("estado");
   const sel = $("group-by-estado");
-  if (sel) {
+  if (sel && !solo) {
     sel.value = "estado";
     guardarPrefs("estado", { agrupar: "estado" });
   }
   renderStatus();
 }
 
-// Las tarjetas Con fallo / Pendientes llevan a Estado de respaldos agrupado por
-// estado, donde se ve la lista de cada grupo (cuáles fallan, cuáles en curso).
-["kpi-card-fail", "kpi-card-pend"].forEach((id) => {
+const KPI_CARD_ESTADO = { "kpi-card-fail": "Con fallo", "kpi-card-pend": "" };
+Object.entries(KPI_CARD_ESTADO).forEach(([id, solo]) => {
   const card = $(id);
   if (!card) return;
-  card.addEventListener("click", irAEstadoPorEstado);
+  const ir = () => irAEstadoPorEstado(solo);
+  card.addEventListener("click", ir);
   card.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); irAEstadoPorEstado(); }
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); ir(); }
   });
 });
+
+// El chip quita el filtro "solo un estado".
+(function () {
+  const chip = $("estado-chip");
+  if (chip) chip.addEventListener("click", () => { estadoSolo = ""; renderStatus(); });
+})();
 
 let editDeviceId = null;
 
