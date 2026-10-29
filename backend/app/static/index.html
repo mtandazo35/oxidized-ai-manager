@@ -274,7 +274,7 @@
         <div>
           <div class="eyebrow">Administración</div>
           <h2>Ajustes del sistema</h2>
-          <p id="hub-descripcion">Carga masiva, versión, seguridad de acceso, bitácora, respaldos programados y cuentas.</p>
+          <p id="hub-descripcion">Carga masiva, versión, seguridad de acceso, bitácora, respaldos programados, Git remoto, avisos por Telegram y cuentas.</p>
         </div>
       </div>
       <div class="hub">
@@ -297,6 +297,14 @@
         <button type="button" class="hub-item" data-seccion="config" data-solo-admin>
           <span class="disc"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9 17 7M7 17l-2.1 2.1"/></svg></span>
           Respaldos<br>programados
+        </button>
+        <button type="button" class="hub-item" data-seccion="git" data-solo-admin>
+          <span class="disc"><svg viewBox="0 0 24 24"><circle cx="12" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><circle cx="18" cy="6" r="3"/><path d="M6 9v3a3 3 0 0 0 3 3h3"/><path d="M18 9v1a3 3 0 0 1-3 3h-3"/></svg></span>
+          Git<br>remoto
+        </button>
+        <button type="button" class="hub-item" data-seccion="telegram" data-solo-admin>
+          <span class="disc"><svg viewBox="0 0 24 24"><path d="M21 4 3 11l5 2 2 6 3-4 5 4z"/><path d="M8 13l9-7"/></svg></span>
+          Avisos por<br>Telegram
         </button>
         <button type="button" class="hub-item" data-seccion="cuentas" data-solo-admin>
           <span class="disc"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M2.5 20c0-3.6 3-5.6 6.5-5.6s6.5 2 6.5 5.6"/><path d="M17 11.5a2.6 2.6 0 1 0 0-5.2"/><path d="M18.5 20c0-2.2-.7-3.8-2-4.8"/></svg></span>
@@ -474,7 +482,32 @@
       </form>
     </div>
 
-    <h2>Git remoto</h2>
+    <h2>Respaldo masivo</h2>
+    <div class="card">
+      <div class="field" style="margin-bottom:14px">
+        <button type="button" id="btn-bulk-all">Respaldar todos ahora</button>
+      </div>
+      <div class="field" style="margin-bottom:14px">
+        <select id="bulk-run-group"></select>
+        <button type="button" class="ghost" id="btn-bulk-run-group">Respaldar grupo</button>
+      </div>
+      <p class="muted" style="margin:0 0 6px">Selectivo — marque los routers:</p>
+      <div id="bulk-run-devices" style="max-height:340px;overflow-y:auto;display:flex;flex-direction:column;gap:10px;margin-bottom:10px"></div>
+      <button type="button" class="ghost" id="btn-bulk-run-selected">Respaldar seleccionados</button>
+      <p class="msg" id="bulk-run-msg" role="status" aria-live="polite"></p>
+    </div>
+
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="sec-git" hidden>
+  <div class="card xwide">
+    <div class="modal-head">
+      <h1>Git remoto</h1>
+      <button type="button" class="ghost" data-cerrar="sec-git">Cerrar</button>
+    </div>
+    <div class="modal-body">
     <div class="card">
       <form id="git-form">
         <p class="muted" style="margin:0 0 12px">Envía una copia de todos los respaldos a un repositorio Git externo (GitHub, GitLab…), para tenerlos fuera del servidor.</p>
@@ -510,8 +543,17 @@
         <p class="msg" id="git-msg" role="status" aria-live="polite"></p>
       </form>
     </div>
+    </div>
+  </div>
+</div>
 
-    <h2>Avisos por Telegram</h2>
+<div class="overlay" id="sec-telegram" hidden>
+  <div class="card xwide">
+    <div class="modal-head">
+      <h1>Avisos por Telegram</h1>
+      <button type="button" class="ghost" data-cerrar="sec-telegram">Cerrar</button>
+    </div>
+    <div class="modal-body">
     <div class="card">
       <form id="telegram-form">
         <p class="muted" style="margin:0 0 12px">Una vez al día, si hay equipos sin respaldo reciente, el panel envía la lista a un chat de Telegram.</p>
@@ -553,22 +595,6 @@
         <p class="msg" id="telegram-msg" role="status" aria-live="polite"></p>
       </form>
     </div>
-
-    <h2>Respaldo masivo</h2>
-    <div class="card">
-      <div class="field" style="margin-bottom:14px">
-        <button type="button" id="btn-bulk-all">Respaldar todos ahora</button>
-      </div>
-      <div class="field" style="margin-bottom:14px">
-        <select id="bulk-run-group"></select>
-        <button type="button" class="ghost" id="btn-bulk-run-group">Respaldar grupo</button>
-      </div>
-      <p class="muted" style="margin:0 0 6px">Selectivo — marque los routers:</p>
-      <div id="bulk-run-devices" style="max-height:340px;overflow-y:auto;display:flex;flex-direction:column;gap:10px;margin-bottom:10px"></div>
-      <button type="button" class="ghost" id="btn-bulk-run-selected">Respaldar seleccionados</button>
-      <p class="msg" id="bulk-run-msg" role="status" aria-live="polite"></p>
-    </div>
-
     </div>
   </div>
 </div>
@@ -2934,7 +2960,7 @@ function applyPermissions(me) {
     item.hidden = !perms.is_admin;
   });
   $("hub-descripcion").textContent = perms.is_admin
-    ? "Carga masiva, versión, seguridad de acceso, bitácora, respaldos programados y cuentas."
+    ? "Carga masiva, versión, seguridad de acceso, bitácora, respaldos programados, Git remoto, avisos por Telegram y cuentas."
     : "Dé de alta muchos routers a la vez desde una plantilla CSV o Excel.";
   $("btn-open-add").hidden = !perms.can_write;
   // Solo el administrador elige la empresa de un equipo: a los demás la API
@@ -3808,6 +3834,8 @@ $("btn-close-account").addEventListener("click", () => {
 // muro de tarjetas y cada cosa se consulta cuando hace falta.
 const HUB_CARGA = {
   config: () => { loadSettings(); loadBulkRun(); },
+  git: () => loadSettings(),
+  telegram: () => loadSettings(),
   version: () => loadVersion(),
   seguridad: () => { loadPolicy(); loadBlocks(); },
   actividad: () => loadActivity(),
