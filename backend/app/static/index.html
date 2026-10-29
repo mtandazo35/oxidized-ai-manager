@@ -195,21 +195,21 @@
         <div class="kpi-bar"><span id="kpi-ok-bar"></span></div>
         <div class="muted mt-1.5" id="kpi-ok-sub">&nbsp;</div>
       </div>
-      <div class="kpi [--kpi-color:var(--fail-ink)]">
+      <div class="kpi [--kpi-color:var(--fail-ink)] kpi-click" id="kpi-card-fail" role="button" tabindex="0" title="Ver cuáles equipos están con fallo">
         <div class="flex items-center justify-between">
           <span class="kpi-label">Con fallo</span>
           <span class="kpi-icon"><svg viewBox="0 0 24 24"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg></span>
         </div>
         <div class="kpi-value" id="kpi-fail">—</div>
-        <div class="muted mt-1">Revise conexión o credenciales</div>
+        <div class="muted mt-1" id="kpi-fail-sub">Revise conexión o credenciales</div>
       </div>
-      <div class="kpi [--kpi-color:var(--warn-ink)]">
+      <div class="kpi [--kpi-color:var(--warn-ink)] kpi-click" id="kpi-card-pend" role="button" tabindex="0" title="Ver el estado de los pendientes y en curso">
         <div class="flex items-center justify-between">
           <span class="kpi-label">Pendientes</span>
           <span class="kpi-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
         </div>
         <div class="kpi-value" id="kpi-pend">—</div>
-        <div class="muted mt-1">Sin respaldo todavía o en curso</div>
+        <div class="muted mt-1" id="kpi-pend-sub">Sin respaldo todavía o en curso</div>
       </div>
     </div>
     <div class="card">
@@ -324,6 +324,9 @@
 .toast.t-espera .t-ico{background:transparent;color:var(--accent)}
 .toast.t-espera .t-ico svg{animation:toast-girar 1s linear infinite}
 @keyframes toast-girar{to{transform:rotate(360deg)}}
+.kpi-click{cursor:pointer;transition:transform .12s ease,box-shadow .12s ease}
+.kpi-click:hover{transform:translateY(-1px);box-shadow:0 6px 18px rgba(0,0,0,.12)}
+.kpi-click:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 </style>
 
 <!-- Respaldo en vivo: se abre al pulsar «Respaldar» (un router) o al lanzar un
@@ -2025,15 +2028,49 @@ function renderKpis() {
   });
   const correctos = cuenta["Correctos"] || 0;
   const porcentaje = total ? Math.round((correctos * 100) / total) : 0;
+  const fallos = cuenta["Con fallo"] || 0;
+  const respaldando = cuenta["Respaldando"] || 0;
+  const encola = cuenta["En cola"] || 0;
+  const pendientes = (cuenta["Pendientes"] || 0) + (cuenta["Sin datos"] || 0)
+    + respaldando + encola;
   $("kpi-total").textContent = total;
   $("kpi-total-sub").textContent = `${activos} activos · ${total - activos} pausados`;
   $("kpi-ok").textContent = correctos;
   $("kpi-ok-bar").style.width = porcentaje + "%";
   $("kpi-ok-sub").textContent = `${porcentaje} % del inventario`;
-  $("kpi-fail").textContent = cuenta["Con fallo"] || 0;
-  $("kpi-pend").textContent =
-    (cuenta["Pendientes"] || 0) + (cuenta["Respaldando"] || 0) + (cuenta["Sin datos"] || 0);
+  $("kpi-fail").textContent = fallos;
+  $("kpi-fail-sub").textContent = fallos
+    ? "Toca para ver cuáles"
+    : "Sin equipos con fallo";
+  $("kpi-pend").textContent = pendientes;
+  // Durante un respaldo mostramos cómo va; si no, el texto por defecto.
+  $("kpi-pend-sub").textContent = (respaldando || encola)
+    ? `${respaldando} en curso · ${encola} en cola`
+    : "Sin respaldo todavía o en curso";
 }
+
+// Lleva a Estado de respaldos agrupado por estado actual, para ver de un
+// vistazo qué equipos están en cada estado (con fallo, en curso, en cola…).
+function irAEstadoPorEstado() {
+  switchTab("estado");
+  const sel = $("group-by-estado");
+  if (sel) {
+    sel.value = "estado";
+    guardarPrefs("estado", { agrupar: "estado" });
+  }
+  renderStatus();
+}
+
+// Las tarjetas Con fallo / Pendientes llevan a Estado de respaldos agrupado por
+// estado, donde se ve la lista de cada grupo (cuáles fallan, cuáles en curso).
+["kpi-card-fail", "kpi-card-pend"].forEach((id) => {
+  const card = $(id);
+  if (!card) return;
+  card.addEventListener("click", irAEstadoPorEstado);
+  card.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); irAEstadoPorEstado(); }
+  });
+});
 
 let editDeviceId = null;
 
