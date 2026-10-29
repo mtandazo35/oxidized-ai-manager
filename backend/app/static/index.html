@@ -1452,19 +1452,25 @@ let statusCache = { evByNode: {}, oxByNode: {}, eventNodes: [] };
 
 // `sufijo` elige el juego de filtros: "" es el de Routers y "-estado" el de
 // la pestaña de estado, que tiene los suyos.
+// Minúsculas y sin acentos/ñ, para que "baños" encuentre "Banos" y "canon"
+// encuentre "Cañón". La búsqueda no debería depender de la tilde.
+function sinAcentos(texto) {
+  return (texto || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+}
+
 function deviceMatchesFilter(device, sufijo = "") {
   // `Array.filter` llama con (elemento, índice, array): si esta función se
   // usa como referencia directa, `sufijo` recibe el índice y se acaba
   // buscando un campo inexistente. Normalizarlo evita que vuelva a pasar.
   if (typeof sufijo !== "string") sufijo = "";
-  const query = $("filter-text" + sufijo).value.trim().toLowerCase();
+  const query = sinAcentos($("filter-text" + sufijo).value.trim());
   const group = $("filter-group" + sufijo).value;
   if (group && (device.group_name || "") !== group) return false;
   if (!query) return true;
   return [
     device.name, device.identity, device.address, String(device.port),
     device.ros_version, device.username, device.group_name, device.model,
-  ].some((value) => (value || "").toLowerCase().includes(query));
+  ].some((value) => sinAcentos(value).includes(query));
 }
 
 function updateGroupOptions() {
@@ -1798,13 +1804,20 @@ function arrastrarColumna(evento, idTabla, th) {
   evento.preventDefault();
   evento.stopPropagation();
   const clave = claveColumna(th, cabeceras(idTabla).indexOf(th));
-  const anchos = medirAnchos(idTabla);
-  guardarPrefs(TABLA_DE[idTabla], { anchos });
-  aplicarAnchos(idTabla);
   const x0 = evento.clientX;
-  const ancho0 = anchos[clave];
-  document.body.classList.add("redimensionando");
+  // Un simple toque en el asa NO debe fijar los anchos: antes `medirAnchos` +
+  // guardar se hacían en `pointerdown`, así que un clic con la tabla filtrada
+  // a pocas filas bloqueaba la tabla con columnas estrechas. Ahora solo se
+  // fija al mover de verdad (umbral de 3 px), y un clic no cambia nada.
+  let anchos = null, ancho0 = 0, arrastrando = false;
   const mover = (e) => {
+    if (!arrastrando) {
+      if (Math.abs(e.clientX - x0) < 3) return;
+      arrastrando = true;
+      anchos = medirAnchos(idTabla);
+      ancho0 = anchos[clave];
+      document.body.classList.add("redimensionando");
+    }
     anchos[clave] = Math.max(ANCHO_MINIMO, Math.round(ancho0 + e.clientX - x0));
     guardarPrefs(TABLA_DE[idTabla], { anchos });
     aplicarAnchos(idTabla);
@@ -1813,9 +1826,11 @@ function arrastrarColumna(evento, idTabla, th) {
     document.removeEventListener("pointermove", mover);
     document.removeEventListener("pointerup", soltar);
     document.body.classList.remove("redimensionando");
-    // El clic que sigue al soltar no debe ordenar la columna.
-    suprimirClicOrden = true;
-    setTimeout(() => { suprimirClicOrden = false; }, 0);
+    // El clic que sigue a un arrastre real no debe ordenar la columna.
+    if (arrastrando) {
+      suprimirClicOrden = true;
+      setTimeout(() => { suprimirClicOrden = false; }, 0);
+    }
   };
   document.addEventListener("pointermove", mover);
   document.addEventListener("pointerup", soltar);
