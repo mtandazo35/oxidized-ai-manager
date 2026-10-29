@@ -213,6 +213,28 @@ async def test_telegram_masked_token_conserva_el_guardado(
     assert stored["telegram_bot_token"] == "123:ABCsecreto"
 
 
+async def test_test_git_sin_url(auth_headers) -> None:
+    async with client() as api:
+        response = await api.post("/api/settings/test-git", headers=auth_headers)
+    assert response.status_code == 200
+    assert response.json() == {"ok": False, "detail": "No hay una URL de Git configurada."}
+
+
+async def test_test_git_hace_push(auth_headers, settings_repository, monkeypatch) -> None:
+    await settings_repository.set_many(
+        {"git_remote_url": "https://u:tok@github.com/u/r.git"}
+    )
+
+    async def fake_push(repo_path, url):
+        return True, "ok"
+
+    monkeypatch.setattr("app.settings_api.push_backups", fake_push)
+    async with client() as api:
+        response = await api.post("/api/settings/test-git", headers=auth_headers)
+    assert response.status_code == 200
+    assert response.json() == {"ok": True, "detail": "ok"}
+
+
 async def test_telegram_activar_sin_token_o_chat_rechazado(auth_headers) -> None:
     async with client() as api:
         response = await api.put(

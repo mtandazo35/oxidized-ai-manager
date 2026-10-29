@@ -3,8 +3,9 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from .auth import require_admin
+from .config import get_settings
 from .notifications import send_telegram
-from .scheduler import mask_remote_url
+from .scheduler import mask_remote_url, push_backups
 from .schemas import SettingsOut, SettingsUpdate
 
 # El token del bot se devuelve enmascarado, igual que la URL del remoto: un
@@ -128,6 +129,19 @@ async def update_settings_view(request: Request, payload: SettingsUpdate) -> dic
         }
     )
     return await _settings_out(request)
+
+
+@router.post("/test-git")
+async def test_git(request: Request) -> dict:
+    """Prueba la conexión al Git remoto con lo guardado: hace un push real, que
+    es lo que confirma a la vez el acceso y el permiso de escritura (el error
+    típico es un token sin «Contents: Read and write»)."""
+    values = await request.app.state.settings.get_all()
+    url = values["git_remote_url"]
+    if not url:
+        return {"ok": False, "detail": "No hay una URL de Git configurada."}
+    ok, detail = await push_backups(get_settings().oxidized_backup_repo, url)
+    return {"ok": ok, "detail": detail}
 
 
 @router.post("/test-telegram")

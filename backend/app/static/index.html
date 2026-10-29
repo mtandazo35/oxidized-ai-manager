@@ -543,6 +543,8 @@
           </div>
         </details>
         <button type="submit">Guardar</button>
+        <button type="button" class="ghost" id="btn-git-test" style="margin-left:8px">Verificar conexión</button>
+        <span class="muted" id="git-test-status" style="margin-left:8px"></span>
         <div style="margin-top:8px"><span class="muted" id="push-status"></span></div>
         <p class="msg" id="git-msg" role="status" aria-live="polite"></p>
       </form>
@@ -2665,6 +2667,18 @@ $("btn-tg-test").addEventListener("click", async () => {
   try {
     const r = await api("/api/settings/test-telegram", { method: "POST" });
     estado.textContent = r.ok ? "✅ Enviado, revisa el chat." : "❌ " + r.detail;
+  } catch (error) { estado.textContent = "❌ " + error.message; }
+});
+
+$("btn-git-test").addEventListener("click", async () => {
+  const estado = $("git-test-status");
+  // El botón prueba lo YA guardado: conviene guardar antes si acabas de cambiar algo.
+  estado.textContent = "Verificando (hace un envío de prueba)…";
+  try {
+    const r = await api("/api/settings/test-git", { method: "POST" });
+    estado.textContent = r.ok
+      ? "✅ Conexión correcta, los respaldos se envían."
+      : "❌ " + r.detail;
   } catch (error) { estado.textContent = "❌ " + error.message; }
 });
 
