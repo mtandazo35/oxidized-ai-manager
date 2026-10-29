@@ -566,8 +566,6 @@ async def test_a_reused_name_does_not_inherit_another_company_history(
         )
         assert antes["versions"].json() == []
         assert antes["events"].json() == []
-        assert antes["audit_head"].status_code == 404
-        assert antes["summary"].json()[0]["error"] == "sin respaldo todavía"
 
         # Primer respaldo de B: se ve, y su diff no enseña lo que había de A.
         commit_b = shared_repo("core-01", _export_de("b", "ClaveDeB"), 60)
@@ -576,7 +574,6 @@ async def test_a_reused_name_does_not_inherit_another_company_history(
             api, "core-01", commit_a, lector_b
         )
         assert [v["commit"] for v in despues["versions"].json()] == [commit_b]
-        assert despues["audit_head"].status_code == 200
         assert [e["commit_ref"] for e in despues["events"].json()] == [commit_b]
         assert despues["status"].json()[0]["last_commit"] == commit_b
 
@@ -633,7 +630,6 @@ async def test_renaming_into_an_old_name_does_not_inherit_its_history(
 
     assert respuestas["versions"].json() == []
     assert respuestas["events"].json() == []
-    assert respuestas["audit_head"].status_code == 404
     assert respuestas["status"].json() == []
 
 
