@@ -227,6 +227,11 @@ async def test_oxidized_nodes_receive_the_decrypted_password(
             "model": "routeros",
             "username": "u",
             "password": guardada,
+            # Columnas de la credencial alternativa: la activa es la 1, así que
+            # Oxidized debe recibir la clave primaria descifrada.
+            "username2": "",
+            "password2": "",
+            "active_credential": 1,
         }
     ]
     monkeypatch.setattr(main_module.app.state, "devices", repository)
