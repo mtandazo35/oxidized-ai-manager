@@ -852,19 +852,16 @@
     <input id="a-address" required style="margin:4px 0 10px">
     <label for="a-port">Puerto SSH</label>
     <input id="a-port" type="number" min="1" max="65535" value="22" style="margin:4px 0 10px">
-    <label for="a-username">Usuario SSH</label>
-    <input id="a-username" style="margin:4px 0 10px">
-    <label for="a-password">Clave SSH</label>
-    <input id="a-password" type="password" autocomplete="new-password" style="margin:4px 0 10px">
-    <details style="margin:0 0 10px">
-      <summary style="cursor:pointer;color:var(--ink-muted)">Credenciales adicionales (opcional)</summary>
-      <p class="muted" style="margin:6px 0">
-        Si la de arriba no entra, se prueban estas en orden. Úsalo cuando el
-        equipo pueda tener varios usuarios/claves.
-      </p>
-      <div id="a-cred-list"></div>
-      <button type="button" class="ghost" id="a-cred-add" style="margin:2px 0 4px">+ Añadir usuario y clave</button>
-    </details>
+    <label>Credenciales SSH</label>
+    <p class="muted" style="margin:2px 0 6px">
+      Se prueban en orden: si una no entra, se prueba la siguiente. El + añade más.
+    </p>
+    <div class="cred-row" style="display:flex;gap:8px;align-items:center;margin:0 0 8px">
+      <input id="a-username" class="cred-user" placeholder="Usuario SSH" style="flex:1;min-width:0">
+      <input id="a-password" class="cred-pass" type="password" autocomplete="new-password" placeholder="Clave SSH" style="flex:1;min-width:0">
+      <button type="button" class="ghost" id="a-cred-add" title="Añadir otro usuario y clave" style="flex:0 0 auto">+</button>
+    </div>
+    <div id="a-cred-list" style="margin:0 0 10px"></div>
     <label for="a-group">Grupo / Empresa</label>
     <input id="a-group" style="margin:4px 0 10px">
     <label for="a-model">Plataforma</label>
@@ -897,23 +894,21 @@
     <input id="e-address" required style="margin:4px 0 10px">
     <label for="e-port">Puerto SSH</label>
     <input id="e-port" type="number" min="1" max="65535" style="margin:4px 0 10px">
-    <label for="e-username">Usuario SSH</label>
-    <input id="e-username" style="margin:4px 0 10px">
-    <label for="e-password">Clave SSH</label>
-    <input id="e-password" type="password" placeholder="(dejar vacío para no cambiarla)" style="margin:4px 0 10px">
-    <details id="e-cred2-box" style="margin:0 0 10px">
-      <summary style="cursor:pointer;color:var(--ink-muted)">Credenciales adicionales (opcional)</summary>
-      <p class="muted" style="margin:6px 0">
-        Si la de arriba no entra, se prueban estas en orden. «Validar» prueba por
-        SSH cuál conecta y deja activa la que gestiona el equipo.
-      </p>
-      <div id="e-cred-list"></div>
-      <button type="button" class="ghost" id="e-cred-add" style="margin:2px 0 8px">+ Añadir usuario y clave</button>
-      <div>
-        <button type="button" class="ghost" id="btn-validar-cred">Validar credenciales</button>
-        <p class="msg" id="cred-valida-msg" role="status" aria-live="polite" style="margin:6px 0 0"></p>
-      </div>
-    </details>
+    <label>Credenciales SSH</label>
+    <p class="muted" style="margin:2px 0 6px">
+      Se prueban en orden: si una no entra, se prueba la siguiente. El + añade
+      más. «Validar» prueba por SSH cuál conecta y deja activa esa.
+    </p>
+    <div class="cred-row" style="display:flex;gap:8px;align-items:center;margin:0 0 8px">
+      <input id="e-username" class="cred-user" placeholder="Usuario SSH" style="flex:1;min-width:0">
+      <input id="e-password" class="cred-pass" type="password" placeholder="Clave (vacío = sin cambiar)" style="flex:1;min-width:0">
+      <button type="button" class="ghost" id="e-cred-add" title="Añadir otro usuario y clave" style="flex:0 0 auto">+</button>
+    </div>
+    <div id="e-cred-list"></div>
+    <div style="margin:0 0 10px">
+      <button type="button" class="ghost" id="btn-validar-cred">Validar credenciales</button>
+      <p class="msg" id="cred-valida-msg" role="status" aria-live="polite" style="margin:6px 0 0"></p>
+    </div>
     <label for="e-group">Grupo / Empresa</label>
     <input id="e-group" style="margin:4px 0 10px">
     <label for="e-model">Plataforma</label>
@@ -2307,11 +2302,8 @@ window.openEdit = (id) => {
   $("e-port").value = device.port;
   $("e-username").value = device.username;
   $("e-password").value = "";
-  const extras = device.extra_usernames || [];
-  renderCredList("e", extras);
+  renderCredList("e", device.extra_usernames || []);
   $("cred-valida-msg").textContent = "";
-  // Abrir el bloque de credenciales adicionales solo si ya hay alguna guardada.
-  $("e-cred2-box").open = extras.length > 0;
   $("e-group").value = device.group_name || "";
   poblarPlataformas("e-model", device.model || "routeros");
   $("e-interval").value = device.backup_interval_minutes || 0;
