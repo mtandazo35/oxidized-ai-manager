@@ -1,8 +1,12 @@
+# syntax=docker/dockerfile:1.7
 FROM python:3.12-slim-bookworm
 
+# PIP_NO_CACHE_DIR se omite a propósito: la red del server va muy lenta a PyPI,
+# así que pip debe poder usar la caché. Esa caché se persiste entre builds con
+# el `--mount=type=cache` del RUN de abajo (BuildKit), de modo que un rebuild no
+# vuelve a descargar los wheels aunque se invalide la capa.
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1 \
     PIP_DEFAULT_TIMEOUT=300 \
     PIP_RETRIES=10
 
@@ -16,7 +20,8 @@ RUN groupadd --gid 10001 app && \
 WORKDIR /app
 
 COPY requirements.txt ./
-RUN pip install --no-cache-dir --requirement requirements.txt
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --requirement requirements.txt
 
 COPY app ./app
 
