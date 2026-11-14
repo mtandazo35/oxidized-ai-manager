@@ -10,6 +10,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_DEFAULT_TIMEOUT=300 \
     PIP_RETRIES=10
 
+# Este server no tiene salida IPv6 (sin ruta por defecto), pero PyPI/Debian
+# resuelven a IPv4 e IPv6 y glibc por defecto prefiere IPv6: cada descarga
+# intenta IPv6, se cuelga y cae a IPv4 a rastras. Preferir IPv4 deja apt y pip
+# rápidos. El host tiene el mismo ajuste en su /etc/gai.conf.
+RUN echo 'precedence ::ffff:0:0/96 100' >> /etc/gai.conf
+
 RUN apt-get update && \
     apt-get install -y --no-install-recommends git && \
     rm -rf /var/lib/apt/lists/*

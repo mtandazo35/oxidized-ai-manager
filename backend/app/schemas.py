@@ -46,6 +46,17 @@ ADDRESS_PATTERN = r"^\S{1,255}$"
 MODEL_PATTERN = r"^[a-z0-9_-]{1,64}$"
 
 
+# Tope de credenciales alternativas por equipo (además de la primaria). Evita
+# que el panel pruebe cientos de logins SSH por un equipo mal cargado.
+MAX_EXTRA_CREDENTIALS = 8
+
+
+class CredentialIn(BaseModel):
+    """Un par usuario/clave adicional. Clave vacía al editar = no cambiarla."""
+    username: str = Field(default="", max_length=128)
+    password: str = Field(default="", max_length=256)
+
+
 class DeviceCreate(BaseModel):
     # Se acepta el nombre tal como lo escriba el operador y se normaliza aquí.
     name: str = Field(min_length=1, max_length=200)
@@ -54,9 +65,11 @@ class DeviceCreate(BaseModel):
     model: str = Field(default="routeros", pattern=MODEL_PATTERN)
     username: str = Field(default="", max_length=128)
     password: str = Field(default="", max_length=256)
-    # Credencial SSH alternativa (opcional): se prueba si la primaria no entra.
-    username2: str = Field(default="", max_length=128)
-    password2: str = Field(default="", max_length=256)
+    # Credenciales SSH adicionales (opcionales): se prueban si la primaria no
+    # entra. Se guardan en orden; la primera que conecte pasa a ser la activa.
+    extra_credentials: list[CredentialIn] = Field(
+        default_factory=list, max_length=MAX_EXTRA_CREDENTIALS
+    )
     enabled: bool = True
     group_name: str = Field(default="", max_length=64)
     backup_interval_minutes: int = Field(default=0, ge=0, le=10080)
@@ -71,8 +84,9 @@ class DeviceUpdate(BaseModel):
     model: str | None = Field(default=None, pattern=MODEL_PATTERN)
     username: str | None = Field(default=None, max_length=128)
     password: str | None = Field(default=None, max_length=256)
-    username2: str | None = Field(default=None, max_length=128)
-    password2: str | None = Field(default=None, max_length=256)
+    extra_credentials: list[CredentialIn] | None = Field(
+        default=None, max_length=MAX_EXTRA_CREDENTIALS
+    )
     enabled: bool | None = None
     group_name: str | None = Field(default=None, max_length=64)
     backup_interval_minutes: int | None = Field(default=None, ge=0, le=10080)
@@ -87,9 +101,9 @@ class DeviceOut(BaseModel):
     port: int
     model: str
     username: str
-    # Usuario de la credencial alternativa (la clave nunca se devuelve) y cuál
-    # de las dos está activa (1 = primaria, 2 = alternativa).
-    username2: str = ""
+    # Usuarios de las credenciales adicionales (las claves nunca se devuelven) y
+    # cuál credencial está activa (1 = primaria, 2 = primera adicional, ...).
+    extra_usernames: list[str] = []
     active_credential: int = 1
     enabled: bool
     group_name: str = ""

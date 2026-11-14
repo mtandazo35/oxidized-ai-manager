@@ -1,3 +1,4 @@
+import json
 from typing import Any
 
 import asyncpg
@@ -15,13 +16,50 @@ class DuplicateDeviceError(Exception):
     """Raised when a device name already exists in the inventory."""
 
 
+# `extra_credentials` se selecciona para poder derivar `extra_usernames`, pero
+# NO se devuelve crudo en la API (lleva las claves cifradas): `_public_device`
+# lo convierte en la lista de usuarios y lo quita.
 PUBLIC_COLUMNS = (
-    "id, name, address, port, model, username, username2, active_credential, "
-    "enabled, group_name, backup_interval_minutes, identity, ros_version, "
-    "board, history_since, created_at, updated_at"
+    "id, name, address, port, model, username, extra_credentials, "
+    "active_credential, enabled, group_name, backup_interval_minutes, "
+    "identity, ros_version, board, history_since, created_at, updated_at"
 )
 
 METADATA_FIELDS = ("identity", "ros_version", "board")
+
+
+def _decode_extras(raw: str | None) -> list[dict[str, str]]:
+    """Lista [{'username':..., 'password':<cifrada>}] desde el JSON guardado.
+
+    Tolera nulos/basura: una fila con JSON corrupto no debe tumbar el inventario
+    entero, así que se trata como «sin credenciales adicionales»."""
+    if not raw:
+        return []
+    try:
+        data = json.loads(raw)
+    except (ValueError, TypeError):
+        return []
+    if not isinstance(data, list):
+        return []
+    salida = []
+    for item in data:
+        if isinstance(item, dict) and "username" in item:
+            salida.append(
+                {
+                    "username": str(item.get("username", "")),
+                    "password": str(item.get("password", "")),
+                }
+            )
+    return salida
+
+
+def _public_device(row: Any) -> dict[str, Any]:
+    """Fila de `devices` -> dict para la API: añade `extra_usernames` y quita el
+    JSON crudo de credenciales (que lleva las claves cifradas)."""
+    device = dict(row)
+    extras = _decode_extras(device.pop("extra_credentials", None))
+    device["extra_usernames"] = [c["username"] for c in extras]
+    return device
 
 
 class DeviceRepository:
@@ -61,7 +99,7 @@ class DeviceRepository:
                 "ORDER BY name",
                 group,
             )
-        return [dict(row) for row in rows]
+        return [_public_device(row) for row in rows]
 
     async def get_device(
         self, device_id: int, group: str | None = None
@@ -77,7 +115,7 @@ class DeviceRepository:
                 device_id,
                 group,
             )
-        return dict(row) if row else None
+        return _public_device(row) if row else None
 
     async def get_device_by_name(
         self, name: str, group: str | None = None
@@ -94,16 +132,41 @@ class DeviceRepository:
                 name,
                 group,
             )
-        return dict(row) if row else None
+        return _public_device(row) if row else None
+
+    def _encode_extras(
+        self, nuevos: list[dict[str, str]], previos: list[dict[str, str]] | None = None
+    ) -> str:
+        """JSON de credenciales adicionales con las claves cifradas.
+
+        Una clave vacía en la posición i conserva la clave ya guardada en esa
+        misma posición (`previos`), para que editar sin reescribir la clave no
+        la borre. Una credencial sin usuario se descarta."""
+        previos = previos or []
+        salida = []
+        for i, cred in enumerate(nuevos):
+            usuario = (cred.get("username") or "").strip()
+            if not usuario:
+                continue
+            clave = cred.get("password") or ""
+            if clave:
+                cifrada = encrypt_secret(self._key, clave)
+            elif i < len(previos):
+                cifrada = previos[i].get("password", "")
+            else:
+                cifrada = encrypt_secret(self._key, "")
+            salida.append({"username": usuario, "password": cifrada})
+        return json.dumps(salida)
 
     async def create_device(self, data: dict[str, Any]) -> dict[str, Any]:
+        extras = self._encode_extras(data.get("extra_credentials", []))
         try:
             row = await self._pool.fetchrow(
                 "INSERT INTO devices "
                 "(name, address, port, model, username, password, "
-                "username2, password2, enabled, "
+                "extra_credentials, enabled, "
                 "group_name, backup_interval_minutes, history_since) "
-                f"VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now()) "
+                f"VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now()) "
                 f"RETURNING {PUBLIC_COLUMNS}",
                 data["name"],
                 data["address"],
@@ -111,15 +174,14 @@ class DeviceRepository:
                 data["model"],
                 data["username"],
                 encrypt_secret(self._key, data["password"]),
-                data.get("username2", ""),
-                encrypt_secret(self._key, data.get("password2", "")),
+                extras,
                 data["enabled"],
                 data["group_name"],
                 data["backup_interval_minutes"],
             )
         except asyncpg.UniqueViolationError as exc:
             raise DuplicateDeviceError(data["name"]) from exc
-        return dict(row)
+        return _public_device(row)
 
     async def update_device(
         self, device_id: int, data: dict[str, Any], group: str | None = None
@@ -128,8 +190,19 @@ class DeviceRepository:
             return await self.get_device(device_id, group)
         if "password" in data:
             data = {**data, "password": encrypt_secret(self._key, data["password"])}
-        if "password2" in data:
-            data = {**data, "password2": encrypt_secret(self._key, data["password2"])}
+        if "extra_credentials" in data:
+            # Se cifra y, por posición, se conservan las claves no reescritas.
+            previos = _decode_extras(
+                await self._pool.fetchval(
+                    "SELECT extra_credentials FROM devices WHERE id = $1", device_id
+                )
+            )
+            data = {
+                **data,
+                "extra_credentials": self._encode_extras(
+                    data["extra_credentials"], previos
+                ),
+            }
         assignments = []
         values: list[Any] = []
         positions: dict[str, int] = {}
@@ -164,7 +237,7 @@ class DeviceRepository:
             row = await self._pool.fetchrow(query, device_id, *values)
         except asyncpg.UniqueViolationError as exc:
             raise DuplicateDeviceError(data.get("name", "")) from exc
-        return dict(row) if row else None
+        return _public_device(row) if row else None
 
     async def update_metadata(self, name: str, meta: dict[str, str]) -> None:
         values = {key: meta[key] for key in METADATA_FIELDS if key in meta}
@@ -212,30 +285,47 @@ class DeviceRepository:
                 )
         return True
 
+    def _credentials(self, row: Any) -> list[dict[str, str]]:
+        """Lista ordenada [primaria, extra0, ...] con las claves descifradas.
+        Índice 1-based en cada elemento (`idx`), que es el `active_credential`."""
+        lista = [
+            {
+                "idx": 1,
+                "username": row["username"],
+                "password": decrypt_secret(self._key, row["password"]),
+            }
+        ]
+        for i, cred in enumerate(_decode_extras(row["extra_credentials"]), start=2):
+            lista.append(
+                {
+                    "idx": i,
+                    "username": cred["username"],
+                    "password": decrypt_secret(self._key, cred["password"]),
+                }
+            )
+        return lista
+
     async def list_oxidized_nodes(self) -> list[dict[str, Any]]:
         rows = await self._pool.fetch(
             "SELECT name, address, port, model, username, password, "
-            "username2, password2, active_credential "
+            "extra_credentials, active_credential "
             "FROM devices WHERE enabled ORDER BY name"
         )
         nodes = []
         for row in rows:
             # Oxidized usa UNA sola credencial por nodo y no reintenta con otra;
-            # por eso aquí se entrega la activa (1 = primaria, 2 = alternativa).
-            # Se cae a la primaria si la alternativa está vacía o el valor es raro.
-            usar_segunda = row["active_credential"] == 2 and row["username2"]
-            if usar_segunda:
-                username, cifrada = row["username2"], row["password2"]
-            else:
-                username, cifrada = row["username"], row["password"]
+            # por eso aquí se entrega la activa. Fuera de rango -> la primaria.
+            creds = self._credentials(row)
+            activa = row["active_credential"] or 1
+            cred = next((c for c in creds if c["idx"] == activa), creds[0])
             nodes.append(
                 {
                     "name": row["name"],
                     "address": row["address"],
                     "port": row["port"],
                     "model": row["model"],
-                    "username": username,
-                    "password": decrypt_secret(self._key, cifrada),
+                    "username": cred["username"],
+                    "password": cred["password"],
                 }
             )
         return nodes
@@ -268,14 +358,17 @@ class DeviceRepository:
             out.append(d)
         return out
 
-    async def both_credentials(
+    async def all_credentials(
         self, device_id: int, group: str | None = None
     ) -> dict[str, Any] | None:
-        """Las DOS credenciales SSH descifradas de un equipo, para validar cuál
-        conecta. None si no existe o no es de la empresa del usuario (`group`)."""
+        """Datos de acceso de un equipo con TODAS sus credenciales descifradas,
+        para validar cuál conecta. None si no existe o no es de la empresa.
+
+        Devuelve {id, name, address, port, active_credential, credentials:
+        [{idx, username, password}, ...]}."""
         query = (
             "SELECT id, name, address, port, username, password, "
-            "username2, password2, active_credential FROM devices WHERE id = $1"
+            "extra_credentials, active_credential FROM devices WHERE id = $1"
         )
         if group is None:
             row = await self._pool.fetchrow(query, device_id)
@@ -285,15 +378,19 @@ class DeviceRepository:
             )
         if row is None:
             return None
-        d = dict(row)
-        d["password"] = decrypt_secret(self._key, d["password"])
-        d["password2"] = decrypt_secret(self._key, d["password2"])
-        return d
+        return {
+            "id": row["id"],
+            "name": row["name"],
+            "address": row["address"],
+            "port": row["port"],
+            "active_credential": row["active_credential"],
+            "credentials": self._credentials(row),
+        }
 
     async def set_active_credential(
         self, device_id: int, which: int, group: str | None = None
     ) -> bool:
-        """Fija qué credencial (1 o 2) se entrega a Oxidized. Respeta `group`."""
+        """Fija qué credencial (1-based) se entrega a Oxidized. Respeta `group`."""
         if group is None:
             result = await self._pool.execute(
                 "UPDATE devices SET active_credential = $2, updated_at = now() "

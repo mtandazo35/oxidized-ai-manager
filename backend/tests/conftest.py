@@ -47,8 +47,12 @@ class FakeDeviceRepository:
 
     @staticmethod
     def _public(device: dict[str, Any]) -> dict[str, Any]:
-        oculto = {"password", "password2"}
-        return {key: value for key, value in device.items() if key not in oculto}
+        oculto = {"password", "extra_credentials"}
+        pub = {key: value for key, value in device.items() if key not in oculto}
+        extras = device.get("extra_credentials") or []
+        pub["extra_usernames"] = [c["username"] for c in extras]
+        pub["active_credential"] = device.get("active_credential", 1)
+        return pub
 
     @staticmethod
     def _in_group(device: dict[str, Any], group: str | None) -> bool:
@@ -87,10 +91,9 @@ class FakeDeviceRepository:
             "identity": "",
             "ros_version": "",
             "board": "",
-            # Defaults de las columnas que no vienen en DeviceCreate pero sí
-            # tiene la tabla real (credencial alternativa + cuál está activa).
-            "username2": "",
-            "password2": "",
+            # Defaults de las columnas que no siempre vienen en los datos pero sí
+            # tiene la tabla real (credenciales adicionales + cuál está activa).
+            "extra_credentials": [],
             "active_credential": 1,
             # El real siempre usa now(); aquí se deja sobrescribir para sembrar
             # equipos "anteriores a la columna" (NULL), como panel/dev_server.py.
@@ -152,6 +155,17 @@ class FakeDeviceRepository:
             and self._in_group(device, group)
         ]
 
+    @staticmethod
+    def _cred_list(device: dict[str, Any]) -> list[dict[str, Any]]:
+        creds = [
+            {"idx": 1, "username": device["username"], "password": device["password"]}
+        ]
+        for i, c in enumerate(device.get("extra_credentials") or [], start=2):
+            creds.append(
+                {"idx": i, "username": c["username"], "password": c["password"]}
+            )
+        return creds
+
     async def list_oxidized_nodes(self) -> list[dict[str, Any]]:
         enabled = sorted(
             (device for device in self._devices.values() if device["enabled"]),
@@ -159,31 +173,34 @@ class FakeDeviceRepository:
         )
         nodes = []
         for device in enabled:
-            usar2 = device.get("active_credential", 1) == 2 and device.get("username2")
+            creds = self._cred_list(device)
+            activa = device.get("active_credential", 1) or 1
+            cred = next((c for c in creds if c["idx"] == activa), creds[0])
             nodes.append(
                 {
                     "name": device["name"],
                     "address": device["address"],
                     "port": device["port"],
                     "model": device["model"],
-                    "username": device["username2"] if usar2 else device["username"],
-                    "password": device["password2"] if usar2 else device["password"],
+                    "username": cred["username"],
+                    "password": cred["password"],
                 }
             )
         return nodes
 
-    async def both_credentials(
+    async def all_credentials(
         self, device_id: int, group: str | None = None
     ) -> dict[str, Any] | None:
         device = self._devices.get(device_id)
         if device is None or not self._in_group(device, group):
             return None
         return {
-            key: device.get(key)
-            for key in (
-                "id", "name", "address", "port", "username", "password",
-                "username2", "password2", "active_credential",
-            )
+            "id": device["id"],
+            "name": device["name"],
+            "address": device["address"],
+            "port": device["port"],
+            "active_credential": device.get("active_credential", 1),
+            "credentials": self._cred_list(device),
         }
 
     async def set_active_credential(

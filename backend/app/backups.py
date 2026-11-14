@@ -146,6 +146,46 @@ _MOTIVO_TEXTO = {
 }
 
 
+async def ajustar_credencial_activa(
+    devices_repo, device_id: int, group: str | None = None
+) -> dict | None:
+    """Prueba por SSH todas las credenciales del equipo (en orden) y deja activa
+    la PRIMERA que conecta. No recarga Oxidized: de eso se encarga quien llama.
+
+    Devuelve None si el equipo no existe (o no es de la empresa). Si existe:
+    {resultados: [{idx, username, estado}], activa, cambio, active_previa}.
+    `estado` ∈ {"ok","credenciales","sin_conexion","error","no_configurada"}.
+    """
+    datos = await devices_repo.all_credentials(device_id, group)
+    if datos is None:
+        return None
+    address, port = datos["address"], int(datos["port"])
+    resultados = []
+    activa = None
+    for cred in datos["credentials"]:
+        if not cred["username"]:
+            estado = "no_configurada"
+        else:
+            estado = await _validar_acceso_ssh(
+                address, port, cred["username"], cred["password"]
+            )
+        resultados.append(
+            {"idx": cred["idx"], "username": cred["username"], "estado": estado}
+        )
+        if estado == "ok" and activa is None:
+            activa = cred["idx"]
+    cambio = False
+    if activa is not None and activa != datos["active_credential"]:
+        await devices_repo.set_active_credential(device_id, activa, group)
+        cambio = True
+    return {
+        "resultados": resultados,
+        "activa": activa,
+        "cambio": cambio,
+        "active_previa": datos["active_credential"],
+    }
+
+
 @router.post("/check")
 async def check_reachability(
     request: Request,

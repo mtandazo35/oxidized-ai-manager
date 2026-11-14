@@ -227,10 +227,9 @@ async def test_oxidized_nodes_receive_the_decrypted_password(
             "model": "routeros",
             "username": "u",
             "password": guardada,
-            # Columnas de la credencial alternativa: la activa es la 1, así que
-            # Oxidized debe recibir la clave primaria descifrada.
-            "username2": "",
-            "password2": "",
+            # Sin credenciales adicionales y activa la 1: Oxidized recibe la
+            # clave primaria descifrada.
+            "extra_credentials": "[]",
             "active_credential": 1,
         }
     ]

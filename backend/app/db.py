@@ -50,13 +50,18 @@ ALTER TABLE devices ADD COLUMN IF NOT EXISTS backup_interval_minutes INTEGER NOT
 -- otro equipo, quizá de otra empresa, lo anterior no se muestra. Sin default:
 -- los equipos que ya existían quedan en NULL y conservan todo su historial.
 ALTER TABLE devices ADD COLUMN IF NOT EXISTS history_since TIMESTAMPTZ;
--- Credencial SSH alternativa: si la primaria no entra, se prueba esta. La clave
--- va cifrada igual que `password`. `active_credential` (1 o 2) es la que el
--- panel entrega a Oxidized para respaldar; el botón "Validar credenciales" o el
--- failover automático la ajustan a la que de verdad conecta.
+-- Credenciales SSH alternativas: además de la primaria (username/password), el
+-- equipo puede tener varias más y el panel prueba cuál conecta. `username2` y
+-- `password2` quedaron de una versión anterior (credencial única) y ya no se
+-- usan; las adicionales viven en `extra_credentials` como un JSON
+-- [{"username": "...", "password": "<cifrada>"}, ...]. `active_credential` es el
+-- índice 1-based en la lista [primaria, extra0, extra1, ...] que se entrega a
+-- Oxidized; el botón "Validar" y el failover automático lo ajustan a la que
+-- de verdad conecta.
 ALTER TABLE devices ADD COLUMN IF NOT EXISTS username2 TEXT NOT NULL DEFAULT '';
 ALTER TABLE devices ADD COLUMN IF NOT EXISTS password2 TEXT NOT NULL DEFAULT '';
 ALTER TABLE devices ADD COLUMN IF NOT EXISTS active_credential SMALLINT NOT NULL DEFAULT 1;
+ALTER TABLE devices ADD COLUMN IF NOT EXISTS extra_credentials TEXT NOT NULL DEFAULT '[]';
 
 -- Después del ALTER que crea group_name: en una base anterior al multi-tenant
 -- la columna todavía no existe, y en una base vacía ni siquiera la tabla.

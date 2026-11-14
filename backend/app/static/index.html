@@ -839,7 +839,7 @@
 </div>
 
 <div class="overlay" id="add-overlay" hidden>
-  <form class="card" id="add-form">
+  <form class="card" id="add-form" style="width:min(560px,100%)">
     <h1 style="margin-bottom:16px;font-size:1.1rem">Agregar router</h1>
     <label for="a-name">Nombre</label>
     <input id="a-name" placeholder="Router Sucursal Norte" required style="margin:4px 0 4px">
@@ -857,15 +857,13 @@
     <label for="a-password">Clave SSH</label>
     <input id="a-password" type="password" autocomplete="new-password" style="margin:4px 0 10px">
     <details style="margin:0 0 10px">
-      <summary style="cursor:pointer;color:var(--ink-muted)">Credencial alternativa (opcional)</summary>
+      <summary style="cursor:pointer;color:var(--ink-muted)">Credenciales adicionales (opcional)</summary>
       <p class="muted" style="margin:6px 0">
-        Si la primera no entra, se prueba esta. Úsala cuando el mismo equipo
-        pueda tener dos usuarios/claves distintos.
+        Si la de arriba no entra, se prueban estas en orden. Úsalo cuando el
+        equipo pueda tener varios usuarios/claves.
       </p>
-      <label for="a-username2">Usuario SSH 2</label>
-      <input id="a-username2" style="margin:4px 0 10px">
-      <label for="a-password2">Clave SSH 2</label>
-      <input id="a-password2" type="password" autocomplete="new-password" style="margin:4px 0 4px">
+      <div id="a-cred-list"></div>
+      <button type="button" class="ghost" id="a-cred-add" style="margin:2px 0 4px">+ Añadir usuario y clave</button>
     </details>
     <label for="a-group">Grupo / Empresa</label>
     <input id="a-group" style="margin:4px 0 10px">
@@ -886,7 +884,7 @@
 </div>
 
 <div class="overlay" id="edit-overlay" hidden>
-  <form class="card" id="edit-form">
+  <form class="card" id="edit-form" style="width:min(560px,100%)">
     <h1 style="margin-bottom:16px;font-size:1.1rem" id="edit-title">Editar</h1>
     <label for="e-name">Nombre</label>
     <input id="e-name" required style="margin:4px 0 4px">
@@ -904,17 +902,17 @@
     <label for="e-password">Clave SSH</label>
     <input id="e-password" type="password" placeholder="(dejar vacío para no cambiarla)" style="margin:4px 0 10px">
     <details id="e-cred2-box" style="margin:0 0 10px">
-      <summary style="cursor:pointer;color:var(--ink-muted)">Credencial alternativa (opcional)</summary>
+      <summary style="cursor:pointer;color:var(--ink-muted)">Credenciales adicionales (opcional)</summary>
       <p class="muted" style="margin:6px 0">
-        Si la primera no entra, se prueba esta. «Validar» prueba por SSH cuál de
-        las dos conecta y deja activa la que gestiona el equipo.
+        Si la de arriba no entra, se prueban estas en orden. «Validar» prueba por
+        SSH cuál conecta y deja activa la que gestiona el equipo.
       </p>
-      <label for="e-username2">Usuario SSH 2</label>
-      <input id="e-username2" style="margin:4px 0 10px">
-      <label for="e-password2">Clave SSH 2</label>
-      <input id="e-password2" type="password" placeholder="(dejar vacío para no cambiarla)" style="margin:4px 0 8px">
-      <button type="button" class="ghost" id="btn-validar-cred">Validar credenciales</button>
-      <p class="msg" id="cred-valida-msg" role="status" aria-live="polite" style="margin:6px 0 0"></p>
+      <div id="e-cred-list"></div>
+      <button type="button" class="ghost" id="e-cred-add" style="margin:2px 0 8px">+ Añadir usuario y clave</button>
+      <div>
+        <button type="button" class="ghost" id="btn-validar-cred">Validar credenciales</button>
+        <p class="msg" id="cred-valida-msg" role="status" aria-live="polite" style="margin:6px 0 0"></p>
+      </div>
     </details>
     <label for="e-group">Grupo / Empresa</label>
     <input id="e-group" style="margin:4px 0 10px">
@@ -2253,6 +2251,52 @@ Object.entries(KPI_CARD_ESTADO).forEach(([id, solo]) => {
 
 let editDeviceId = null;
 
+// ---- Credenciales adicionales: lista dinámica de usuario/clave ----
+function credRow(username = "") {
+  const row = document.createElement("div");
+  row.className = "cred-row";
+  row.style.cssText = "display:flex;gap:8px;margin-bottom:8px";
+  const u = document.createElement("input");
+  u.className = "cred-user";
+  u.placeholder = "Usuario SSH";
+  u.value = username;
+  u.style.flex = "1";
+  const p = document.createElement("input");
+  p.className = "cred-pass";
+  p.type = "password";
+  p.placeholder = username ? "Clave (vacío = sin cambiar)" : "Clave SSH";
+  p.autocomplete = "new-password";
+  p.style.flex = "1";
+  const del = document.createElement("button");
+  del.type = "button";
+  del.className = "ghost cred-del";
+  del.title = "Quitar";
+  del.textContent = "✕";
+  del.addEventListener("click", () => row.remove());
+  row.append(u, p, del);
+  return row;
+}
+function renderCredList(prefix, usernames) {
+  const list = $(prefix + "-cred-list");
+  list.textContent = "";
+  usernames.forEach((u) => list.appendChild(credRow(u)));
+}
+function collectExtras(prefix) {
+  const out = [];
+  $(prefix + "-cred-list").querySelectorAll(".cred-row").forEach((row) => {
+    const username = row.querySelector(".cred-user").value.trim();
+    const password = row.querySelector(".cred-pass").value;
+    if (username) out.push({ username, password });
+  });
+  return out;
+}
+$("e-cred-add").addEventListener("click", () => {
+  $("e-cred-list").appendChild(credRow(""));
+});
+$("a-cred-add").addEventListener("click", () => {
+  $("a-cred-list").appendChild(credRow(""));
+});
+
 window.openEdit = (id) => {
   const device = allDevices.find((d) => d.id === id);
   if (!device) return;
@@ -2263,11 +2307,11 @@ window.openEdit = (id) => {
   $("e-port").value = device.port;
   $("e-username").value = device.username;
   $("e-password").value = "";
-  $("e-username2").value = device.username2 || "";
-  $("e-password2").value = "";
+  const extras = device.extra_usernames || [];
+  renderCredList("e", extras);
   $("cred-valida-msg").textContent = "";
-  // Abrir el bloque de credencial alternativa solo si ya hay una guardada.
-  $("e-cred2-box").open = Boolean(device.username2);
+  // Abrir el bloque de credenciales adicionales solo si ya hay alguna guardada.
+  $("e-cred2-box").open = extras.length > 0;
   $("e-group").value = device.group_name || "";
   poblarPlataformas("e-model", device.model || "routeros");
   $("e-interval").value = device.backup_interval_minutes || 0;
@@ -2286,13 +2330,12 @@ $("edit-form").addEventListener("submit", async (event) => {
     address: $("e-address").value.trim(),
     port: Number($("e-port").value) || 22,
     username: $("e-username").value,
-    username2: $("e-username2").value,
+    extra_credentials: collectExtras("e"),
     group_name: $("e-group").value.trim(),
     model: $("e-model").value.trim().toLowerCase() || "routeros",
     backup_interval_minutes: Number($("e-interval").value) || 0,
   };
   if ($("e-password").value) body.password = $("e-password").value;
-  if ($("e-password2").value) body.password2 = $("e-password2").value;
   try {
     await api("/api/devices/" + editDeviceId, {
       method: "PATCH",
@@ -2319,10 +2362,9 @@ $("btn-validar-cred").addEventListener("click", async () => {
   const msg = $("cred-valida-msg");
   const body = {
     username: $("e-username").value,
-    username2: $("e-username2").value,
+    extra_credentials: collectExtras("e"),
   };
   if ($("e-password").value) body.password = $("e-password").value;
-  if ($("e-password2").value) body.password2 = $("e-password2").value;
   btn.disabled = true;
   msg.className = "msg";
   msg.textContent = "Guardando y probando por SSH…";
@@ -2333,24 +2375,24 @@ $("btn-validar-cred").addEventListener("click", async () => {
       body: JSON.stringify(body),
     });
     $("e-password").value = "";
-    $("e-password2").value = "";
     const r = await api(
       "/api/devices/" + editDeviceId + "/validate-credentials",
       { method: "POST" }
     );
     const nombre = (e) => CRED_ESTADO[e] || e;
-    const l1 = "Credencial 1 (" + esc(r.usuario1 || "—") + "): " + nombre(r.cred1);
-    const l2 = "Credencial 2 (" + esc(r.usuario2 || "—") + "): " + nombre(r.cred2);
-    let resumen;
+    const lineas = (r.resultados || []).map(
+      (c) => "Credencial " + c.idx + " (" + esc(c.username || "—") + "): "
+        + nombre(c.estado)
+    );
     if (r.activa) {
-      resumen = "Activa: credencial " + r.activa
-        + " — Oxidized respaldará con esa.";
+      lineas.push("Activa: credencial " + r.activa
+        + " — Oxidized respaldará con esa.");
       msg.className = "msg ok";
     } else {
-      resumen = "Ninguna de las dos conecta: no se cambió la activa.";
+      lineas.push("Ninguna conecta: no se cambió la activa.");
       msg.className = "msg err";
     }
-    msg.innerHTML = [l1, l2, resumen].join("<br>");
+    msg.innerHTML = lineas.join("<br>");
     refresh();
   } catch (error) {
     msg.className = "msg err";
@@ -2681,6 +2723,7 @@ $("login-form").addEventListener("submit", async (event) => {
 
 $("btn-open-add").addEventListener("click", () => {
   $("add-form").reset();
+  $("a-cred-list").textContent = "";  // reset() no borra las filas generadas
   poblarPlataformas("a-model");
   $("a-port").value = 22;
   $("a-interval").value = 0;
@@ -2706,8 +2749,7 @@ $("add-form").addEventListener("submit", async (event) => {
         port: Number($("a-port").value) || 22,
         username: $("a-username").value,
         password: $("a-password").value,
-        username2: $("a-username2").value,
-        password2: $("a-password2").value,
+        extra_credentials: collectExtras("a"),
         group_name: $("a-group").value.trim(),
         backup_interval_minutes: Number($("a-interval").value) || 0,
       }),
