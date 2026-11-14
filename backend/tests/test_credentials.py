@@ -124,3 +124,63 @@ async def test_validar_equipo_inexistente_404(auth_headers) -> None:
     async with client(auth_headers) as api:
         resp = await api.post("/api/devices/9999/validate-credentials")
     assert resp.status_code == 404
+
+
+async def test_node_fail_hace_failover_automatico(
+    auth_headers, device_repository, monkeypatch
+) -> None:
+    """Un evento node_fail dispara el failover: si otra credencial conecta, pasa
+    a ser la activa y se recarga/reintenta (apartado 2)."""
+    import app.oxidized_source as oxi
+
+    oxi._ultimo_failover.clear()
+    monkeypatch.setattr(backups_module, "_validar_acceso_ssh", _ssh_ok_para("u2"))
+    recargas: list = []
+
+    async def fake_reload(url):
+        recargas.append(("reload", url))
+
+    async def fake_trigger(url, node):
+        recargas.append(("trigger", node))
+
+    monkeypatch.setattr(oxi, "refresh_inventory", fake_reload)
+    monkeypatch.setattr(oxi, "trigger_node_backup", fake_trigger)
+
+    async with client(auth_headers) as api:
+        await api.post("/api/devices", json=BASE)
+        resp = await api.post(
+            "/api/oxidized/events",
+            headers={"X-Oxidized-Token": "test-oxidized-token"},
+            json={"node": "rb-cred", "event": "node_fail"},
+        )
+
+    assert resp.status_code == 204
+    nodes = await device_repository.list_oxidized_nodes()
+    assert next(n for n in nodes if n["name"] == "rb-cred")["username"] == "u2"
+    # Se recargó Oxidized y se reintentó el respaldo con la credencial nueva.
+    assert ("trigger", "rb-cred") in recargas
+
+
+async def test_node_fail_sin_credenciales_extra_no_hace_nada(
+    auth_headers, device_repository, monkeypatch
+) -> None:
+    import app.oxidized_source as oxi
+
+    oxi._ultimo_failover.clear()
+    llamado = False
+
+    async def no_debe_llamarse(*a, **k):
+        nonlocal llamado
+        llamado = True
+        return "ok"
+
+    monkeypatch.setattr(backups_module, "_validar_acceso_ssh", no_debe_llamarse)
+    solo = {"name": "rb-solo", "address": "192.0.2.60", "username": "u1", "password": "p1"}
+    async with client(auth_headers) as api:
+        await api.post("/api/devices", json=solo)
+        await api.post(
+            "/api/oxidized/events",
+            headers={"X-Oxidized-Token": "test-oxidized-token"},
+            json={"node": "rb-solo", "event": "node_fail"},
+        )
+    assert llamado is False  # sin credenciales adicionales no se sondea nada

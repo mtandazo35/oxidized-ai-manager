@@ -1,14 +1,25 @@
 import secrets
+import time
 
 import httpx
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    Header,
+    HTTPException,
+    Request,
+    status,
+)
 
 from .auth import require_admin
+from .backups import ajustar_credencial_activa
 from .config import get_settings
 from .gitrepo import GitRepoError, NotFoundInRepoError, list_versions, show_config
 from .integrity import revisar
 from .metadata import parse_routeros_metadata
 from .schemas import BackupEventIn, OxidizedNode
+from .scheduler import refresh_inventory, trigger_node_backup
 from .secrets_box import ClaveIlegibleError
 
 
@@ -105,10 +116,43 @@ async def oxidized_nodes(
     ]
 
 
+# Tiempo mínimo entre intentos de failover de credencial por nodo. Oxidized
+# reintenta los fallos seguido; sin este freno, un equipo caído dispararía una
+# ronda de sondas SSH en cada ciclo.
+_FAILOVER_COOLDOWN = 300.0
+_ultimo_failover: dict[str, float] = {}
+
+
+async def _failover_credencial(app, node: str) -> None:
+    """Tras un respaldo fallido: prueba las demás credenciales del equipo y, si
+    alguna conecta, la deja activa, recarga Oxidized y reintenta el respaldo.
+
+    Si el equipo no tiene credenciales adicionales, o está caído (ninguna
+    conecta), no hace nada: `ajustar_credencial_activa` solo cambia la activa
+    cuando otra credencial autentica de verdad, así que no provoca aleteo."""
+    ahora = time.monotonic()
+    if ahora - _ultimo_failover.get(node, 0.0) < _FAILOVER_COOLDOWN:
+        return
+    _ultimo_failover[node] = ahora
+    device = await app.state.devices.get_device_by_name(node)
+    if not device or not device.get("extra_usernames"):
+        return
+    resultado = await ajustar_credencial_activa(app.state.devices, device["id"])
+    if not resultado or not resultado["cambio"]:
+        return
+    settings = get_settings()
+    try:
+        await refresh_inventory(settings.oxidized_url)
+        await trigger_node_backup(settings.oxidized_url, node)
+    except (httpx.HTTPError, OSError):
+        return
+
+
 @router.post("/events", status_code=status.HTTP_204_NO_CONTENT)
 async def oxidized_event(
     request: Request,
     payload: BackupEventIn,
+    background: BackgroundTasks,
     x_oxidized_token: str = Header(default=""),
 ) -> None:
     _require_token(x_oxidized_token)
@@ -117,6 +161,9 @@ async def oxidized_event(
     await request.app.state.backup_events.record_event(
         payload.node, payload.event, payload.commit
     )
+    if payload.event == "node_fail":
+        # En segundo plano: no bloquear la respuesta a Oxidized con sondas SSH.
+        background.add_task(_failover_credencial, request.app, payload.node)
     if payload.event in ("node_success", "post_store"):
         settings = get_settings()
         try:
