@@ -213,6 +213,13 @@ class FakeBackupEventRepository:
             visible = [e for e in events if e["event"] != "post_store"]
             successes = [e for e in events if e["event"] == "node_success"]
             commits = [e for e in events if e["commit_ref"]]
+            last_ok = successes[-1]["created_at"] if successes else None
+            fail_streak = sum(
+                1
+                for e in events
+                if e["event"] == "node_fail"
+                and (last_ok is None or e["created_at"] > last_ok)
+            )
             result.append(
                 {
                     "node": node,
@@ -220,6 +227,7 @@ class FakeBackupEventRepository:
                     "last_event_at": visible[-1]["created_at"] if visible else None,
                     "last_success_at": successes[-1]["created_at"] if successes else None,
                     "last_commit": commits[-1]["commit_ref"] if commits else None,
+                    "fail_streak": fail_streak,
                     # El repositorio real trae estas tres columnas del LEFT JOIN
                     # con `backup_integrity`; aquí van en su valor neutro para
                     # que la forma de la respuesta sea la misma.

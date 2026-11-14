@@ -556,6 +556,14 @@ class BackupEventRepository:
                        AS last_success_at,
                    (array_agg(e.commit_ref ORDER BY e.created_at DESC)
                        FILTER (WHERE e.commit_ref <> ''))[1] AS last_commit,
+                   -- Racha de fallos actuales: node_fail posteriores al último
+                   -- éxito (un éxito reinicia la cuenta). Si nunca tuvo éxito,
+                   -- cuenta todos sus node_fail.
+                   count(*) FILTER (
+                       WHERE e.event = 'node_fail'
+                         AND e.created_at > COALESCE(ls.last_success_at,
+                                                     '-infinity'::timestamptz)
+                   ) AS fail_streak,
                    COALESCE(i.warnings, '{}') AS warnings,
                    COALESCE(i.bytes, 0) AS bytes,
                    COALESCE(i.lines, 0) AS lines
@@ -563,11 +571,19 @@ class BackupEventRepository:
             LEFT JOIN devices d ON d.name = e.node
             LEFT JOIN backup_integrity i ON i.node = e.node
                 AND (d.history_since IS NULL OR i.checked_at >= d.history_since)
+            LEFT JOIN (
+                SELECT b.node, max(b.created_at) AS last_success_at
+                FROM backup_events b
+                LEFT JOIN devices dd ON dd.name = b.node
+                WHERE b.event = 'node_success'
+                  AND (dd.history_since IS NULL OR b.created_at >= dd.history_since)
+                GROUP BY b.node
+            ) ls ON ls.node = e.node
             WHERE ($1::text[] IS NULL OR e.node = ANY($1))
               -- Lo anterior al alta (o al último cambio de nombre o empresa)
               -- pertenece al dueño anterior del nombre.
               AND (d.history_since IS NULL OR e.created_at >= d.history_since)
-            GROUP BY e.node, i.warnings, i.bytes, i.lines
+            GROUP BY e.node, i.warnings, i.bytes, i.lines, ls.last_success_at
             ORDER BY e.node
             """,
             nodes,

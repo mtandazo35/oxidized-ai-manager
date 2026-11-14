@@ -255,6 +255,7 @@
         <select id="filter-group-estado"><option value="">Todas las empresas</option></select>
         <select id="group-by-estado" title="Agrupa las filas"><option value="">Sin agrupar</option><option value="group_name">Por empresa</option><option value="estado">Por estado actual</option></select>
         <select id="filter-respaldo-estado" title="Muestra solo los equipos que nunca se respaldaron con éxito, o solo los que sí"><option value="">Respaldados y no</option><option value="no">Solo no respaldados</option><option value="si">Solo respaldados</option></select>
+        <select id="filter-fallos-estado" title="Equipos que fallan de forma seguida: fallos consecutivos desde su último éxito"><option value="">Todos los fallos</option><option value="2">Fallan seguido (≥2)</option><option value="3">Fallan seguido (≥3)</option><option value="5">Fallan seguido (≥5)</option></select>
         <button type="button" id="estado-chip" class="chip-filtro" title="Quitar el filtro" hidden></button>
       </div>
       <p class="msg" id="estado-msg" role="status" aria-live="polite"></p>
@@ -2005,6 +2006,13 @@ function renderStatus() {
   if (respaldo === "no") names = names.filter((n) => !estaRespaldado(n));
   else if (respaldo === "si") names = names.filter((n) => estaRespaldado(n));
 
+  // Filtro "fallan seguido": racha de fallos consecutivos desde el último
+  // éxito (fail_streak, que calcula el backend) mayor o igual al umbral.
+  const minRacha = Number($("filter-fallos-estado").value) || 0;
+  if (minRacha) {
+    names = names.filter((n) => ((evByNode[n] || {}).fail_streak || 0) >= minRacha);
+  }
+
   // Filtro "solo un estado" (p. ej. al llegar desde la tarjeta Con fallo):
   // deja únicamente los equipos en ese estado y muestra un chip para quitarlo.
   if (estadoSolo) names = names.filter((n) => estadoDe(n) === estadoSolo);
@@ -2017,8 +2025,12 @@ function renderStatus() {
   const fila = (name) => {
         const ev = evByNode[name];
         const avisos = (ev && ev.warnings) || [];
+        const racha = (ev && ev.fail_streak) || 0;
+        const badgeRacha = racha >= 2
+          ? `<span class="badge fail" title="${racha} fallos seguidos sin un respaldo exitoso">✖ ${racha}</span>`
+          : "";
         return `<tr>
-          <td>${esc(name)}${avisos.length ? `<button type="button" class="badge warn" data-accion="verAvisos" data-node="${esc(name)}" title="El respaldo se guardó, pero puede estar incompleto">⚠ ${avisos.length}</button>` : ""}</td>
+          <td>${esc(name)}${badgeRacha}${avisos.length ? `<button type="button" class="badge warn" data-accion="verAvisos" data-node="${esc(name)}" title="El respaldo se guardó, pero puede estar incompleto">⚠ ${avisos.length}</button>` : ""}</td>
           <td>${currentStateBadge(name, oxByNode)}</td>
           <td>${ev && ev.last_event ? `<span class="badge ${ev.last_event === "node_success" ? "ok" : "fail"}">${esc(ev.last_event)}</span>` : '<span class="muted">—</span>'}</td>
           <td>${fmtDate(ev && ev.last_event_at)}</td>
@@ -2383,6 +2395,7 @@ alEscribir("filter-text-estado", renderStatus);
 $("group-by-estado").addEventListener("change", renderStatus);
 $("filter-group-estado").addEventListener("change", renderStatus);
 $("filter-respaldo-estado").addEventListener("change", renderStatus);
+$("filter-fallos-estado").addEventListener("change", renderStatus);
 Object.keys(TABLAS).forEach((tabla) => prefsDeFiltros(tabla));
 Object.keys(TABLA_DE).forEach((idTabla) => prepararAnchos(idTabla));
 

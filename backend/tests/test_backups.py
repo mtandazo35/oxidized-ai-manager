@@ -75,7 +75,26 @@ async def test_status_aggregates_last_backup(auth_headers) -> None:
     assert status["rb-lab-01"]["last_event"] == "node_fail"
     assert status["rb-lab-01"]["last_commit"] == "abc123"
     assert status["rb-lab-01"]["last_success_at"] is not None
+    assert status["rb-lab-01"]["fail_streak"] == 1  # un fallo tras el éxito
     assert status["rb-lab-02"]["last_event"] == "node_success"
+    assert status["rb-lab-02"]["fail_streak"] == 0
+
+
+async def test_status_fail_streak(auth_headers) -> None:
+    async with client() as api:
+        # Equipo que falla seguido: 3 fallos y ningún éxito.
+        await post_event(api, "rb-roto", "node_fail")
+        await post_event(api, "rb-roto", "node_fail")
+        await post_event(api, "rb-roto", "node_fail")
+        # Equipo que falló pero luego se recuperó: la racha se reinicia a 0.
+        await post_event(api, "rb-sano", "node_fail")
+        await post_event(api, "rb-sano", "node_fail")
+        await post_event(api, "rb-sano", "node_success", "ok1")
+        response = await api.get("/api/backups/status", headers=auth_headers)
+
+    status = {e["node"]: e for e in response.json()}
+    assert status["rb-roto"]["fail_streak"] == 3
+    assert status["rb-sano"]["fail_streak"] == 0
 
 
 async def test_post_store_supplies_commit_without_masking_events(

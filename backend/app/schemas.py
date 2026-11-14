@@ -181,6 +181,9 @@ class BackupStatusOut(BaseModel):
     last_event_at: datetime | None
     last_success_at: datetime | None
     last_commit: str | None
+    # Fallos consecutivos desde el último éxito (0 = su último respaldo salió
+    # bien). Sirve para el filtro «fallos frecuentes» del panel.
+    fail_streak: int = 0
     # Un nodo puede estar en `node_success` y tener el respaldo cortado o
     # censurado; estos avisos son lo que distingue «se guardó» de «sirve».
     warnings: list[str] = []
