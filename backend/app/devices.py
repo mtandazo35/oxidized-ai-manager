@@ -17,6 +17,7 @@ from openpyxl.styles import Font
 from pydantic import ValidationError
 
 from .auth import CurrentUser, current_user, require_write
+from .backups import _validar_acceso_ssh
 from .config import get_settings
 from .repository import DeviceRepository, DuplicateDeviceError
 from .scheduler import backup_new_nodes, refresh_inventory, trigger_node_backup
@@ -314,3 +315,60 @@ async def backup_now(
             detail="Oxidized no aceptó la solicitud de respaldo.",
         )
     return {"status": "queued", "node": device["name"]}
+
+
+@router.post("/{device_id}/validate-credentials")
+async def validate_credentials(
+    request: Request,
+    device_id: int,
+    background: BackgroundTasks,
+    user: CurrentUser = Depends(require_write),
+) -> dict:
+    """Prueba por SSH las dos credenciales del equipo y deja activa la que
+    conecta. Oxidized respaldará con esa. No ejecuta ningún comando: solo
+    autentica. Si ninguna entra, no cambia la activa.
+
+    estado de cada credencial: "ok" | "credenciales" | "sin_conexion" |
+    "error" | "no_configurada".
+    """
+    cred = await _repository(request).both_credentials(device_id, user.scope)
+    if cred is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Equipo no encontrado."
+        )
+    address, port = cred["address"], int(cred["port"])
+
+    if cred["username"]:
+        estado1 = await _validar_acceso_ssh(
+            address, port, cred["username"], cred["password"]
+        )
+    else:
+        estado1 = "no_configurada"
+    if cred["username2"]:
+        estado2 = await _validar_acceso_ssh(
+            address, port, cred["username2"], cred["password2"]
+        )
+    else:
+        estado2 = "no_configurada"
+
+    # Preferir la primaria si ambas entran: evita saltar de credencial sin
+    # necesidad. Solo se reescribe la activa cuando alguna conecta.
+    if estado1 == "ok":
+        activa = 1
+    elif estado2 == "ok":
+        activa = 2
+    else:
+        activa = None
+    if activa is not None and activa != cred["active_credential"]:
+        await _repository(request).set_active_credential(
+            device_id, activa, user.scope
+        )
+        # Oxidized sigue con la credencial vieja hasta que recargue el inventario.
+        background.add_task(refresh_inventory, get_settings().oxidized_url)
+    return {
+        "cred1": estado1,
+        "cred2": estado2,
+        "activa": activa,
+        "usuario1": cred["username"],
+        "usuario2": cred["username2"],
+    }

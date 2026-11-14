@@ -47,7 +47,8 @@ class FakeDeviceRepository:
 
     @staticmethod
     def _public(device: dict[str, Any]) -> dict[str, Any]:
-        return {key: value for key, value in device.items() if key != "password"}
+        oculto = {"password", "password2"}
+        return {key: value for key, value in device.items() if key not in oculto}
 
     @staticmethod
     def _in_group(device: dict[str, Any], group: str | None) -> bool:
@@ -86,6 +87,11 @@ class FakeDeviceRepository:
             "identity": "",
             "ros_version": "",
             "board": "",
+            # Defaults de las columnas que no vienen en DeviceCreate pero sí
+            # tiene la tabla real (credencial alternativa + cuál está activa).
+            "username2": "",
+            "password2": "",
+            "active_credential": 1,
             # El real siempre usa now(); aquí se deja sobrescribir para sembrar
             # equipos "anteriores a la columna" (NULL), como panel/dev_server.py.
             "history_since": now,
@@ -151,17 +157,43 @@ class FakeDeviceRepository:
             (device for device in self._devices.values() if device["enabled"]),
             key=lambda device: device["name"],
         )
-        return [
-            {
-                "name": device["name"],
-                "address": device["address"],
-                "port": device["port"],
-                "model": device["model"],
-                "username": device["username"],
-                "password": device["password"],
-            }
-            for device in enabled
-        ]
+        nodes = []
+        for device in enabled:
+            usar2 = device.get("active_credential", 1) == 2 and device.get("username2")
+            nodes.append(
+                {
+                    "name": device["name"],
+                    "address": device["address"],
+                    "port": device["port"],
+                    "model": device["model"],
+                    "username": device["username2"] if usar2 else device["username"],
+                    "password": device["password2"] if usar2 else device["password"],
+                }
+            )
+        return nodes
+
+    async def both_credentials(
+        self, device_id: int, group: str | None = None
+    ) -> dict[str, Any] | None:
+        device = self._devices.get(device_id)
+        if device is None or not self._in_group(device, group):
+            return None
+        return {
+            key: device.get(key)
+            for key in (
+                "id", "name", "address", "port", "username", "password",
+                "username2", "password2", "active_credential",
+            )
+        }
+
+    async def set_active_credential(
+        self, device_id: int, which: int, group: str | None = None
+    ) -> bool:
+        device = self._devices.get(device_id)
+        if device is None or not self._in_group(device, group):
+            return False
+        device["active_credential"] = which
+        return True
 
 
 class FakeBackupEventRepository:

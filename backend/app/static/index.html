@@ -856,6 +856,17 @@
     <input id="a-username" style="margin:4px 0 10px">
     <label for="a-password">Clave SSH</label>
     <input id="a-password" type="password" autocomplete="new-password" style="margin:4px 0 10px">
+    <details style="margin:0 0 10px">
+      <summary style="cursor:pointer;color:var(--ink-muted)">Credencial alternativa (opcional)</summary>
+      <p class="muted" style="margin:6px 0">
+        Si la primera no entra, se prueba esta. Úsala cuando el mismo equipo
+        pueda tener dos usuarios/claves distintos.
+      </p>
+      <label for="a-username2">Usuario SSH 2</label>
+      <input id="a-username2" style="margin:4px 0 10px">
+      <label for="a-password2">Clave SSH 2</label>
+      <input id="a-password2" type="password" autocomplete="new-password" style="margin:4px 0 4px">
+    </details>
     <label for="a-group">Grupo / Empresa</label>
     <input id="a-group" style="margin:4px 0 10px">
     <label for="a-model">Plataforma</label>
@@ -892,6 +903,19 @@
     <input id="e-username" style="margin:4px 0 10px">
     <label for="e-password">Clave SSH</label>
     <input id="e-password" type="password" placeholder="(dejar vacío para no cambiarla)" style="margin:4px 0 10px">
+    <details id="e-cred2-box" style="margin:0 0 10px">
+      <summary style="cursor:pointer;color:var(--ink-muted)">Credencial alternativa (opcional)</summary>
+      <p class="muted" style="margin:6px 0">
+        Si la primera no entra, se prueba esta. «Validar» prueba por SSH cuál de
+        las dos conecta y deja activa la que gestiona el equipo.
+      </p>
+      <label for="e-username2">Usuario SSH 2</label>
+      <input id="e-username2" style="margin:4px 0 10px">
+      <label for="e-password2">Clave SSH 2</label>
+      <input id="e-password2" type="password" placeholder="(dejar vacío para no cambiarla)" style="margin:4px 0 8px">
+      <button type="button" class="ghost" id="btn-validar-cred">Validar credenciales</button>
+      <p class="msg" id="cred-valida-msg" role="status" aria-live="polite" style="margin:6px 0 0"></p>
+    </details>
     <label for="e-group">Grupo / Empresa</label>
     <input id="e-group" style="margin:4px 0 10px">
     <label for="e-model">Plataforma</label>
@@ -2239,6 +2263,11 @@ window.openEdit = (id) => {
   $("e-port").value = device.port;
   $("e-username").value = device.username;
   $("e-password").value = "";
+  $("e-username2").value = device.username2 || "";
+  $("e-password2").value = "";
+  $("cred-valida-msg").textContent = "";
+  // Abrir el bloque de credencial alternativa solo si ya hay una guardada.
+  $("e-cred2-box").open = Boolean(device.username2);
   $("e-group").value = device.group_name || "";
   poblarPlataformas("e-model", device.model || "routeros");
   $("e-interval").value = device.backup_interval_minutes || 0;
@@ -2257,11 +2286,13 @@ $("edit-form").addEventListener("submit", async (event) => {
     address: $("e-address").value.trim(),
     port: Number($("e-port").value) || 22,
     username: $("e-username").value,
+    username2: $("e-username2").value,
     group_name: $("e-group").value.trim(),
     model: $("e-model").value.trim().toLowerCase() || "routeros",
     backup_interval_minutes: Number($("e-interval").value) || 0,
   };
   if ($("e-password").value) body.password = $("e-password").value;
+  if ($("e-password2").value) body.password2 = $("e-password2").value;
   try {
     await api("/api/devices/" + editDeviceId, {
       method: "PATCH",
@@ -2272,6 +2303,61 @@ $("edit-form").addEventListener("submit", async (event) => {
     setMsg("device-msg", "Router actualizado.", true);
     refresh();
   } catch (error) { setMsg("edit-msg", error.message, false); }
+});
+
+const CRED_ESTADO = {
+  ok: "conecta", credenciales: "usuario o clave inválidos",
+  sin_conexion: "no responde", error: "no se pudo negociar SSH",
+  no_configurada: "no configurada",
+};
+
+$("btn-validar-cred").addEventListener("click", async () => {
+  if (!editDeviceId) return;
+  // Guardar primero: si no, se validan las credenciales viejas de la base y no
+  // las que el usuario acaba de escribir en el modal.
+  const btn = $("btn-validar-cred");
+  const msg = $("cred-valida-msg");
+  const body = {
+    username: $("e-username").value,
+    username2: $("e-username2").value,
+  };
+  if ($("e-password").value) body.password = $("e-password").value;
+  if ($("e-password2").value) body.password2 = $("e-password2").value;
+  btn.disabled = true;
+  msg.className = "msg";
+  msg.textContent = "Guardando y probando por SSH…";
+  try {
+    await api("/api/devices/" + editDeviceId, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    $("e-password").value = "";
+    $("e-password2").value = "";
+    const r = await api(
+      "/api/devices/" + editDeviceId + "/validate-credentials",
+      { method: "POST" }
+    );
+    const nombre = (e) => CRED_ESTADO[e] || e;
+    const l1 = "Credencial 1 (" + esc(r.usuario1 || "—") + "): " + nombre(r.cred1);
+    const l2 = "Credencial 2 (" + esc(r.usuario2 || "—") + "): " + nombre(r.cred2);
+    let resumen;
+    if (r.activa) {
+      resumen = "Activa: credencial " + r.activa
+        + " — Oxidized respaldará con esa.";
+      msg.className = "msg ok";
+    } else {
+      resumen = "Ninguna de las dos conecta: no se cambió la activa.";
+      msg.className = "msg err";
+    }
+    msg.innerHTML = [l1, l2, resumen].join("<br>");
+    refresh();
+  } catch (error) {
+    msg.className = "msg err";
+    msg.textContent = error.message;
+  } finally {
+    btn.disabled = false;
+  }
 });
 
 window.editGroup = async (id, current) => {
@@ -2620,6 +2706,8 @@ $("add-form").addEventListener("submit", async (event) => {
         port: Number($("a-port").value) || 22,
         username: $("a-username").value,
         password: $("a-password").value,
+        username2: $("a-username2").value,
+        password2: $("a-password2").value,
         group_name: $("a-group").value.trim(),
         backup_interval_minutes: Number($("a-interval").value) || 0,
       }),

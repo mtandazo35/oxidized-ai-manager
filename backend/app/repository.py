@@ -16,9 +16,9 @@ class DuplicateDeviceError(Exception):
 
 
 PUBLIC_COLUMNS = (
-    "id, name, address, port, model, username, enabled, group_name, "
-    "backup_interval_minutes, identity, ros_version, board, history_since, "
-    "created_at, updated_at"
+    "id, name, address, port, model, username, username2, active_credential, "
+    "enabled, group_name, backup_interval_minutes, identity, ros_version, "
+    "board, history_since, created_at, updated_at"
 )
 
 METADATA_FIELDS = ("identity", "ros_version", "board")
@@ -100,9 +100,10 @@ class DeviceRepository:
         try:
             row = await self._pool.fetchrow(
                 "INSERT INTO devices "
-                "(name, address, port, model, username, password, enabled, "
+                "(name, address, port, model, username, password, "
+                "username2, password2, enabled, "
                 "group_name, backup_interval_minutes, history_since) "
-                f"VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, now()) "
+                f"VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now()) "
                 f"RETURNING {PUBLIC_COLUMNS}",
                 data["name"],
                 data["address"],
@@ -110,6 +111,8 @@ class DeviceRepository:
                 data["model"],
                 data["username"],
                 encrypt_secret(self._key, data["password"]),
+                data.get("username2", ""),
+                encrypt_secret(self._key, data.get("password2", "")),
                 data["enabled"],
                 data["group_name"],
                 data["backup_interval_minutes"],
@@ -125,6 +128,8 @@ class DeviceRepository:
             return await self.get_device(device_id, group)
         if "password" in data:
             data = {**data, "password": encrypt_secret(self._key, data["password"])}
+        if "password2" in data:
+            data = {**data, "password2": encrypt_secret(self._key, data["password2"])}
         assignments = []
         values: list[Any] = []
         positions: dict[str, int] = {}
@@ -209,14 +214,30 @@ class DeviceRepository:
 
     async def list_oxidized_nodes(self) -> list[dict[str, Any]]:
         rows = await self._pool.fetch(
-            "SELECT name, address, port, model, username, password "
+            "SELECT name, address, port, model, username, password, "
+            "username2, password2, active_credential "
             "FROM devices WHERE enabled ORDER BY name"
         )
         nodes = []
         for row in rows:
-            node = dict(row)
-            node["password"] = decrypt_secret(self._key, node["password"])
-            nodes.append(node)
+            # Oxidized usa UNA sola credencial por nodo y no reintenta con otra;
+            # por eso aquí se entrega la activa (1 = primaria, 2 = alternativa).
+            # Se cae a la primaria si la alternativa está vacía o el valor es raro.
+            usar_segunda = row["active_credential"] == 2 and row["username2"]
+            if usar_segunda:
+                username, cifrada = row["username2"], row["password2"]
+            else:
+                username, cifrada = row["username"], row["password"]
+            nodes.append(
+                {
+                    "name": row["name"],
+                    "address": row["address"],
+                    "port": row["port"],
+                    "model": row["model"],
+                    "username": username,
+                    "password": decrypt_secret(self._key, cifrada),
+                }
+            )
         return nodes
 
     async def credentials_for(
@@ -246,6 +267,49 @@ class DeviceRepository:
             d["password"] = decrypt_secret(self._key, d["password"])
             out.append(d)
         return out
+
+    async def both_credentials(
+        self, device_id: int, group: str | None = None
+    ) -> dict[str, Any] | None:
+        """Las DOS credenciales SSH descifradas de un equipo, para validar cuál
+        conecta. None si no existe o no es de la empresa del usuario (`group`)."""
+        query = (
+            "SELECT id, name, address, port, username, password, "
+            "username2, password2, active_credential FROM devices WHERE id = $1"
+        )
+        if group is None:
+            row = await self._pool.fetchrow(query, device_id)
+        else:
+            row = await self._pool.fetchrow(
+                query + " AND group_name = $2", device_id, group
+            )
+        if row is None:
+            return None
+        d = dict(row)
+        d["password"] = decrypt_secret(self._key, d["password"])
+        d["password2"] = decrypt_secret(self._key, d["password2"])
+        return d
+
+    async def set_active_credential(
+        self, device_id: int, which: int, group: str | None = None
+    ) -> bool:
+        """Fija qué credencial (1 o 2) se entrega a Oxidized. Respeta `group`."""
+        if group is None:
+            result = await self._pool.execute(
+                "UPDATE devices SET active_credential = $2, updated_at = now() "
+                "WHERE id = $1",
+                device_id,
+                which,
+            )
+        else:
+            result = await self._pool.execute(
+                "UPDATE devices SET active_credential = $2, updated_at = now() "
+                "WHERE id = $1 AND group_name = $3",
+                device_id,
+                which,
+                group,
+            )
+        return result != "UPDATE 0"
 
 
 class ActivityRepository:
