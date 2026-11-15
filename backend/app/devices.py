@@ -340,12 +340,21 @@ async def bulk_update_devices(
         objetivo = todos
 
     cambios = payload.cambios()
+    creds = [c.model_dump() for c in payload.extra_credentials]
     actualizados: list[str] = []
     for device in objetivo:
-        # `user.scope` vuelve a filtrar por empresa en el propio UPDATE.
-        editado = await repo.update_device(device["id"], dict(cambios), user.scope)
-        if editado:
-            actualizados.append(editado["name"])
+        did = device["id"]
+        tocado = False
+        if cambios:
+            # `user.scope` vuelve a filtrar por empresa en el propio UPDATE.
+            tocado = await repo.update_device(did, dict(cambios), user.scope) is not None
+        if payload.extra_mode:
+            ok = await repo.bulk_edit_credentials(
+                did, payload.extra_mode, creds, user.scope
+            )
+            tocado = tocado or ok
+        if tocado:
+            actualizados.append(device["name"])
     # Cambiar credenciales, puerto o el estado de pausa no sirve si Oxidized
     # sigue con la lista anterior.
     if actualizados:

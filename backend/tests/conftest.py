@@ -212,6 +212,31 @@ class FakeDeviceRepository:
         device["active_credential"] = which
         return True
 
+    async def bulk_edit_credentials(
+        self, device_id: int, mode: str, creds: list[dict], group: str | None = None
+    ) -> bool:
+        device = self._devices.get(device_id)
+        if device is None or not self._in_group(device, group):
+            return False
+        extras = list(device.get("extra_credentials") or [])
+        if mode == "add":
+            nombres = {device["username"]} | {e["username"] for e in extras}
+            for c in creds:
+                u = (c.get("username") or "").strip()
+                if u and u not in nombres:
+                    extras.append({"username": u, "password": c.get("password", "")})
+                    nombres.add(u)
+        elif mode == "remove":
+            quitar = {(c.get("username") or "").strip() for c in creds}
+            quitar.discard("")
+            extras = [e for e in extras if e["username"] not in quitar]
+        else:
+            return False
+        device["extra_credentials"] = extras
+        if (device.get("active_credential", 1) or 1) > len(extras) + 1:
+            device["active_credential"] = 1
+        return True
+
 
 class FakeBackupEventRepository:
     """In-memory stand-in matching BackupEventRepository's public contract."""

@@ -559,6 +559,22 @@
           <option value="activar">Reactivar respaldos</option>
         </select>
       </div>
+      <div class="field" style="align-items:flex-start;margin-bottom:10px">
+        <label style="display:flex;gap:8px;align-items:center;min-width:150px">
+          <input type="checkbox" id="me-chk-cred"> Credenciales
+        </label>
+        <div style="flex:1;min-width:0">
+          <select id="me-cred-mode" style="margin-bottom:6px">
+            <option value="add">Añadir estas credenciales</option>
+            <option value="remove">Quitar estas (por usuario)</option>
+          </select>
+          <p class="muted" id="me-cred-hint" style="margin:0 0 6px">
+            Se añaden a las credenciales adicionales de cada router (la principal no se toca).
+          </p>
+          <div id="me-cred-list"></div>
+          <button type="button" class="ghost" id="me-cred-add">+ Añadir usuario y clave</button>
+        </div>
+      </div>
       <button type="button" id="btn-masivo-aplicar">Aplicar a los seleccionados</button>
       <p class="msg" id="masivo-msg" role="status" aria-live="polite"></p>
     </div>
@@ -3444,12 +3460,30 @@ async function loadMasivo() {
     $("bulk-edit-group").innerHTML = '<option value="">Todos</option>' +
       groups.map((g) => `<option value="${esc(g)}">${esc(g)}</option>`).join("");
     renderMasivoDevices();
+    $("me-cred-list").textContent = "";  // sin filas de una apertura anterior
     $("masivo-msg").textContent = "";
   } catch (e) {}
 }
 
 $("bulk-edit-group").addEventListener("change", renderMasivoDevices);
 $("bulk-edit-devices").addEventListener("change", masivoDevicesClick);
+$("me-cred-add").addEventListener("click", () => {
+  $("me-cred-list").appendChild(credRow(""));
+  aplicarModoCred();
+});
+$("me-cred-mode").addEventListener("change", aplicarModoCred);
+
+// En modo "Quitar" la clave no hace falta: se desactiva para no confundir.
+function aplicarModoCred() {
+  const quitar = $("me-cred-mode").value === "remove";
+  $("me-cred-hint").textContent = quitar
+    ? "Quita de cada router (principal o adicional) las credenciales con esos usuarios."
+    : "Se añaden a las credenciales adicionales de cada router (la principal no se toca).";
+  $("me-cred-list").querySelectorAll(".cred-pass").forEach((p) => {
+    p.disabled = quitar;
+    p.placeholder = quitar ? "(no hace falta)" : "Clave SSH";
+  });
+}
 
 $("btn-masivo-aplicar").addEventListener("click", async () => {
   const msg = $("masivo-msg");
@@ -3464,6 +3498,16 @@ $("btn-masivo-aplicar").addEventListener("click", async () => {
   if ($("me-chk-pass").checked) changes.password = $("me-pass").value;
   if ($("me-chk-port").checked) changes.port = Number($("me-port").value) || 22;
   if ($("me-chk-omit").checked) changes.enabled = $("me-omit").value === "activar";
+  if ($("me-chk-cred").checked) {
+    const creds = collectExtras("me");
+    if (!creds.length) {
+      msg.className = "msg err";
+      msg.textContent = "Añade al menos un usuario en Credenciales.";
+      return;
+    }
+    changes.extra_mode = $("me-cred-mode").value;
+    changes.extra_credentials = creds;
+  }
   if (!Object.keys(changes).length) {
     msg.className = "msg err"; msg.textContent = "Marca al menos un campo a cambiar.";
     return;

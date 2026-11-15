@@ -408,6 +408,65 @@ class DeviceRepository:
             )
         return result != "UPDATE 0"
 
+    async def bulk_edit_credentials(
+        self,
+        device_id: int,
+        mode: str,
+        creds: list[dict[str, str]],
+        group: str | None = None,
+    ) -> bool:
+        """Añade ("add") o quita ("remove") credenciales ADICIONALES de un equipo
+        (no toca la primaria). Dedupe por usuario al añadir; al quitar, elimina
+        las que coincidan por usuario. Reescribe con las claves reales cifradas,
+        así que no sufre el problema de posición del merge de `update_device`."""
+        datos = await self.all_credentials(device_id, group)
+        if datos is None:
+            return False
+        existentes = datos["credentials"]  # idx1 = primaria, idx>=2 = extras
+        extras = [
+            {"username": c["username"], "password": c["password"]}
+            for c in existentes
+            if c["idx"] >= 2
+        ]
+        if mode == "add":
+            nombres = {c["username"] for c in existentes}
+            for c in creds:
+                usuario = (c.get("username") or "").strip()
+                if usuario and usuario not in nombres:
+                    extras.append(
+                        {"username": usuario, "password": c.get("password", "")}
+                    )
+                    nombres.add(usuario)
+        elif mode == "remove":
+            quitar = {(c.get("username") or "").strip() for c in creds}
+            quitar.discard("")
+            extras = [e for e in extras if e["username"] not in quitar]
+        else:
+            return False
+        nuevo = self._encode_extras(extras)
+        # Si la activa apuntaba a una extra que ya no existe, volver a la primaria.
+        activa = datos["active_credential"] or 1
+        if activa > len(extras) + 1:
+            activa = 1
+        if group is None:
+            result = await self._pool.execute(
+                "UPDATE devices SET extra_credentials = $2, active_credential = $3, "
+                "updated_at = now() WHERE id = $1",
+                device_id,
+                nuevo,
+                activa,
+            )
+        else:
+            result = await self._pool.execute(
+                "UPDATE devices SET extra_credentials = $2, active_credential = $3, "
+                "updated_at = now() WHERE id = $1 AND group_name = $4",
+                device_id,
+                nuevo,
+                activa,
+                group,
+            )
+        return result != "UPDATE 0"
+
 
 class ActivityRepository:
     """Bitácora. Escribir aquí nunca debe tumbar la petición que la origina."""

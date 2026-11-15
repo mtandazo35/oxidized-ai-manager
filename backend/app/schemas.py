@@ -196,6 +196,13 @@ class BulkDeviceEdit(BaseModel):
     password: str | None = Field(default=None, max_length=256)
     port: int | None = Field(default=None, ge=1, le=65535)
     enabled: bool | None = None
+    # Operación sobre las credenciales ADICIONALES de cada equipo: "add" añade
+    # las de `extra_credentials` (sin duplicar por usuario), "remove" quita las
+    # que coincidan por usuario. "" = no tocar las credenciales adicionales.
+    extra_mode: Literal["", "add", "remove"] = ""
+    extra_credentials: list[CredentialIn] = Field(
+        default_factory=list, max_length=MAX_EXTRA_CREDENTIALS
+    )
 
     @model_validator(mode="after")
     def _coherente(self) -> "BulkDeviceEdit":
@@ -203,12 +210,16 @@ class BulkDeviceEdit(BaseModel):
             raise ValueError("Falta la empresa para el alcance 'group'.")
         if self.scope == "devices" and not self.device_ids:
             raise ValueError("No hay routers seleccionados.")
-        if self.cambios() == {}:
+        if self.extra_mode and not [
+            c for c in self.extra_credentials if c.username.strip()
+        ]:
+            raise ValueError("No se indicó ninguna credencial para la operación.")
+        if self.cambios() == {} and not self.extra_mode:
             raise ValueError("No se indicó ningún cambio a aplicar.")
         return self
 
     def cambios(self) -> dict:
-        """Solo los campos a cambiar (los no nulos)."""
+        """Solo los campos escalares a cambiar (los no nulos)."""
         campos = ("username", "password", "port", "enabled")
         return {c: getattr(self, c) for c in campos if getattr(self, c) is not None}
 

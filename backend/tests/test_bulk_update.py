@@ -88,3 +88,73 @@ async def test_bulk_update_group_sin_empresa_422(auth_headers) -> None:
             "/api/devices/bulk-update", json={"scope": "group", "port": 2222},
         )
     assert r.status_code == 422
+
+
+async def test_bulk_add_credenciales(auth_headers) -> None:
+    async with client(auth_headers) as api:
+        d1 = await _crear(api, "rb-c1")
+        d2 = await _crear(api, "rb-c2")
+        r = await api.post("/api/devices/bulk-update", json={
+            "scope": "devices", "device_ids": [d1["id"], d2["id"]],
+            "extra_mode": "add",
+            "extra_credentials": [
+                {"username": "alt", "password": "x"},
+                {"username": "alt2", "password": "y"},
+            ],
+        })
+        assert r.status_code == 200
+        assert r.json()["actualizados"] == 2
+        devs = {d["name"]: d for d in (await api.get("/api/devices")).json()}
+    assert devs["rb-c1"]["extra_usernames"] == ["alt", "alt2"]
+    assert devs["rb-c2"]["extra_usernames"] == ["alt", "alt2"]
+
+
+async def test_bulk_add_no_duplica_por_usuario(auth_headers) -> None:
+    async with client(auth_headers) as api:
+        d = (await api.post("/api/devices", json={
+            "name": "rb-dup", "address": "192.0.2.10",
+            "username": "u", "password": "p",
+            "extra_credentials": [{"username": "alt", "password": "p1"}],
+        })).json()
+        await api.post("/api/devices/bulk-update", json={
+            "scope": "devices", "device_ids": [d["id"]],
+            "extra_mode": "add",
+            "extra_credentials": [
+                {"username": "alt", "password": "otra"},   # ya existe
+                {"username": "u", "password": "z"},         # es la primaria
+                {"username": "alt3", "password": "p3"},
+            ],
+        })
+        devs = {x["name"]: x for x in (await api.get("/api/devices")).json()}
+    assert devs["rb-dup"]["extra_usernames"] == ["alt", "alt3"]
+
+
+async def test_bulk_remove_credenciales(auth_headers) -> None:
+    async with client(auth_headers) as api:
+        d = (await api.post("/api/devices", json={
+            "name": "rb-rm", "address": "192.0.2.10",
+            "username": "u", "password": "p",
+            "extra_credentials": [
+                {"username": "a", "password": "1"},
+                {"username": "b", "password": "2"},
+                {"username": "c", "password": "3"},
+            ],
+        })).json()
+        r = await api.post("/api/devices/bulk-update", json={
+            "scope": "devices", "device_ids": [d["id"]],
+            "extra_mode": "remove",
+            "extra_credentials": [{"username": "b"}, {"username": "c"}],
+        })
+        assert r.json()["actualizados"] == 1
+        devs = {x["name"]: x for x in (await api.get("/api/devices")).json()}
+    assert devs["rb-rm"]["extra_usernames"] == ["a"]
+
+
+async def test_bulk_add_sin_credenciales_422(auth_headers) -> None:
+    async with client(auth_headers) as api:
+        d = await _crear(api, "rb-vacio")
+        r = await api.post("/api/devices/bulk-update", json={
+            "scope": "devices", "device_ids": [d["id"]],
+            "extra_mode": "add", "extra_credentials": [],
+        })
+    assert r.status_code == 422
