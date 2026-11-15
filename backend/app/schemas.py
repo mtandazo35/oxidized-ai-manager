@@ -3,7 +3,7 @@ import unicodedata
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 # Patrón del nombre **ya normalizado**. Sigue siendo estricto porque ese
@@ -182,6 +182,35 @@ class BulkBackupRequest(BaseModel):
     scope: Literal["all", "group", "devices"]
     group: str = Field(default="", max_length=64)
     device_ids: list[int] = Field(default_factory=list, max_length=1000)
+
+
+class BulkDeviceEdit(BaseModel):
+    """Cambio masivo de credenciales/puerto/omitir-respaldos sobre un conjunto
+    de equipos (toda una empresa, o los routers seleccionados)."""
+    scope: Literal["all", "group", "devices"]
+    group: str = Field(default="", max_length=64)
+    device_ids: list[int] = Field(default_factory=list, max_length=5000)
+    # Solo se aplican los campos presentes (no nulos). `enabled=False` = omitir
+    # respaldos (el equipo queda agregado pero no se respalda).
+    username: str | None = Field(default=None, max_length=128)
+    password: str | None = Field(default=None, max_length=256)
+    port: int | None = Field(default=None, ge=1, le=65535)
+    enabled: bool | None = None
+
+    @model_validator(mode="after")
+    def _coherente(self) -> "BulkDeviceEdit":
+        if self.scope == "group" and not self.group:
+            raise ValueError("Falta la empresa para el alcance 'group'.")
+        if self.scope == "devices" and not self.device_ids:
+            raise ValueError("No hay routers seleccionados.")
+        if self.cambios() == {}:
+            raise ValueError("No se indicó ningún cambio a aplicar.")
+        return self
+
+    def cambios(self) -> dict:
+        """Solo los campos a cambiar (los no nulos)."""
+        campos = ("username", "password", "port", "enabled")
+        return {c: getattr(self, c) for c in campos if getattr(self, c) is not None}
 
 
 class BackupEventIn(BaseModel):

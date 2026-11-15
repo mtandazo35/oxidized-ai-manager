@@ -22,6 +22,7 @@ from .config import get_settings
 from .repository import DeviceRepository, DuplicateDeviceError
 from .scheduler import backup_new_nodes, refresh_inventory, trigger_node_backup
 from .schemas import (
+    BulkDeviceEdit,
     DeviceCreate,
     DeviceImportRequest,
     DeviceImportResult,
@@ -315,6 +316,41 @@ async def backup_now(
             detail="Oxidized no aceptó la solicitud de respaldo.",
         )
     return {"status": "queued", "node": device["name"]}
+
+
+@router.post("/bulk-update")
+async def bulk_update_devices(
+    request: Request,
+    payload: BulkDeviceEdit,
+    background: BackgroundTasks,
+    user: CurrentUser = Depends(require_write),
+) -> dict:
+    """Aplica los mismos cambios (usuario/clave/puerto/omitir-respaldos) a un
+    conjunto de equipos: toda una empresa, los seleccionados, o todos. Respeta
+    la empresa del usuario. Solo cambia los campos presentes.
+    """
+    repo = _repository(request)
+    todos = await repo.list_devices(user.scope)
+    if payload.scope == "group":
+        objetivo = [d for d in todos if d["group_name"] == payload.group]
+    elif payload.scope == "devices":
+        ids = set(payload.device_ids)
+        objetivo = [d for d in todos if d["id"] in ids]
+    else:  # all
+        objetivo = todos
+
+    cambios = payload.cambios()
+    actualizados: list[str] = []
+    for device in objetivo:
+        # `user.scope` vuelve a filtrar por empresa en el propio UPDATE.
+        editado = await repo.update_device(device["id"], dict(cambios), user.scope)
+        if editado:
+            actualizados.append(editado["name"])
+    # Cambiar credenciales, puerto o el estado de pausa no sirve si Oxidized
+    # sigue con la lista anterior.
+    if actualizados:
+        background.add_task(refresh_inventory, get_settings().oxidized_url)
+    return {"actualizados": len(actualizados), "nombres": actualizados}
 
 
 @router.post("/{device_id}/validate-credentials")

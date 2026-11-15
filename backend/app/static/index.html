@@ -283,6 +283,10 @@
           <span class="disc"><svg viewBox="0 0 24 24"><path d="M12 15V3"/><path d="m7 8 5-5 5 5"/><path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg></span>
           Carga masiva<br>de routers
         </button>
+        <button type="button" class="hub-item" data-seccion="masivo">
+          <span class="disc"><svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M3 12h18"/><path d="M3 18h12"/><path d="m16 17 2 2 4-4"/></svg></span>
+          Cambios<br>masivos
+        </button>
         <button type="button" class="hub-item" data-seccion="version" data-solo-admin>
           <span class="disc"><svg viewBox="0 0 24 24"><path d="M12 3v10"/><path d="m8 9 4 4 4-4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg></span>
           Versión y<br>actualizaciones
@@ -498,6 +502,66 @@
       <p class="msg" id="bulk-run-msg" role="status" aria-live="polite"></p>
     </div>
 
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="sec-masivo" hidden>
+  <div class="card xwide">
+    <div class="modal-head">
+      <h1>Cambios masivos</h1>
+      <button type="button" class="ghost" data-cerrar="sec-masivo">Cerrar</button>
+    </div>
+    <div class="modal-body">
+    <p class="muted" style="margin-top:0">
+      Aplica los mismos cambios a varios equipos a la vez: elige una empresa o
+      marca routers sueltos, indica qué cambiar y aplica.
+    </p>
+    <div class="card">
+      <h2 style="margin-top:0">1. Elegir equipos</h2>
+      <div class="field" style="margin-bottom:10px">
+        <label for="bulk-edit-group">Empresa</label>
+        <select id="bulk-edit-group"></select>
+        <span class="muted">(filtra la lista; «Todos» muestra todas)</span>
+      </div>
+      <p class="muted" style="margin:0 0 6px">Marque los routers (o una empresa entera):</p>
+      <div id="bulk-edit-devices" style="max-height:300px;overflow-y:auto;display:flex;flex-direction:column;gap:10px;margin-bottom:4px"></div>
+      <p class="muted" id="bulk-edit-count" style="margin:4px 0 0">0 routers seleccionados.</p>
+    </div>
+
+    <div class="card">
+      <h2 style="margin-top:0">2. Qué cambiar</h2>
+      <p class="muted" style="margin:0 0 10px">Solo se aplican los campos que marques.</p>
+      <div class="field" style="margin-bottom:10px">
+        <label style="display:flex;gap:8px;align-items:center;min-width:150px">
+          <input type="checkbox" id="me-chk-user"> Usuario SSH
+        </label>
+        <input id="me-user" placeholder="Nuevo usuario" style="flex:1">
+      </div>
+      <div class="field" style="margin-bottom:10px">
+        <label style="display:flex;gap:8px;align-items:center;min-width:150px">
+          <input type="checkbox" id="me-chk-pass"> Clave SSH
+        </label>
+        <input id="me-pass" type="password" autocomplete="new-password" placeholder="Nueva clave" style="flex:1">
+      </div>
+      <div class="field" style="margin-bottom:10px">
+        <label style="display:flex;gap:8px;align-items:center;min-width:150px">
+          <input type="checkbox" id="me-chk-port"> Puerto SSH
+        </label>
+        <input id="me-port" type="number" min="1" max="65535" placeholder="Nuevo puerto" style="width:120px">
+      </div>
+      <div class="field" style="margin-bottom:10px">
+        <label style="display:flex;gap:8px;align-items:center;min-width:150px">
+          <input type="checkbox" id="me-chk-omit"> Omitir respaldos
+        </label>
+        <select id="me-omit" style="flex:1">
+          <option value="omit">Omitir (queda agregado pero no se respalda)</option>
+          <option value="activar">Reactivar respaldos</option>
+        </select>
+      </div>
+      <button type="button" id="btn-masivo-aplicar">Aplicar a los seleccionados</button>
+      <p class="msg" id="masivo-msg" role="status" aria-live="polite"></p>
+    </div>
     </div>
   </div>
 </div>
@@ -3309,6 +3373,120 @@ $("btn-bulk-run-selected").addEventListener("click", () => {
   respaldar({ scope: "devices", device_ids: ids });
 });
 
+// --- Cambios masivos (usuario/clave/puerto/omitir respaldos) --------------
+
+function masivoCount() {
+  const n = document.querySelectorAll(".bulk-edit-check:checked").length;
+  $("bulk-edit-count").textContent =
+    n + (n === 1 ? " router seleccionado." : " routers seleccionados.");
+}
+
+function renderMasivoDevices() {
+  const group = $("bulk-edit-group").value;
+  const list = allDevices.filter((d) => !group || (d.group_name || "") === group);
+  if (!list.length) {
+    $("bulk-edit-devices").innerHTML =
+      '<span class="muted">Sin routers en esta empresa.</span>';
+    masivoCount();
+    return;
+  }
+  const porEmpresa = new Map();
+  list.forEach((d) => {
+    const g = d.group_name || "Sin empresa";
+    if (!porEmpresa.has(g)) porEmpresa.set(g, []);
+    porEmpresa.get(g).push(d);
+  });
+  const grid = "display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:4px;margin-top:6px";
+  $("bulk-edit-devices").innerHTML = [...porEmpresa.keys()].sort().map((g) => {
+    const items = porEmpresa.get(g).sort((a, b) => a.name.localeCompare(b.name));
+    const checks = items.map((d) => `<label style="display:flex;gap:6px;align-items:center">
+        <input type="checkbox" class="bulk-edit-check" value="${d.id}" data-group="${esc(g)}">
+        ${esc(d.name)}${d.enabled ? "" : ' <span class="muted">(omitido)</span>'}</label>`).join("");
+    return `<fieldset style="border:1px solid var(--line,#e5e7eb);border-radius:8px;padding:6px 10px 8px;margin:0">
+      <legend style="padding:0 4px">
+        <label style="display:flex;gap:6px;align-items:center;cursor:pointer">
+          <input type="checkbox" class="bulk-edit-grupo-all" data-group="${esc(g)}">
+          <strong>${esc(g)}</strong> <span class="muted">(${items.length})</span>
+        </label>
+      </legend>
+      <div style="${grid}">${checks}</div>
+    </fieldset>`;
+  }).join("");
+  masivoCount();
+}
+
+function masivoDevicesClick(e) {
+  const t = e.target;
+  if (t.classList.contains("bulk-edit-grupo-all")) {
+    document.querySelectorAll(
+      `.bulk-edit-check[data-group="${CSS.escape(t.dataset.group)}"]`
+    ).forEach((c) => { c.checked = t.checked; });
+  } else if (t.classList.contains("bulk-edit-check")) {
+    const hermanos = [...document.querySelectorAll(
+      `.bulk-edit-check[data-group="${CSS.escape(t.dataset.group)}"]`)];
+    const head = document.querySelector(
+      `.bulk-edit-grupo-all[data-group="${CSS.escape(t.dataset.group)}"]`);
+    if (head) {
+      const m = hermanos.filter((c) => c.checked).length;
+      head.checked = m === hermanos.length;
+      head.indeterminate = m > 0 && m < hermanos.length;
+    }
+  }
+  masivoCount();
+}
+
+async function loadMasivo() {
+  try {
+    allDevices = await api("/api/devices");
+    const groups = [...new Set(
+      allDevices.map((d) => d.group_name).filter(Boolean)
+    )].sort();
+    $("bulk-edit-group").innerHTML = '<option value="">Todos</option>' +
+      groups.map((g) => `<option value="${esc(g)}">${esc(g)}</option>`).join("");
+    renderMasivoDevices();
+    $("masivo-msg").textContent = "";
+  } catch (e) {}
+}
+
+$("bulk-edit-group").addEventListener("change", renderMasivoDevices);
+$("bulk-edit-devices").addEventListener("change", masivoDevicesClick);
+
+$("btn-masivo-aplicar").addEventListener("click", async () => {
+  const msg = $("masivo-msg");
+  const ids = [...document.querySelectorAll(".bulk-edit-check:checked")]
+    .map((c) => Number(c.value));
+  if (!ids.length) {
+    msg.className = "msg err"; msg.textContent = "Marca al menos un router.";
+    return;
+  }
+  const changes = {};
+  if ($("me-chk-user").checked) changes.username = $("me-user").value;
+  if ($("me-chk-pass").checked) changes.password = $("me-pass").value;
+  if ($("me-chk-port").checked) changes.port = Number($("me-port").value) || 22;
+  if ($("me-chk-omit").checked) changes.enabled = $("me-omit").value === "activar";
+  if (!Object.keys(changes).length) {
+    msg.className = "msg err"; msg.textContent = "Marca al menos un campo a cambiar.";
+    return;
+  }
+  const btn = $("btn-masivo-aplicar");
+  btn.disabled = true; msg.className = "msg"; msg.textContent = "Aplicando…";
+  try {
+    const r = await api("/api/devices/bulk-update", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ scope: "devices", device_ids: ids, ...changes }),
+    });
+    msg.className = "msg ok";
+    msg.textContent = "Cambios aplicados a " + r.actualizados + " router(es).";
+    refresh();
+    loadMasivo();
+  } catch (error) {
+    msg.className = "msg err"; msg.textContent = error.message;
+  } finally {
+    btn.disabled = false;
+  }
+});
+
 // --- Cuentas de acceso (solo administrador) ------------------------------
 
 async function loadUsers() {
@@ -3986,6 +4164,7 @@ $("btn-close-account").addEventListener("click", () => {
 // Cada círculo abre su apartado y esconde los demás; así la pestaña no es un
 // muro de tarjetas y cada cosa se consulta cuando hace falta.
 const HUB_CARGA = {
+  masivo: () => loadMasivo(),
   config: () => { loadSettings(); loadBulkRun(); },
   git: () => loadSettings(),
   telegram: () => loadSettings(),
