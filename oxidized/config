@@ -13,6 +13,14 @@ threads: 20
 timeout: 30
 timelimit: 240
 retries: 1
+# Solo password en SSH. Por defecto net-ssh prueba [none, publickey, password];
+# el método `none` hace que el MikroTik consulte a RADIUS sin una clave válida y
+# registre un Access-Reject espurio ("contraseña incorrecta") por cada respaldo,
+# además del Access-Accept bueno de `password`. Dejando solo password se manda
+# un único Access-Request por respaldo.
+vars:
+  auth_methods:
+    - password
 prompt: !ruby/regexp /^([\w.@-]+[#>]\s?)$/
 pid: /tmp/oxidized.pid
 crash:
