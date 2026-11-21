@@ -11,7 +11,9 @@ threads: 20
 # saltar, Oxidized marca el nodo como fallido y no guarda nada (ver job.rb), o
 # sea que el respaldo de ese equipo simplemente no se hacía.
 timeout: 30
-timelimit: 240
+# 900 s: hay cores cuyo `/export` tarda varios minutos (RouterOS 6 con mucha
+# carga); con 240 el trabajo se cortaba siempre y el equipo no se respaldaba.
+timelimit: 900
 retries: 1
 # Solo password en SSH. Por defecto net-ssh prueba [none, publickey, password];
 # el método `none` hace que el MikroTik consulte a RADIUS sin una clave válida y
