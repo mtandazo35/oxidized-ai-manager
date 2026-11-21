@@ -525,6 +525,10 @@
         <span class="muted">(filtra la lista; «Todos» muestra todas)</span>
       </div>
       <p class="muted" style="margin:0 0 6px">Marque los routers (o una empresa entera):</p>
+      <label style="display:flex;gap:6px;align-items:center;cursor:pointer;margin:0 0 8px">
+        <input type="checkbox" id="bulk-edit-all">
+        <strong>Seleccionar todos</strong> <span class="muted">(los de la lista de abajo)</span>
+      </label>
       <div id="bulk-edit-devices" style="max-height:300px;overflow-y:auto;display:flex;flex-direction:column;gap:10px;margin-bottom:4px"></div>
       <p class="muted" id="bulk-edit-count" style="margin:4px 0 0">0 routers seleccionados.</p>
     </div>
@@ -536,7 +540,7 @@
         <label style="display:flex;gap:8px;align-items:center;min-width:150px">
           <input type="checkbox" id="me-chk-user"> Usuario SSH
         </label>
-        <input id="me-user" placeholder="Nuevo usuario" style="flex:1">
+        <input id="me-user" placeholder="Nuevo usuario" autocomplete="off" style="flex:1">
       </div>
       <div class="field" style="margin-bottom:10px">
         <label style="display:flex;gap:8px;align-items:center;min-width:150px">
@@ -3392,10 +3396,24 @@ $("btn-bulk-run-selected").addEventListener("click", () => {
 // --- Cambios masivos (usuario/clave/puerto/omitir respaldos) --------------
 
 function masivoCount() {
+  const todos = document.querySelectorAll(".bulk-edit-check").length;
   const n = document.querySelectorAll(".bulk-edit-check:checked").length;
   $("bulk-edit-count").textContent =
     n + (n === 1 ? " router seleccionado." : " routers seleccionados.");
+  // La casilla general refleja lo marcado: todo, nada o parte.
+  const general = $("bulk-edit-all");
+  general.checked = todos > 0 && n === todos;
+  general.indeterminate = n > 0 && n < todos;
 }
+
+$("bulk-edit-all").addEventListener("change", (e) => {
+  const marcar = e.target.checked;
+  document.querySelectorAll(".bulk-edit-check, .bulk-edit-grupo-all").forEach((c) => {
+    c.checked = marcar;
+    c.indeterminate = false;
+  });
+  masivoCount();
+});
 
 function renderMasivoDevices() {
   const group = $("bulk-edit-group").value;
