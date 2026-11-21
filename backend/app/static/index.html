@@ -1804,7 +1804,7 @@ function comparar(a, b) {
 // («Sin asignar» al final): así cada página trae grupos enteros y seguidos.
 const ORDEN_ESTADOS = {
   "Respaldando": 0, "En cola": 1, "Con fallo": 2,
-  "Pendientes": 3, "Sin datos": 4, "Correctos": 5,
+  "Pendientes": 3, "Sin datos": 4, "Correctos": 5, "Fuera de inventario": 6,
 };
 
 function ordenar(tabla, filas, grupoDe) {
@@ -2078,6 +2078,9 @@ function alEscribir(id, render) {
 
 // Estado actual de un equipo en texto, para agrupar por él.
 function estadoDe(name) {
+  // Nombre con historial de respaldos pero sin equipo en el inventario
+  // (renombrado o borrado): categoría propia, no es un pendiente.
+  if (!allDevices.some((d) => d.name === name)) return "Fuera de inventario";
   if (pendingBackups[name] || name === bulkActivo) return "Respaldando";
   if (bulkRunNodes.has(name) && !nodoProcesadoEnTanda(name)) return "En cola";
   const ox = statusCache.oxByNode[name];
