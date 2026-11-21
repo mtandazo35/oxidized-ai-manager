@@ -497,6 +497,10 @@
         <button type="button" class="ghost" id="btn-bulk-run-group">Respaldar grupo</button>
       </div>
       <p class="muted" style="margin:0 0 6px">Selectivo — marque los routers:</p>
+      <label style="display:flex;gap:6px;align-items:center;cursor:pointer;margin:0 0 8px">
+        <input type="checkbox" id="bulk-run-all">
+        <strong>Seleccionar todos</strong> <span class="muted">(los de la lista de abajo)</span>
+      </label>
       <div id="bulk-run-devices" style="max-height:340px;overflow-y:auto;display:flex;flex-direction:column;gap:10px;margin-bottom:10px"></div>
       <button type="button" class="ghost" id="btn-bulk-run-selected">Respaldar seleccionados</button>
       <p class="msg" id="bulk-run-msg" role="status" aria-live="polite"></p>
@@ -3275,6 +3279,7 @@ function renderBulkDevices() {
   if (!enabled.length) {
     $("bulk-run-devices").innerHTML =
       '<span class="muted">Sin routers activos en esta empresa.</span>';
+    bulkRunSyncAll();
     return;
   }
   // Agrupados por empresa, cada bloque con su cabecera y un "marcar todos".
@@ -3300,7 +3305,25 @@ function renderBulkDevices() {
       <div style="${grid}">${checks}</div>
     </fieldset>`;
   }).join("");
+  bulkRunSyncAll();
 }
+
+// La casilla «Seleccionar todos» refleja lo marcado: todo, nada o parte.
+function bulkRunSyncAll() {
+  const todos = document.querySelectorAll(".bulk-run-check").length;
+  const n = document.querySelectorAll(".bulk-run-check:checked").length;
+  const general = $("bulk-run-all");
+  general.checked = todos > 0 && n === todos;
+  general.indeterminate = n > 0 && n < todos;
+}
+
+$("bulk-run-all").addEventListener("change", (e) => {
+  const marcar = e.target.checked;
+  document.querySelectorAll(".bulk-run-check, .bulk-grupo-all").forEach((c) => {
+    c.checked = marcar;
+    c.indeterminate = false;
+  });
+});
 
 // Marcar/desmarcar toda una empresa, y mantener la cabecera al día cuando se
 // marcan routers sueltos (delegación: se registra una sola vez).
@@ -3321,6 +3344,7 @@ function bulkDevicesClick(e) {
       head.indeterminate = marcados > 0 && marcados < hermanos.length;
     }
   }
+  bulkRunSyncAll();
 }
 
 async function loadBulkRun() {
