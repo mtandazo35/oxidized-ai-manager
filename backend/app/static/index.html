@@ -2130,8 +2130,11 @@ function renderStatus() {
   // deja únicamente los equipos en ese estado y muestra un chip para quitarlo.
   // "Pendientes" es lo mismo que cuenta la tarjeta del resumen: en curso, en
   // cola, sin respaldo todavía y sin datos.
+  // Solo equipos del inventario: un nombre con historial pero sin equipo
+  // (renombrado o borrado) no está pendiente de nada y la tarjeta no lo cuenta.
   if (estadoSolo === "Pendientes") {
-    names = names.filter((n) => ESTADOS_PENDIENTES.includes(estadoDe(n)));
+    names = names.filter((n) =>
+      deviceNameSet.has(n) && ESTADOS_PENDIENTES.includes(estadoDe(n)));
   } else if (estadoSolo) {
     names = names.filter((n) => estadoDe(n) === estadoSolo);
   }
