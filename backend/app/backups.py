@@ -125,6 +125,17 @@ async def _validar_acceso_ssh(
                 password=password,
                 known_hosts=None,
                 config=None,
+                # Solo password: sin esto asyncssh prueba también public-key y
+                # keyboard-interactive en la MISMA conexión, y un MikroTik con
+                # RADIUS registra DOS Access-Request (uno Reject, uno Accept) por
+                # una sola validación. Forzando password se envía uno solo.
+                client_keys=None,
+                gss_auth=False,
+                agent_path=None,
+                public_key_auth=False,
+                kbdint_auth=False,
+                host_based_auth=False,
+                password_auth=True,
             ),
             timeout=CHECK_TIMEOUT,
         )
