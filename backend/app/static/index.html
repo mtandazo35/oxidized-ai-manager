@@ -1957,6 +1957,7 @@ function prefsDeFiltros(tabla) {
 // tabla. Doble clic en el asa (o «Restablecer anchos» en Columnas) vuelve al
 // ancho automático.
 const ANCHO_MINIMO = 48;
+const ANCHO_MAXIMO_ACCIONES = 520;
 const TABLA_DE = { "tabla-routers": "routers", "tabla-estado": "estado" };
 let suprimirClicOrden = false;
 
@@ -1979,6 +1980,17 @@ function aplicarAnchos(idTabla) {
     return;
   }
   tabla.classList.add("anchos-fijos");
+  // La columna de botones se mide por su CONTENIDO. Antes se medía con su
+  // ancho ya asignado (`scrollWidth` de la propia celda), así que nunca podía
+  // encoger y cualquier píxel de más se sumaba en cada refresco: con el tiempo
+  // crecía sin tope y, como va fija a la derecha con fondo opaco, tapaba el
+  // resto de columnas y la tabla parecía vacía. Se encoge primero para que
+  // `scrollWidth` devuelva lo que ocupan los botones.
+  const ultima = ths[ths.length - 1];
+  if (ultima) {
+    tabla.style.width = "1px";
+    ultima.style.width = "1px";
+  }
   let total = 0;
   ths.forEach((th, i) => {
     // Nunca por debajo del mínimo: un ancho guardado minúsculo (de una medición
@@ -1990,6 +2002,8 @@ function aplicarAnchos(idTabla) {
     if (i === ths.length - 1) {
       const celdas = [...tabla.querySelectorAll("tbody tr:not(.grupo-fila) td:last-child")];
       ancho = Math.max(ANCHO_MINIMO, th.scrollWidth, ...celdas.map((td) => td.scrollWidth));
+      // Tope de seguridad: cuatro botones no pasan de unos 350 px.
+      ancho = Math.min(ancho, ANCHO_MAXIMO_ACCIONES);
     }
     th.style.width = ancho + "px";
     if (!th.hidden) total += ancho;
