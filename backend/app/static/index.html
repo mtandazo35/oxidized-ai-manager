@@ -1802,6 +1802,11 @@ function comparar(a, b) {
 
 // Ordena por la columna elegida. Si la tabla está agrupada, primero por grupo
 // («Sin asignar» al final): así cada página trae grupos enteros y seguidos.
+const ORDEN_ESTADOS = {
+  "Respaldando": 0, "En cola": 1, "Con fallo": 2,
+  "Pendientes": 3, "Sin datos": 4, "Correctos": 5,
+};
+
 function ordenar(tabla, filas, grupoDe) {
   const { orden, sentido } = leerPrefs(tabla);
   const clave = CLAVES_ORDEN[tabla][orden];
@@ -1813,6 +1818,12 @@ function ordenar(tabla, filas, grupoDe) {
       if (ga !== gb) {
         if (ga === "Sin asignar") return 1;
         if (gb === "Sin asignar") return -1;
+        // Agrupando por estado, primero lo que pide atención (en curso, en
+        // cola, con fallo, sin respaldo) y al final los correctos: por orden
+        // alfabético los pendientes quedaban debajo de todos los correctos.
+        const ra = ORDEN_ESTADOS[ga];
+        const rb = ORDEN_ESTADOS[gb];
+        if (ra !== undefined && rb !== undefined) return ra - rb;
         return COLADOR.compare(ga, gb);
       }
     }
@@ -2077,6 +2088,7 @@ function estadoDe(name) {
 }
 
 let estadoSolo = "";   // filtro "solo este estado actual" en Estado de respaldos
+const ESTADOS_PENDIENTES = ["Respaldando", "En cola", "Pendientes", "Sin datos"];
 
 function renderStatus() {
   const evByNode = statusCache.evByNode;
@@ -2116,7 +2128,13 @@ function renderStatus() {
 
   // Filtro "solo un estado" (p. ej. al llegar desde la tarjeta Con fallo):
   // deja únicamente los equipos en ese estado y muestra un chip para quitarlo.
-  if (estadoSolo) names = names.filter((n) => estadoDe(n) === estadoSolo);
+  // "Pendientes" es lo mismo que cuenta la tarjeta del resumen: en curso, en
+  // cola, sin respaldo todavía y sin datos.
+  if (estadoSolo === "Pendientes") {
+    names = names.filter((n) => ESTADOS_PENDIENTES.includes(estadoDe(n)));
+  } else if (estadoSolo) {
+    names = names.filter((n) => estadoDe(n) === estadoSolo);
+  }
   const chip = $("estado-chip");
   if (chip) {
     chip.hidden = !estadoSolo;
@@ -2292,7 +2310,7 @@ function renderKpis() {
   // Durante un respaldo mostramos cómo va; si no, el texto por defecto.
   $("kpi-pend-sub").textContent = (respaldando || encola)
     ? `${respaldando} en curso · ${encola} en cola`
-    : "Sin respaldo todavía o en curso";
+    : pendientes ? "Toca para ver cuáles" : "Sin respaldo todavía o en curso";
 }
 
 // Lleva a Estado de respaldos agrupado por estado actual, para ver de un
@@ -2304,14 +2322,16 @@ function irAEstadoPorEstado(solo = "") {
   estadoSolo = solo;
   switchTab("estado");
   const sel = $("group-by-estado");
-  if (sel && !solo) {
+  // Los pendientes se agrupan por estado para distinguir en curso / en cola /
+  // sin respaldo dentro del mismo filtro.
+  if (sel && (!solo || solo === "Pendientes")) {
     sel.value = "estado";
     guardarPrefs("estado", { agrupar: "estado" });
   }
   renderStatus();
 }
 
-const KPI_CARD_ESTADO = { "kpi-card-fail": "Con fallo", "kpi-card-pend": "" };
+const KPI_CARD_ESTADO = { "kpi-card-fail": "Con fallo", "kpi-card-pend": "Pendientes" };
 Object.entries(KPI_CARD_ESTADO).forEach(([id, solo]) => {
   const card = $(id);
   if (!card) return;
