@@ -150,7 +150,7 @@ services:
       APP_ENABLE_HSTS: ${APP_ENABLE_HSTS:-false}
       # Retención de la bitácora y de los eventos de respaldo, en días.
       ACTIVITY_RETENTION_DAYS: ${ACTIVITY_RETENTION_DAYS:-90}
-      BACKUP_EVENTS_RETENTION_DAYS: ${BACKUP_EVENTS_RETENTION_DAYS:-365}
+      BACKUP_EVENTS_RETENTION_DAYS: ${BACKUP_EVENTS_RETENTION_DAYS:-90}
       # En quién confiar para leer X-Forwarded-For (uvicorn). Con el proxy
       # externo, la subred de su red Docker; sin proxy, 127.0.0.1.
       FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-127.0.0.1}

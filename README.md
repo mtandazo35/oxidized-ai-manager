@@ -163,9 +163,9 @@ Un respaldo puede figurar como correcto y traer un **aviso de integridad**: el p
 
 ### Limpieza de eventos viejos
 
-Cada respaldo deja un par de eventos, así que con respaldos cada hora la tabla suma varios miles de filas al día. Una vez al día el panel borra los eventos de más de `BACKUP_EVENTS_RETENTION_DAYS` (365 por defecto, en `.env`).
+Cada respaldo deja un par de eventos, así que con respaldos cada hora la tabla suma varios miles de filas al día. Una vez al día el panel borra los eventos de más de `BACKUP_EVENTS_RETENTION_DAYS` (90 por defecto, en `.env`).
 
-De cada equipo se conservan siempre, por viejos que sean, su último evento, su último éxito y el último que trae commit: un router que lleva más de un año sin respaldar sigue mostrando cuándo fue su último respaldo bueno y permite descargarlo. Esto solo recorta el registro de eventos; las configuraciones guardadas en Git no se tocan.
+De cada equipo se conservan siempre, por viejos que sean, su último evento, su último éxito y el último que trae commit: un router que lleva meses sin respaldar sigue mostrando cuándo fue su último respaldo bueno y permite descargarlo. Esto solo recorta el registro de eventos; las configuraciones guardadas en Git no se tocan.
 
 ### Respaldar a mano
 
