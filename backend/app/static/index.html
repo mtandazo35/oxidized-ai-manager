@@ -275,7 +275,7 @@
         <div>
           <div class="eyebrow">Administración</div>
           <h2>Ajustes del sistema</h2>
-          <p id="hub-descripcion">Carga masiva, versión, seguridad de acceso, bitácora, respaldos programados, Git remoto, avisos por Telegram y cuentas.</p>
+          <p id="hub-descripcion">Carga masiva, versión, seguridad de acceso, bitácora, respaldos programados, Git remoto, avisos por Telegram, migración y cuentas.</p>
         </div>
       </div>
       <div class="hub">
@@ -310,6 +310,10 @@
         <button type="button" class="hub-item" data-seccion="telegram" data-solo-admin>
           <span class="disc"><svg viewBox="0 0 24 24"><path d="M21 4 3 11l5 2 2 6 3-4 5 4z"/><path d="M8 13l9-7"/></svg></span>
           Avisos por<br>Telegram
+        </button>
+        <button type="button" class="hub-item" data-seccion="migracion" data-solo-admin>
+          <span class="disc"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="7" ry="3"/><path d="M5 5v6c0 1.7 3.1 3 7 3s7-1.3 7-3V5"/><path d="M12 14v7"/><path d="m8.5 17.5 3.5 3.5 3.5-3.5"/></svg></span>
+          Migrar a otra<br>instalación
         </button>
         <button type="button" class="hub-item" data-seccion="cuentas" data-solo-admin>
           <span class="disc"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M2.5 20c0-3.6 3-5.6 6.5-5.6s6.5 2 6.5 5.6"/><path d="M17 11.5a2.6 2.6 0 1 0 0-5.2"/><path d="M18.5 20c0-2.2-.7-3.8-2-4.8"/></svg></span>
@@ -688,6 +692,66 @@
         <span class="muted" id="tg-test-status" style="margin-left:8px"></span>
         <div style="margin-top:8px"><span class="muted" id="tg-last-status"></span></div>
         <p class="msg" id="telegram-msg" role="status" aria-live="polite"></p>
+      </form>
+    </div>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="sec-migracion" hidden>
+  <div class="card xwide">
+    <div class="modal-head">
+      <h1>Migrar a otra instalación</h1>
+      <button type="button" class="ghost" data-cerrar="sec-migracion">Cerrar</button>
+    </div>
+    <div class="modal-body">
+    <p class="muted" style="margin-top:0">
+      Lleva los equipos (con todas sus credenciales), las cuentas de acceso y los
+      ajustes a otro servidor donde ya esté instalado este mismo sistema. No
+      incluye el historial de configuraciones de los routers: la instalación
+      nueva empieza el suyo con el primer respaldo.
+    </p>
+    <div class="card">
+      <h2 style="margin-top:0">1. Descargar la base de este servidor</h2>
+      <p class="muted" style="margin:0 0 12px">
+        El archivo sale cifrado con la frase que escriba aquí. Sin esa frase no
+        se puede abrir: anótela, porque se pide al importar.
+      </p>
+      <form id="mig-export-form">
+        <div class="field" style="margin-bottom:12px">
+          <label for="mig-frase" style="min-width:150px">Frase de cifrado</label>
+          <input id="mig-frase" type="password" autocomplete="new-password" minlength="12" placeholder="mínimo 12 caracteres" style="flex:1">
+        </div>
+        <div class="field" style="margin-bottom:12px">
+          <label for="mig-frase2" style="min-width:150px">Repetir la frase</label>
+          <input id="mig-frase2" type="password" autocomplete="new-password" style="flex:1">
+        </div>
+        <button type="submit" id="btn-mig-export">Descargar base de datos</button>
+        <p class="msg" id="mig-export-msg" role="status" aria-live="polite"></p>
+      </form>
+    </div>
+    <div class="card">
+      <h2 style="margin-top:0">2. Cargar una base en este servidor</h2>
+      <p class="muted" style="margin:0 0 12px">
+        Se usa en el servidor nuevo. Los equipos que falten se crean y los que
+        coincidan por nombre se actualizan; las cuentas que ya existan aquí no
+        se tocan.
+      </p>
+      <form id="mig-import-form">
+        <div class="field" style="margin-bottom:12px">
+          <label for="mig-archivo" style="min-width:150px">Archivo</label>
+          <input id="mig-archivo" type="file" accept=".json,application/json" style="flex:1">
+        </div>
+        <div class="field" style="margin-bottom:12px">
+          <label for="mig-frase-import" style="min-width:150px">Frase de cifrado</label>
+          <input id="mig-frase-import" type="password" autocomplete="off" style="flex:1">
+        </div>
+        <div class="field" style="margin-bottom:12px">
+          <input id="mig-ajustes" type="checkbox" checked>
+          <label for="mig-ajustes">Importar también los ajustes (intervalos, Telegram, Git remoto)</label>
+        </div>
+        <button type="submit" id="btn-mig-import">Cargar base de datos</button>
+        <p class="msg" id="mig-import-msg" role="status" aria-live="polite"></p>
       </form>
     </div>
     </div>
@@ -3241,7 +3305,7 @@ function applyPermissions(me) {
     item.hidden = !perms.is_admin;
   });
   $("hub-descripcion").textContent = perms.is_admin
-    ? "Carga masiva, versión, seguridad de acceso, bitácora, respaldos programados, Git remoto, avisos por Telegram y cuentas."
+    ? "Carga masiva, versión, seguridad de acceso, bitácora, respaldos programados, Git remoto, avisos por Telegram, migración y cuentas."
     : "Dé de alta muchos routers a la vez desde una plantilla CSV o Excel.";
   $("btn-open-add").hidden = !perms.can_write;
   // Solo el administrador elige la empresa de un equipo: a los demás la API
@@ -4283,6 +4347,104 @@ $("btn-account").addEventListener("click", () => {
 
 $("btn-close-account").addEventListener("click", () => {
   $("account-overlay").hidden = true;
+});
+
+// --- Migrar a otra instalación (exportar / importar la base) ---------------
+
+function migAviso(msg, texto, esError) {
+  msg.textContent = texto;
+  msg.className = esError ? "msg err" : "msg";
+}
+
+$("mig-export-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const msg = $("mig-export-msg");
+  const frase = $("mig-frase").value;
+  if (frase.length < 12) {
+    migAviso(msg, "La frase debe tener al menos 12 caracteres.", true);
+    return;
+  }
+  if (frase !== $("mig-frase2").value) {
+    migAviso(msg, "Las dos frases no coinciden.", true);
+    return;
+  }
+  $("btn-mig-export").disabled = true;
+  migAviso(msg, "Preparando el archivo…", false);
+  try {
+    const paquete = await api("/api/system/migration/export", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ frase }),
+    });
+    const sello = new Date().toISOString().slice(0, 19).replace(/[-:T]/g, "");
+    const enlace = document.createElement("a");
+    enlace.href = URL.createObjectURL(
+      new Blob([JSON.stringify(paquete)], { type: "application/json" }));
+    enlace.download = "oxidized-ai-manager-migracion-" + sello + ".json";
+    document.body.appendChild(enlace);
+    enlace.click();
+    enlace.remove();
+    URL.revokeObjectURL(enlace.href);
+    migAviso(msg, "Descargado: " + paquete.resumen.equipos + " equipos y " +
+      paquete.resumen.cuentas + " cuentas. Guarde la frase: sin ella el archivo no se abre.", false);
+    $("mig-frase").value = "";
+    $("mig-frase2").value = "";
+  } catch (error) {
+    migAviso(msg, "No se pudo exportar: " + error.message, true);
+  } finally {
+    $("btn-mig-export").disabled = false;
+  }
+});
+
+$("mig-import-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const msg = $("mig-import-msg");
+  const archivo = $("mig-archivo").files[0];
+  const frase = $("mig-frase-import").value;
+  if (!archivo || !frase) {
+    migAviso(msg, "Elija el archivo y escriba la frase con que se cifró.", true);
+    return;
+  }
+  let paquete;
+  try {
+    paquete = JSON.parse(await archivo.text());
+  } catch (error) {
+    migAviso(msg, "Ese archivo no es un paquete de migración.", true);
+    return;
+  }
+  $("btn-mig-import").disabled = true;
+  migAviso(msg, "Cargando…", false);
+  try {
+    const r = await api("/api/system/migration/import", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        frase, paquete, importar_ajustes: $("mig-ajustes").checked,
+      }),
+    });
+    const partes = [
+      "Equipos: " + r.equipos_creados + " creados, " + r.equipos_actualizados + " actualizados.",
+      "Cuentas: " + r.cuentas_creadas + " creadas, " + r.cuentas_omitidas + " ya existían.",
+      "Ajustes importados: " + r.ajustes_importados + ".",
+    ];
+    const apagados = r.ajustes_apagados || [];
+    if (apagados.includes("git_remote_enabled")) {
+      partes.push("El envío al Git remoto quedó desactivado: actívelo en «Git remoto» cuando el servidor anterior ya no esté en uso.");
+    }
+    if (apagados.includes("login_allowlist_enabled")) {
+      partes.push("La lista de IPs permitidas se copió desactivada: revísela en «Seguridad de acceso» antes de activarla.");
+    }
+    if (r.errores.length) {
+      partes.push("Con error (" + r.errores.length + "): " + r.errores.join(" · "));
+    }
+    migAviso(msg, partes.join(" "), r.errores.length > 0);
+    $("mig-frase-import").value = "";
+    $("mig-archivo").value = "";
+  } catch (error) {
+    migAviso(msg, "No se pudo importar: " + error.message, true);
+  } finally {
+    $("btn-mig-import").disabled = false;
+  }
 });
 
 // --- Portada de Ajustes del sistema --------------------------------------

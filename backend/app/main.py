@@ -14,6 +14,7 @@ from .config import get_settings
 from .db import create_pool, init_schema
 from .devices import router as devices_router
 from .health import backup_freshness, check_dependencies
+from .migration import router as migration_router
 from .middleware import (
     ActivityLogMiddleware,
     BodySizeLimitMiddleware,
@@ -105,6 +106,7 @@ app.include_router(devices_router)
 app.include_router(oxidized_router)
 app.include_router(settings_router)
 app.include_router(system_router)
+app.include_router(migration_router)
 app.include_router(users_router)
 
 

@@ -225,6 +225,8 @@ ACTION_MAP: tuple[tuple[str, str, str], ...] = (
     ("DELETE", r"^/api/users/[^/]+$", "cuenta.baja"),
     ("POST", r"^/api/oxidized/reload$", "oxidized.recarga"),
     ("POST", r"^/api/system/update$", "sistema.actualizacion"),
+    ("POST", r"^/api/system/migration/export$", "sistema.exportar-base"),
+    ("POST", r"^/api/system/migration/import$", "sistema.importar-base"),
     ("POST", r"^/api/access/unblock-ip$", "acceso.desbloqueo-ip"),
     ("POST", r"^/api/access/unlock-account$", "acceso.desbloqueo-cuenta"),
     ("POST", r"^/api/auth/logout$", "logout"),
