@@ -107,6 +107,23 @@ def test_recargar_vuelve_a_la_pestana_y_seccion_donde_se_estaba() -> None:
     assert js.count("alCerrarVentana(") >= 3
 
 
+def test_recargar_no_pasa_por_routers_antes_de_conocer_el_rol() -> None:
+    """Al arrancar con sesión guardada aún no se sabe el rol. Si ahí se usa
+    `switchTab`, `allowedTab("system")` da falso: se pintaba Routers y se
+    reescribía la dirección a «#dashboard», y al contestar /api/auth/me se
+    volvía a Ajustes. El arranque debe pintar la pestaña guardada tal cual."""
+    js = panel_js()
+    arranque = js[js.rindex("if (token) {"):]
+    antes_de_entrar = arranque[: arranque.index("enterApp();")]
+
+    assert "pintarTab(tabGuardada)" in antes_de_entrar
+    assert "switchTab(" not in antes_de_entrar
+    pintar = re.search(r"function pintarTab\(tab\) \{(.*?)
+\}", js, re.S).group(1)
+    assert "fijarUbicacion" not in pintar, "pintar no debe tocar la dirección"
+    assert "allowedTab" not in pintar
+
+
 def test_cada_columna_ocultable_existe_en_la_cabecera_y_en_las_filas() -> None:
     """Un `data-col` en la lista que no esté en las celdas es una casilla que
     no oculta nada; uno en las celdas que no esté en la lista es una columna

@@ -3322,12 +3322,17 @@ function allowedTab(tab) {
   return true;
 }
 
-function switchTab(tab) {
-  if (!allowedTab(tab)) tab = "dashboard";
+// Muestra una pestaña sin comprobar permisos ni tocar la dirección.
+function pintarTab(tab) {
   TAB_NAMES.forEach((name) => {
     $("tab-" + name).hidden = name !== tab;
     $("tab-btn-" + name).classList.toggle("active", name === tab);
   });
+}
+
+function switchTab(tab) {
+  if (!allowedTab(tab)) tab = "dashboard";
+  pintarTab(tab);
   fijarUbicacion("#" + tab);
   if (tab === "system") hubMostrar(null);
 }
@@ -4763,8 +4768,15 @@ if (token) {
   // para evitar el destello de la pantalla de login en cada refresco. Hasta
   // que /api/auth/me conteste no se conoce el rol, así que se parte sin
   // permisos: enterApp() los aplica y recoloca la pestaña.
+  //
+  // Se pinta la pestaña de la dirección tal cual, sin pasar por `switchTab`:
+  // sin permisos todavía, `allowedTab("system")` da falso y recargar estando en
+  // Ajustes del sistema enseñaba Routers un instante antes de volver. La
+  // dirección solo dice «#system» si quien la dejó ahí podía entrar; si ya no
+  // puede, enterApp() lo saca en cuanto conoce su rol, y la API no le sirve
+  // nada entretanto.
   show("app");
-  switchTab(allowedTab(tabGuardada) ? tabGuardada : "dashboard");
+  pintarTab(tabGuardada);
   enterApp();
 } else {
   show("login");
