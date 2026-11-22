@@ -5,6 +5,11 @@ model: routeros
 interval: 31536000
 debug: false
 threads: 20
+# Sin esto Oxidized calcula cuántos trabajos corre a la vez a partir de
+# `interval`; con un intervalo de un año (los respaldos los dispara el panel) el
+# cálculo da 1, o sea la flota entera de uno en uno, y un solo equipo lento
+# bloquea a todos los demás hasta que salta su `timelimit` (ver jobs.rb).
+use_max_threads: true
 # `timeout` es el límite de conexión SSH: un equipo inalcanzable falla ahí, así
 # que subirlo poco. `timelimit` es el techo de la sesión completa, y un core con
 # un export de cientos de kilobytes por un enlace lento no cabía en 60 s: al
