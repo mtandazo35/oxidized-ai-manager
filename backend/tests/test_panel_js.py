@@ -118,9 +118,8 @@ def test_recargar_no_pasa_por_routers_antes_de_conocer_el_rol() -> None:
 
     assert "pintarTab(tabGuardada)" in antes_de_entrar
     assert "switchTab(" not in antes_de_entrar
-    pintar = re.search(r"function pintarTab\(tab\) \{(.*?)
-\}", js, re.S).group(1)
-    assert "fijarUbicacion" not in pintar, "pintar no debe tocar la dirección"
+    pintar = re.search(r"function pintarTab\(tab\) \{(.*?)\n\}", js, re.S).group(1)
+    assert "fijarUbicacion" not in pintar,"pintar no debe tocar la dirección"
     assert "allowedTab" not in pintar
 
 
