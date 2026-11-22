@@ -161,6 +161,12 @@ Las tarjetas **Con fallo** y **Pendientes** se pueden pulsar: filtran la tabla p
 
 Un respaldo puede figurar como correcto y traer un **aviso de integridad**: el panel compara cada respaldo con el anterior y avisa si desaparecieron secciones enteras. Suele indicar que el propio router no pudo exportarlas; en ese caso el archivo termina con una línea `#error exporting ...` escrita por RouterOS.
 
+### Limpieza de eventos viejos
+
+Cada respaldo deja un par de eventos, así que con respaldos cada hora la tabla suma varios miles de filas al día. Una vez al día el panel borra los eventos de más de `BACKUP_EVENTS_RETENTION_DAYS` (365 por defecto, en `.env`).
+
+De cada equipo se conservan siempre, por viejos que sean, su último evento, su último éxito y el último que trae commit: un router que lleva más de un año sin respaldar sigue mostrando cuándo fue su último respaldo bueno y permite descargarlo. Esto solo recorta el registro de eventos; las configuraciones guardadas en Git no se tocan.
+
 ### Respaldar a mano
 
 **Sistema → Respaldos programados** fija cada cuántos minutos se respalda y permite lanzar un respaldo de todos, de una empresa o de los routers marcados (con **Seleccionar todos** para la lista visible).
