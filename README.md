@@ -276,6 +276,31 @@ BACKUP_PASSPHRASE='...' ./scripts/backup-system.sh /root/backups
 Para dejarlo diario hay units de systemd en `deploy/`. Procedimiento completo y
 restauración verificada en [docs/BACKUP_RESTORE.md](docs/BACKUP_RESTORE.md).
 
+## Migrar a otra instalación
+
+Para mudar el inventario a un servidor donde ya está instalado este mismo sistema, sin copiar archivos a mano: **Sistema → Migrar a otra instalación** (solo administrador).
+
+1. **En el servidor de origen**, escribir una frase de cifrado (mínimo 12 caracteres) y pulsar **Descargar base de datos**. Baja un archivo `oxidized-ai-manager-migracion-<fecha>.json`.
+2. **En el servidor nuevo**, abrir el mismo apartado, elegir ese archivo, escribir la misma frase y pulsar **Cargar base de datos**.
+
+| Qué viaja | Qué no viaja |
+|---|---|
+| Equipos con todas sus credenciales, puerto, empresa, intervalo y estado de omitido | El historial de configuraciones de los routers (`backups.git`) |
+| Cuentas de acceso, con su rol, empresa y contraseña | Los eventos de respaldo y la bitácora |
+| Ajustes: intervalos, Telegram, Git remoto, lista de IPs | Bloqueos de IP y de cuenta vigentes |
+
+Lo que conviene saber antes de usarlo:
+
+- **Por qué no es un volcado de PostgreSQL.** Las claves de los routers se guardan cifradas con la `APP_SECRET_KEY` de cada instalación; un volcado llevado a otro servidor trae claves que allí no se pueden leer. El paquete se descifra en origen, se sella con la frase y se vuelve a cifrar en destino con su propia llave.
+- **Sin la frase el archivo no se abre**, ni siquiera en el servidor que lo generó. No se guarda en ningún sitio.
+- **Al importar no se pierde nada de lo que ya hay.** Los equipos que faltan se crean y los que coinciden por nombre se actualizan. Las cuentas que ya existen en destino no se tocan, así que quien importa conserva su contraseña.
+- **Dos ajustes llegan apagados** y se encienden a mano tras revisarlos: el envío al Git remoto (para que dos instalaciones vivas no empujen al mismo repositorio) y la lista de IPs permitidas para ingresar (es la del servidor de origen y podría dejar fuera a quien importa).
+- **El servidor nuevo respalda todo el inventario** en cuanto recibe los equipos, con un inicio de sesión por router.
+
+Si además hay que llevarse el historial de configuraciones, el camino es el respaldo completo de la sección anterior.
+
+Por API: `POST /api/system/migration/export` con `{"frase": "..."}` y `POST /api/system/migration/import` con `{"frase": "...", "paquete": {...}, "importar_ajustes": true}`.
+
 ## Monitoreo
 
 | URL | Qué vigila |
