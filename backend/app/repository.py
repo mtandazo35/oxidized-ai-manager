@@ -767,44 +767,67 @@ class BackupEventRepository:
             return []
         rows = await self._pool.fetch(
             """
-            SELECT e.node AS node,
-                   (array_agg(e.event ORDER BY e.created_at DESC)
-                       FILTER (WHERE e.event <> 'post_store'))[1] AS last_event,
-                   max(e.created_at) FILTER (WHERE e.event <> 'post_store')
-                       AS last_event_at,
-                   max(e.created_at) FILTER (WHERE e.event = 'node_success')
-                       AS last_success_at,
-                   (array_agg(e.commit_ref ORDER BY e.created_at DESC)
-                       FILTER (WHERE e.commit_ref <> ''))[1] AS last_commit,
-                   -- Racha de fallos actuales: node_fail posteriores al último
-                   -- éxito (un éxito reinicia la cuenta). Si nunca tuvo éxito,
-                   -- cuenta todos sus node_fail.
-                   count(*) FILTER (
-                       WHERE e.event = 'node_fail'
-                         AND e.created_at > COALESCE(ls.last_success_at,
-                                                     '-infinity'::timestamptz)
-                   ) AS fail_streak,
+            -- Una búsqueda por índice para cada dato de cada nodo, en vez de
+            -- agregar la tabla entera. `backup_events` solo crece (cientos de
+            -- miles de filas) y el panel pide esto en cada carga: agrupando
+            -- todo tardaba cerca de un segundo; así, unos milisegundos.
+            --
+            -- `nodos` recorre el índice (node, created_at DESC) saltando de un
+            -- nombre al siguiente: un DISTINCT leería todas las filas.
+            WITH RECURSIVE nodos AS (
+                (SELECT node FROM backup_events ORDER BY node LIMIT 1)
+                UNION ALL
+                SELECT (SELECT e.node FROM backup_events e
+                        WHERE e.node > nodos.node ORDER BY e.node LIMIT 1)
+                FROM nodos WHERE nodos.node IS NOT NULL
+            )
+            SELECT n.node AS node,
+                   le.event AS last_event,
+                   le.created_at AS last_event_at,
+                   ok.created_at AS last_success_at,
+                   lc.commit_ref AS last_commit,
+                   fs.fail_streak AS fail_streak,
                    COALESCE(i.warnings, '{}') AS warnings,
                    COALESCE(i.bytes, 0) AS bytes,
                    COALESCE(i.lines, 0) AS lines
-            FROM backup_events e
-            LEFT JOIN devices d ON d.name = e.node
-            LEFT JOIN backup_integrity i ON i.node = e.node
+            FROM (
+                SELECT node FROM nodos
+                WHERE node IS NOT NULL AND ($1::text[] IS NULL OR node = ANY($1))
+            ) n
+            LEFT JOIN devices d ON d.name = n.node
+            LEFT JOIN backup_integrity i ON i.node = n.node
                 AND (d.history_since IS NULL OR i.checked_at >= d.history_since)
-            LEFT JOIN (
-                SELECT b.node, max(b.created_at) AS last_success_at
-                FROM backup_events b
-                LEFT JOIN devices dd ON dd.name = b.node
-                WHERE b.event = 'node_success'
-                  AND (dd.history_since IS NULL OR b.created_at >= dd.history_since)
-                GROUP BY b.node
-            ) ls ON ls.node = e.node
-            WHERE ($1::text[] IS NULL OR e.node = ANY($1))
-              -- Lo anterior al alta (o al último cambio de nombre o empresa)
-              -- pertenece al dueño anterior del nombre.
-              AND (d.history_since IS NULL OR e.created_at >= d.history_since)
-            GROUP BY e.node, i.warnings, i.bytes, i.lines, ls.last_success_at
-            ORDER BY e.node
+            CROSS JOIN LATERAL (
+                SELECT 1 AS hay FROM backup_events e
+                WHERE e.node = n.node
+                  AND (d.history_since IS NULL OR e.created_at >= d.history_since)
+                LIMIT 1
+            ) visible
+            LEFT JOIN LATERAL (
+                SELECT e.event, e.created_at FROM backup_events e
+                WHERE e.node = n.node AND e.event <> 'post_store'
+                  AND (d.history_since IS NULL OR e.created_at >= d.history_since)
+                ORDER BY e.created_at DESC LIMIT 1
+            ) le ON true
+            LEFT JOIN LATERAL (
+                SELECT e.created_at FROM backup_events e
+                WHERE e.node = n.node AND e.event = 'node_success'
+                  AND (d.history_since IS NULL OR e.created_at >= d.history_since)
+                ORDER BY e.created_at DESC LIMIT 1
+            ) ok ON true
+            LEFT JOIN LATERAL (
+                SELECT e.commit_ref FROM backup_events e
+                WHERE e.node = n.node AND e.commit_ref <> ''
+                  AND (d.history_since IS NULL OR e.created_at >= d.history_since)
+                ORDER BY e.created_at DESC LIMIT 1
+            ) lc ON true
+            CROSS JOIN LATERAL (
+                SELECT count(*) AS fail_streak FROM backup_events e
+                WHERE e.node = n.node AND e.event = 'node_fail'
+                  AND (d.history_since IS NULL OR e.created_at >= d.history_since)
+                  AND e.created_at > COALESCE(ok.created_at, '-infinity'::timestamptz)
+            ) fs
+            ORDER BY n.node
             """,
             nodes,
         )
