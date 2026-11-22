@@ -271,6 +271,32 @@ class FakeBackupEventRepository:
         )
         self._next_id += 1
 
+    async def purge(self, days: int) -> int:
+        """Mismo criterio que el DELETE real: ver BackupEventRepository.purge."""
+        corte = datetime.now(timezone.utc) - timedelta(days=max(days, 1))
+        conservar: set[int] = set()
+        for criterio in (
+            lambda e: e["event"] != "post_store",
+            lambda e: e["event"] == "node_success",
+            lambda e: e["commit_ref"] != "",
+        ):
+            ultimo: dict[str, dict[str, Any]] = {}
+            for evento in self._events:
+                if not criterio(evento):
+                    continue
+                previo = ultimo.get(evento["node"])
+                if previo is None or (evento["created_at"], evento["id"]) > (
+                    previo["created_at"],
+                    previo["id"],
+                ):
+                    ultimo[evento["node"]] = evento
+            conservar.update(e["id"] for e in ultimo.values())
+        antes = len(self._events)
+        self._events = [
+            e for e in self._events if e["created_at"] >= corte or e["id"] in conservar
+        ]
+        return antes - len(self._events)
+
     async def status(self, nodes_filter: list[str] | None = None) -> list[dict[str, Any]]:
         if nodes_filter is not None and not nodes_filter:
             return []

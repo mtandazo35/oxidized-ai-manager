@@ -833,6 +833,39 @@ class BackupEventRepository:
         )
         return [dict(row) for row in rows]
 
+    async def purge(self, days: int) -> int:
+        """Borra los eventos más viejos que `days`; devuelve cuántos se fueron.
+
+        De cada equipo se conservan siempre, por viejos que sean, su último
+        evento, su último éxito y el último que trae commit: son los que pinta
+        «Estado de respaldos», y un equipo que lleva un año sin respaldar no
+        debe perder la fecha de su último respaldo bueno ni el enlace para
+        descargarlo.
+        """
+        result = await self._pool.execute(
+            """
+            DELETE FROM backup_events e
+            WHERE e.created_at < now() - ($1 || ' days')::interval
+              AND e.id NOT IN (
+                SELECT DISTINCT ON (node) id FROM backup_events
+                WHERE event <> 'post_store'
+                ORDER BY node, created_at DESC, id DESC)
+              AND e.id NOT IN (
+                SELECT DISTINCT ON (node) id FROM backup_events
+                WHERE event = 'node_success'
+                ORDER BY node, created_at DESC, id DESC)
+              AND e.id NOT IN (
+                SELECT DISTINCT ON (node) id FROM backup_events
+                WHERE commit_ref <> ''
+                ORDER BY node, created_at DESC, id DESC)
+            """,
+            str(max(days, 1)),
+        )
+        try:
+            return int(result.split()[-1])
+        except (ValueError, IndexError):
+            return 0
+
     async def list_events(
         self, node: str | None, limit: int, nodes: list[str] | None = None
     ) -> list[dict[str, Any]]:

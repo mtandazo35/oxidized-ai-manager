@@ -181,6 +181,17 @@ async def purge_activity(app, settings: Settings) -> int:
         return 0
 
 
+async def purge_backup_events(app, settings: Settings) -> int:
+    """Recorta los eventos de respaldo viejos. Sin esto la tabla solo crece."""
+    try:
+        return await app.state.backup_events.purge(
+            settings.backup_events_retention_days
+        )
+    except Exception:
+        log.warning("No se pudieron purgar los eventos de respaldo", exc_info=True)
+        return 0
+
+
 async def maybe_send_stale_alert(
     app, settings: Settings, last_alert_date: dict
 ) -> None:
@@ -261,6 +272,9 @@ async def scheduler_loop(app, settings: Settings) -> None:
                 borradas = await purge_activity(app, settings)
                 if borradas:
                     log.info("Bitácora: %s entradas purgadas", borradas)
+                borrados = await purge_backup_events(app, settings)
+                if borrados:
+                    log.info("Eventos de respaldo: %s purgados", borrados)
         except asyncio.CancelledError:
             raise
         except Exception:

@@ -52,6 +52,9 @@ class Settings(BaseSettings):
     ip_block_minutes: int = 30
     # Cuánto se guarda la bitácora antes de purgarse sola.
     activity_retention_days: int = 90
+    # Cuánto se guardan los eventos de respaldo (un par por cada respaldo de
+    # cada equipo). Lo último de cada equipo se conserva siempre.
+    backup_events_retention_days: int = 365
 
     @field_validator("app_secret_key")
     @classmethod
