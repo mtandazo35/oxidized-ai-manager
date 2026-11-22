@@ -112,6 +112,31 @@ curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/api/devices   # lis
 curl http://127.0.0.1:8888/reload                                          # recarga de nodos en Oxidized
 ```
 
+### Varias credenciales por equipo
+
+Un router puede tener más de un par usuario/clave. En **Editar** (y en **Agregar**) la primera fila es la credencial principal y el botón **+** añade las siguientes, hasta ocho adicionales. El orden de las filas es el orden en que se prueban.
+
+- **Validar credenciales** abre una sesión SSH con cada par, muestra cuál entra y deja esa como activa. Oxidized recibe siempre la credencial activa.
+- **Cambio automático:** si un respaldo falla, el panel prueba el resto de credenciales de ese equipo y, si otra entra, la activa para el siguiente intento. Hay una espera de cinco minutos por equipo entre dos comprobaciones para no llenar de intentos fallidos el servidor de autenticación.
+- Las claves se guardan cifradas y la API nunca las devuelve: el listado solo trae los nombres de usuario. Dejar una clave en blanco al editar conserva la que ya estaba.
+- La sesión SSH usa únicamente el método `password`, tanto al validar como al respaldar. Con los métodos por defecto de la librería, el router recibe antes un intento sin clave y, si autentica contra RADIUS, lo registra como un acceso rechazado en cada respaldo.
+
+### Omitir respaldos
+
+Un equipo puede seguir en el inventario sin respaldarse: al marcarlo como **omitido** deja de enviarse a Oxidized y conserva su historial. Sirve para un router en mantenimiento o para uno cuyo export se cuelga y no debe ocupar la cola. El estado se ve en la columna correspondiente de la tabla de Routers.
+
+### Cambios masivos
+
+**Sistema → Cambios masivos** aplica el mismo cambio a muchos equipos de una vez:
+
+1. **Elegir equipos:** todos (casilla **Seleccionar todos**), una empresa entera o routers sueltos. El desplegable de empresa filtra la lista.
+2. **Elegir qué cambiar**, marcando solo lo que se quiere tocar: usuario, clave, puerto SSH, omitir respaldos, y añadir o quitar credenciales adicionales.
+3. **Aplicar.** Lo que no se marca no se modifica.
+
+> **Cuidado con la clave.** Un cambio masivo de clave sobrescribe la de todos los equipos elegidos, y el panel no puede saber si los routers ya aceptan la nueva: si se aplica antes de cambiarla en los equipos (o en el servidor RADIUS), todos fallarán la autenticación en el siguiente respaldo. Conviene revisar también que el navegador no haya autocompletado el campo de clave. Para deshacerlo hace falta un respaldo de la base ([docs/BACKUP_RESTORE.md](docs/BACKUP_RESTORE.md)).
+
+Por API es `POST /api/devices/bulk-update`, con `scope` (`all`, `group` o `devices`) y solo los campos a cambiar.
+
 ## Estado de respaldos
 
 Cada respaldo queda versionado en Git (volumen de Oxidized) y notificado al backend:
@@ -122,6 +147,48 @@ curl -H "Authorization: Bearer $TOKEN" 'http://127.0.0.1:8000/api/backups/events
 ```
 
 Detalles y criterios de aceptación en [docs/PHASE2.md](docs/PHASE2.md).
+
+### Cómo leer la pantalla
+
+Las tarjetas **Con fallo** y **Pendientes** se pueden pulsar: filtran la tabla para ver qué equipos son.
+
+| Estado | Qué significa |
+|---|---|
+| Respaldo correcto | El último intento terminó bien y quedó guardado. |
+| Con fallo | El último intento falló. La insignia roja «✖ N» cuenta los fallos seguidos; el filtro **fallan seguido** deja solo los que repiten. |
+| Pendientes | Equipos del inventario que todavía no tienen resultado: están en cola, respaldándose ahora o nunca se han intentado. |
+| Fuera de inventario | Hay respaldos guardados con ese nombre, pero el equipo ya no existe en el inventario (se borró o se renombró). |
+
+Un respaldo puede figurar como correcto y traer un **aviso de integridad**: el panel compara cada respaldo con el anterior y avisa si desaparecieron secciones enteras. Suele indicar que el propio router no pudo exportarlas; en ese caso el archivo termina con una línea `#error exporting ...` escrita por RouterOS.
+
+### Respaldar a mano
+
+**Sistema → Respaldos programados** fija cada cuántos minutos se respalda y permite lanzar un respaldo de todos, de una empresa o de los routers marcados (con **Seleccionar todos** para la lista visible).
+
+### Ajustes de Oxidized que importan
+
+Están en [oxidized/config](oxidized/config), con el motivo de cada uno comentado:
+
+| Ajuste | Valor | Por qué |
+|---|---|---|
+| `use_max_threads` | `true` | Sin él Oxidized calcula cuántos respaldos corre a la vez a partir de `interval`, y como aquí los respaldos los dispara el panel (intervalo de un año) el resultado es uno solo: la flota va en fila y un equipo lento bloquea a todos. |
+| `threads` | `20` | Respaldos simultáneos. |
+| `timelimit` | `900` | Techo de una sesión completa. Hay cores cuyo `/export` tarda varios minutos. |
+| `timeout` | `30` | Límite de conexión: un equipo inalcanzable falla aquí. |
+| `vars.auth_methods` | `password` | Un solo intento de autenticación por respaldo. |
+
+Para aplicar un cambio de ese archivo: `docker compose up -d oxidized-init && docker compose restart oxidized`. **Reiniciar Oxidized relanza el respaldo de todo el inventario**, con un inicio de sesión por equipo.
+
+### Si un equipo no respalda
+
+| Síntoma en el registro de Oxidized | Causa habitual |
+|---|---|
+| `Net::SSH::AuthenticationFailed` | Usuario o clave que el router no acepta. Usar **Validar credenciales**. |
+| `status no_connection` sin más detalle | El puerto SSH no responde o rechaza la conexión: servicio apagado, otro puerto, firewall o equipo caído. |
+| `Job timelimit reached` | El export no terminó dentro de `timelimit`. Si se repite, el problema está en el router. |
+| Muchos equipos en **Pendientes** a la vez | Cola en marcha tras un «respaldar todos» o un reinicio; se vacía sola. |
+
+Oxidized no permite cancelar un respaldo en curso: un trabajo colgado termina cuando salta su `timelimit`. Mientras tanto no frena a los demás, y el equipo se puede marcar como omitido.
 
 ## Auditoría de configuraciones
 
